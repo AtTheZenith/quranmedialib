@@ -27,7 +27,6 @@ def annotate_word_with_translation(image, surah, ayah, word_index):
         font = ImageFont.load_default()
 
     # Calculate translation text dimensions
-    draw_temp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     bbox = font.getbbox(translation)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
