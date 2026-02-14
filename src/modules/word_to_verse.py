@@ -8,10 +8,14 @@ It should always return a list of images.
 from PIL import Image
 
 
-def convert_words_to_verses(words: list[Image.Image], row_num=5, max_width=1920, image_height=1080):
+QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۘ", "ۙ", "ۚ", "ۛ", "ۜ"]
+
+
+def convert_words_to_verses(words: list[Image.Image], words_text: list[str] = None, row_num=5, max_width=1920, image_height=1080):
     """
     Takes a list of words in image form, then manages the 2D grid needed to create the image, based on constraints in row number and width.
     If there are too many words to fit in one image, it will overflow into another image that the function will manage.
+    If words_text is provided, it will prioritize overflowing at the last Quranic stop sign in the last row of an image.
     Returns: list[PIL.Image.Image]
     """
     if not words:
@@ -22,53 +26,90 @@ def convert_words_to_verses(words: list[Image.Image], row_num=5, max_width=1920,
     word_spacing = 20
     row_spacing = 30
 
-    # Group words into rows
-    rows = []
-    current_row = []
-    current_row_width = 0
+    # Process all words into images
+    all_items = list(zip(words, words_text if words_text else [None] * len(words)))
+    images = []
 
-    for word in words:
-        ww, wh = word.size
-        # If adding this word exceeds max_width (considering padding and spacing)
-        if current_row_width + ww + (word_spacing if current_row else 0) > max_width - 2 * padding:
-            if current_row:
-                rows.append(current_row)
-            current_row = [word]
-            current_row_width = ww
-        else:
-            current_row_width += ww + (word_spacing if current_row else 0)
-            current_row.append(word)
+    while all_items:
+        current_image_rows = []
+        current_y = padding
+        current_row_count = 0
+        items_consumed = 0
 
-    if current_row:
-        rows.append(current_row)
+        # Tentatively group rows for ONE image
+        while items_consumed < len(all_items) and current_row_count < row_num:
+            row_items = []
+            current_row_width = 0
+            row_consumed = 0
 
-    # Distribute rows into images
-    current_image = None
-    current_y = padding
-    current_row_count = 0
+            # Group items into a single row
+            for i in range(items_consumed, len(all_items)):
+                word_img, _ = all_items[i]
+                ww, wh = word_img.size
 
-    for row in rows:
-        max_row_height = max(word.size[1] for word in row)
+                if current_row_width + ww + (word_spacing if row_items else 0) > max_width - 2 * padding:
+                    break
 
-        # Check if we need a new image: row count reached OR height exceeded
-        if current_image is None or current_row_count >= row_num or (current_y + max_row_height + padding > image_height):
-            current_image = Image.new("RGBA", (max_width, image_height), color=(0, 0, 0, 0))
-            images.append(current_image)
-            current_y = padding
-            current_row_count = 0
+                current_row_width += ww + (word_spacing if row_items else 0)
+                row_items.append(all_items[i])
+                row_consumed += 1
 
-        # Draw row RTL
-        current_x = max_width - padding
-        for word in row:
-            ww, wh = word.size
-            # Vertically center word in row
-            word_y = current_y + (max_row_height - wh) // 2
-            # Place word from right
-            current_image.paste(word, (current_x - ww, word_y), mask=word if word.mode == "RGBA" else None)
-            current_x -= ww + word_spacing
+            if not row_items:
+                break
 
-        current_y += max_row_height + row_spacing
-        current_row_count += 1
+            max_row_height = max(item[0].size[1] for item in row_items)
+            if current_y + max_row_height + padding > image_height:
+                break
+
+            current_image_rows.append(row_items)
+            items_consumed += row_consumed
+            current_y += max_row_height + row_spacing
+            current_row_count += 1
+
+        # Third Method: Stop-sign based overflow adjustment
+        if words_text and items_consumed < len(all_items):
+            # Scan backwards from the end of the last row to find a stop sign
+            found_stop_sign = False
+            for r_idx in range(len(current_image_rows) - 1, -1, -1):
+                row = current_image_rows[r_idx]
+                for w_idx in range(len(row) - 1, -1, -1):
+                    _, text = row[w_idx]
+                    if text and any(sign in text for sign in QURANIC_STOP_SIGNS):
+                        # Found it! Adjust consumption point
+                        # Everything after this word in this row, and all subsequent rows, move back to all_items
+
+                        # Count how many items to keep
+                        keep_count = 0
+                        for i in range(r_idx):
+                            keep_count += len(current_image_rows[i])
+                        keep_count += w_idx + 1  # +1 to include the word with the stop sign
+
+                        # If we aren't keeping ALL items (which would mean no change)
+                        if keep_count < items_consumed:
+                            items_consumed = keep_count
+                            current_image_rows = current_image_rows[: r_idx + 1]
+                            current_image_rows[-1] = current_image_rows[-1][: w_idx + 1]
+                            found_stop_sign = True
+                            break
+                if found_stop_sign:
+                    break
+
+        # Draw the image
+        img = Image.new("RGBA", (max_width, image_height), color=(0, 0, 0, 0))
+        images.append(img)
+        draw_y = padding
+
+        for row in current_image_rows:
+            max_h = max(item[0].size[1] for item in row)
+            current_x = max_width - padding
+            for word_img, _ in row:
+                ww, wh = word_img.size
+                word_y = draw_y + (max_h - wh) // 2
+                img.paste(word_img, (current_x - ww, word_y), mask=word_img if word_img.mode == "RGBA" else None)
+                current_x -= ww + word_spacing
+            draw_y += max_h + row_spacing
+
+        all_items = all_items[items_consumed:]
 
     return images
 
@@ -91,8 +132,8 @@ if __name__ == "__main__":
     for i in range(0, len(word_images)):
         word_wbw_images.append(annotate_word_with_translation(word_images[i], 2, 255, i + 1))
 
-    print("Arranging words into verses...")
-    images = convert_words_to_verses(word_wbw_images)
+    print("Arranging words into verses with stop-sign overflow...")
+    images = convert_words_to_verses(word_wbw_images, words_text=words_text)
 
     output_dir = "./ayat/new/words/test/"
     os.makedirs(output_dir, exist_ok=True)
