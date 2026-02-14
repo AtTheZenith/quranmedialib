@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+uv.lock
+
+# Virtual environments
+.venv
+
+# Cache files
+/suwar-names/processed/
+/ayat/processed/
+/ayat/short/processed/
+/ayat/numbers/processed/
+/ai/dataset_expected/
+/ayat/new/

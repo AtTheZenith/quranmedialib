@@ -1,8 +1,6 @@
-# ./assets/corpus.db
-# table structure:
-# "surah","ayah","word","ar1","ar2","ar3","ar4","ar5","pos1","pos2","pos3","pos4","pos5","count","root_ar","lemma","verb_type","verf_form"
-# concatenate ar1-ar5 to get the word
-# concatenate all the words with a space to get the verse
+# ./assets/quran.db
+# table (is named 'verses') structure:
+# "surah","ayah","text"
 
 # ./assets/wbw_en.db
 # table structure:
@@ -25,31 +23,27 @@ class DatabaseManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(DatabaseManager, cls).__new__(cls)
-            cls._instance.conn_corpus = sqlite3.connect("./assets/corpus.db")
-            cls._instance.cursor_corpus = cls._instance.conn_corpus.cursor()
+            cls._instance.conn_quran = sqlite3.connect("./assets/quran.db")
+            cls._instance.cursor_quran = cls._instance.conn_quran.cursor()
             cls._instance.conn_wbw = sqlite3.connect("./assets/wbw_en.db")
             cls._instance.cursor_wbw = cls._instance.conn_wbw.cursor()
         return cls._instance
 
     def fetch_all_verses_from_surah(self, surah_number):
-        self.cursor_corpus.execute("SELECT ayah, ar1, ar2, ar3, ar4, ar5 FROM corpus WHERE surah = ? ORDER BY ayah, word", (surah_number,))
+        self.cursor_quran.execute("SELECT ayah, text FROM verses WHERE sura = ? ORDER BY ayah", (surah_number,))
         verses_dict = {}
-        for ayah, ar1, ar2, ar3, ar4, ar5 in self.cursor_corpus.fetchall():
-            word = "".join(filter(None, [ar1, ar2, ar3, ar4, ar5]))
-            verses_dict.setdefault(ayah, []).append(word)
+        for ayah, text in self.cursor_quran.fetchall():
+            verses_dict.setdefault(ayah, []).append(text)
         return [" ".join(verses_dict[ayah_num]) for ayah_num in sorted(verses_dict)]
 
     def fetch_all_words_from_surah(self, surah_number):
-        self.cursor_corpus.execute("SELECT ar1, ar2, ar3, ar4, ar5 FROM corpus WHERE surah = ? ORDER BY ayah, word", (surah_number,))
-        words = ["".join(filter(None, row)) for row in self.cursor_corpus.fetchall()]
+        self.cursor_quran.execute("SELECT text FROM verses WHERE sura = ? ORDER BY ayah", (surah_number,))
+        words = [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
         return words
 
     def fetch_all_words_from_verse(self, surah_number, ayah_number):
-        self.cursor_corpus.execute("SELECT ar1, ar2, ar3, ar4, ar5 FROM corpus WHERE surah = ? AND ayah = ? ORDER BY word", (surah_number, ayah_number))
-        words = []
-        for ar1, ar2, ar3, ar4, ar5 in self.cursor_corpus.fetchall():
-            word = "".join(filter(None, [ar1, ar2, ar3, ar4, ar5]))
-            words.append(word)
+        self.cursor_quran.execute("SELECT text FROM verses WHERE sura = ? AND ayah = ?", (surah_number, ayah_number))
+        words = [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
         return words
 
     def fetch_all_tr_words_from_surah(self, surah_number):
@@ -68,7 +62,7 @@ class DatabaseManager:
         return self.cursor_wbw.fetchone()[0]
 
     def close(self):
-        self.conn_corpus.close()
+        self.conn_quran.close()
         self.conn_wbw.close()
 
 

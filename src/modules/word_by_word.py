@@ -20,7 +20,7 @@ def annotate_word_with_translation(image, surah, ayah, word_index):
 
     # Font settings for translation
     font_path = "./assets/inter.ttf"
-    font_size = 32
+    font_size = 28
     try:
         font = ImageFont.truetype(font_path, font_size)
     except Exception:
@@ -40,7 +40,7 @@ def annotate_word_with_translation(image, surah, ayah, word_index):
     total_h = ih + th + padding * 3
 
     # Create new image
-    new_img = Image.new("RGBA", (total_w, total_h), color=(0, 0, 0, 255))
+    new_img = Image.new("RGBA", (total_w, total_h), color=(0, 0, 0, 0))
 
     # Paste original Arabic word (centered horizontally)
     new_img.paste(image, ((total_w - iw) // 2, padding))
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # 3. Save result
     output_dir = "./ayat/new/words/test/"
     os.makedirs(output_dir, exist_ok=True)
-    save_path = f"{output_dir}/annotated_sample.png"
+    save_path = f"{output_dir}/word_by_word.png"
     annotated_img.save(save_path)
 
     print(f"Annotated image saved to: {save_path}")

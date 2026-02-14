@@ -18,26 +18,26 @@ from database_manager import DatabaseManager
 db = DatabaseManager()
 
 
-def convert_word_to_image(text):
+def convert_word_to_image(text, font_size=80):
     """
     Converts a word string into an image using the hafs font.
     """
 
     font_path = "./assets/hafs.otf"
-    font_size = 128
     font = ImageFont.truetype(font_path, font_size)
 
     # Calculate text dimensions for dynamic image sizing
     bbox = font.getbbox(text)
     w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
+    h = 90
 
     # Create image with padding
-    padding = 20
+    padding = 15
     img = Image.new(
         "RGBA",
         (w + padding * 2, h + padding * 2),
         color=(
+            0,
             0,
             0,
             0,
@@ -46,7 +46,13 @@ def convert_word_to_image(text):
     draw = ImageDraw.Draw(img)
 
     # Draw text centered with respect to its bounding box
-    draw.text((padding - bbox[0], padding - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
+    text_height = bbox[3] - bbox[1]
+    draw.text(
+        (padding - bbox[0], padding + (h - text_height) // 2 - bbox[1]),
+        text,
+        font=font,
+        fill=(255, 255, 255, 255),
+    )
 
     return img
 
@@ -57,8 +63,8 @@ if __name__ == "__main__":
     output_dir = "./ayat/new/words/test/"
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Processing {len(words)} words...")
-    for i in range(0, len(words)):
+    print("Processing 20 words...")
+    for i in range(0, 20):
         img = convert_word_to_image(words[i])
-        img.save(f"{output_dir}/{i + 1}.png")
+        img.save(f"{output_dir}/word_to_image_{i + 1}.png")
     print("Done.")
