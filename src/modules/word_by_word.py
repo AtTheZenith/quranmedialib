@@ -11,25 +11,27 @@ import database_manager
 db = database_manager.DatabaseManager()
 
 
-def annotate_word_with_translation(image, surah, ayah, word_index):
+def annotate_word_with_translation(image, surah, ayah, word_index, translation_font_size=28):
     """
     Annotates a word (as given in image) with its translation.
     Creates a new image with the translation drawn below the original image.
+    Uses baseline alignment for the translation text to ensure consistency.
     """
     translation = db.fetch_translation_for_word(surah, ayah, word_index)
 
     # Font settings for translation
     font_path = "./assets/inter.ttf"
-    font_size = 28
     try:
-        font = ImageFont.truetype(font_path, font_size)
+        font = ImageFont.truetype(font_path, translation_font_size)
     except Exception:
         font = ImageFont.load_default()
 
-    # Calculate translation text dimensions
+    # Calculate translation dimensions and metrics
+    ascent, descent = font.getmetrics()
     bbox = font.getbbox(translation)
     tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
+    # Height is based on the font's maximum possible height to ensure consistency
+    th = ascent + descent
 
     # Original image dimensions
     iw, ih = image.size
@@ -37,19 +39,22 @@ def annotate_word_with_translation(image, surah, ayah, word_index):
     # Padding and layout
     padding = 10
     total_w = max(iw, tw + padding * 2)
-    total_h = ih + th + padding * 3
+    # The Arabic word sits at the top, followed by padding, then the translation box
+    total_h = ih + padding + th + padding
 
     # Create new image
     new_img = Image.new("RGBA", (total_w, total_h), color=(0, 0, 0, 0))
 
     # Paste original Arabic word (centered horizontally)
-    new_img.paste(image, ((total_w - iw) // 2, padding))
+    # The Arabic image already has its own internal padding from word_to_image.py
+    new_img.paste(image, ((total_w - iw) // 2, 0))
 
-    # Draw translation text (centered horizontally at the bottom)
+    # Draw translation text (centered horizontally below the Arabic word)
     draw = ImageDraw.Draw(new_img)
-    tx = (total_w - tw) // 2
-    ty = ih + padding * 2 - bbox[1]
-    draw.text((tx, ty), translation, font=font, fill=(255, 255, 255, 255))
+    tx = (total_w - tw) // 2 - bbox[0]
+    # Baseline for translation: Arabic image height + padding + font's ascent
+    ty = ih + padding + ascent
+    draw.text((tx, ty), translation, font=font, fill=(255, 255, 255, 255), anchor="ls")
 
     return new_img
 
