@@ -18,7 +18,7 @@ from database_manager import DatabaseManager
 db = DatabaseManager()
 
 
-def convert_word_to_image(text, font_size=80):
+def convert_word_to_image(text, font_size=80, color=(255, 255, 255, 255)):
     """
     Converts a word string into an image using the hafs font.
     """
@@ -52,7 +52,7 @@ def convert_word_to_image(text, font_size=80):
         (padding - bbox[0], padding + ascent),
         text,
         font=font,
-        fill=(255, 255, 255, 255),
+        fill=color,
         anchor="ls",  # 'l' for left, 's' for baseline (standard in modern PILLOW)
     )
 

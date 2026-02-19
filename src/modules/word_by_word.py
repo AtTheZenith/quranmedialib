@@ -11,7 +11,7 @@ import database_manager
 db = database_manager.DatabaseManager()
 
 
-def annotate_word_with_translation(image, surah, ayah, word_index, translation_font_size=28):
+def annotate_with_translation(image, surah, ayah, word_index, translation_font_size=28, color=(255, 255, 255, 255)):
     """
     Annotates a word (as given in image) with its translation.
     Creates a new image with the translation drawn below the original image.
@@ -54,7 +54,7 @@ def annotate_word_with_translation(image, surah, ayah, word_index, translation_f
     tx = (total_w - tw) // 2 - bbox[0]
     # Baseline for translation: Arabic image height + padding + font's ascent
     ty = ih + padding + ascent
-    draw.text((tx, ty), translation, font=font, fill=(255, 255, 255, 255), anchor="ls")
+    draw.text((tx, ty), translation, font=font, fill=color, anchor="ls")
 
     return new_img
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     arabic_img = word_to_image.convert_word_to_image(arabic_text)
 
     # 2. Annotate with translation
-    annotated_img = annotate_word_with_translation(arabic_img, surah, ayah, word_idx)
+    annotated_img = annotate_with_translation(arabic_img, surah, ayah, word_idx)
 
     # 3. Save result
     output_dir = "./ayat/new/words/test/"
