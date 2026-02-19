@@ -26,32 +26,34 @@ def convert_word_to_image(text, font_size=80):
     font_path = "./assets/hafs.otf"
     font = ImageFont.truetype(font_path, font_size)
 
-    # Calculate text dimensions for dynamic image sizing
+    # Calculate text dimensions for dynamic image sizing and alignment
+    ascent, descent = font.getmetrics()
     bbox = font.getbbox(text)
+
+    # Width is based on the actual bounding box
     w = bbox[2] - bbox[0]
-    h = 90
+    # Height is based on the font's maximum possible height (ascent + descent)
+    # to ensure consistency regardless of specific character extensions
+    h = ascent + descent
 
     # Create image with padding
-    padding = 15
+    padding = 20
     img = Image.new(
         "RGBA",
         (w + padding * 2, h + padding * 2),
-        color=(
-            0,
-            0,
-            0,
-            0,
-        ),
+        color=(0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(img)
 
-    # Draw text centered with respect to its bounding box
-    text_height = bbox[3] - bbox[1]
+    # Draw text using the baseline
+    # padding - bbox[0] ensures the leftmost part of the glyph starts at the padding
+    # padding + ascent draws the baseline at a fixed height from the top
     draw.text(
-        (padding - bbox[0], padding + (h - text_height) // 2 - bbox[1]),
+        (padding - bbox[0], padding + ascent),
         text,
         font=font,
         fill=(255, 255, 255, 255),
+        anchor="ls",  # 'l' for left, 's' for baseline (standard in modern PILLOW)
     )
 
     return img
