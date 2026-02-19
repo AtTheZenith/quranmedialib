@@ -27,6 +27,9 @@ def convert_words_to_verses(words: list[Image.Image], words_text: list[str] = No
     row_spacing = 30
 
     # Process all words into images
+    if words_text and len(words_text) < len(words):
+        words_text.extend([None] * (len(words) - len(words_text)))
+
     all_items = list(zip(words, words_text if words_text else [None] * len(words)))
     images = []
 
@@ -119,7 +122,8 @@ if __name__ == "__main__":
 
     from database_manager import DatabaseManager
     from word_to_image import convert_word_to_image
-    from word_by_word import annotate_word_with_translation
+    from word_by_word import annotate_with_translation
+    from verse_numbers import verse_number
 
     db = DatabaseManager()
     # Ayatul Kursi (2:255)
@@ -130,9 +134,10 @@ if __name__ == "__main__":
     print("Annotating words with translations...")
     word_wbw_images = []
     for i in range(0, len(word_images)):
-        word_wbw_images.append(annotate_word_with_translation(word_images[i], 2, 255, i + 1))
+        word_wbw_images.append(annotate_with_translation(word_images[i], 2, 255, i + 1))
 
     print("Arranging words into verses with stop-sign overflow...")
+    word_wbw_images.append(verse_number(255, padding=(0, 42, 0, 0)))
     images = convert_words_to_verses(word_wbw_images, words_text=words_text)
 
     output_dir = "./ayat/new/words/test/"
