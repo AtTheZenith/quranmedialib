@@ -11,11 +11,31 @@ import database_manager
 db = database_manager.DatabaseManager()
 
 
-def annotate_with_translation(image, surah, ayah, word_index, translation_font_size=28, color=(255, 255, 255, 255)):
-    """
-    Annotates a word (as given in image) with its translation.
+def annotate_word(
+    image: Image.Image,
+    surah: int,
+    ayah: int,
+    word_index: int,
+    translation_font_size: int = 28,
+    color: tuple[int, int, int, int] = (255, 255, 255, 255),
+    padding: tuple[int, int, int, int] = (0, 42, 0, 0),
+) -> Image.Image:
+    """Annotates a word image with its translation.
+
     Creates a new image with the translation drawn below the original image.
     Uses baseline alignment for the translation text to ensure consistency.
+
+    Args:
+        image: The input PIL Image of the Arabic word.
+        surah: The surah number.
+        ayah: The ayah number.
+        word_index: The word index within the ayah.
+        translation_font_size: Font size for the translation text.
+        color: RGBA color for the translation text.
+        padding: A tuple of (top, bottom, left, right) padding values.
+
+    Returns:
+        A new PIL Image containing the Arabic word and its translation.
     """
     translation = db.fetch_translation_for_word(surah, ayah, word_index)
 
@@ -37,10 +57,10 @@ def annotate_with_translation(image, surah, ayah, word_index, translation_font_s
     iw, ih = image.size
 
     # Padding and layout
-    padding = 10
-    total_w = max(iw, tw + padding * 2)
-    # The Arabic word sits at the top, followed by padding, then the translation box
-    total_h = ih + padding + th + padding
+    # padding is (top, bottom, left, right)
+    total_w = max(iw, tw + padding[2] + padding[3])
+    # The Arabic word sits at the top, followed by padding[0], then translation, then padding[1]
+    total_h = ih + padding[0] + th + padding[1]
 
     # Create new image
     new_img = Image.new("RGBA", (total_w, total_h), color=(0, 0, 0, 0))
@@ -52,15 +72,15 @@ def annotate_with_translation(image, surah, ayah, word_index, translation_font_s
     # Draw translation text (centered horizontally below the Arabic word)
     draw = ImageDraw.Draw(new_img)
     tx = (total_w - tw) // 2 - bbox[0]
-    # Baseline for translation: Arabic image height + padding + font's ascent
-    ty = ih + padding + ascent
+    # Baseline for translation: Arabic image height + top padding + font's ascent
+    ty = ih + padding[0] + ascent
     draw.text((tx, ty), translation, font=font, fill=color, anchor="ls")
 
     return new_img
 
 
 if __name__ == "__main__":
-    import word_to_image
+    import wimage
     import os
 
     surah = 1
@@ -70,10 +90,11 @@ if __name__ == "__main__":
     # 1. Fetch Arabic word and convert to image
     arabic_words = db.fetch_all_words_from_verse(surah, ayah)
     arabic_text = arabic_words[word_idx - 1]
-    arabic_img = word_to_image.convert_word_to_image(arabic_text)
+    arabic_img = wimage.get_wimage(arabic_text)
 
     # 2. Annotate with translation
-    annotated_img = annotate_with_translation(arabic_img, surah, ayah, word_idx)
+    # Using top=0, bottom=42 for compatibility with original design if that was the intent
+    annotated_img = annotate_word(arabic_img, surah, ayah, word_idx, padding=(0, 42, 0, 0))
 
     # 3. Save result
     output_dir = "./ayat/new/words/test/"

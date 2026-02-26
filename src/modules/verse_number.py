@@ -8,18 +8,22 @@ FONT_PATH = "./assets/hafs.otf"
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
 
-def verse_number(number, font_size=128, color=(255, 255, 255, 255), padding=(10, 10, 10, 10)):
-    """
-    Generates an image of the ayah symbol with the given number using Unicode.
+def verse_number(
+    number: int,
+    font_size: int = 128,
+    color: tuple[int, int, int, int] = (255, 255, 255, 255),
+    padding: tuple[int, int, int, int] = (10, 10, 10, 10),
+) -> Image.Image:
+    """Generates an image of the ayah symbol with the given number using Unicode.
 
     Args:
-        number (int): The ayah number to draw.
-        font_size (int): Font size for the Unicode symbol.
-        color (tuple): RGBA color for the text.
-        padding (tuple): (top, bottom, left, right) padding around the symbol.
+        number: The ayah number to draw.
+        font_size: Font size for the Unicode symbol.
+        color: RGBA color for the text.
+        padding: A tuple of (top, bottom, left, right) padding values.
 
     Returns:
-        PIL.Image: The generated image.
+        A PIL Image containing the generated verse number symbol.
     """
     try:
         symbol_font = ImageFont.truetype(FONT_PATH, font_size)

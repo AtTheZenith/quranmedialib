@@ -4,11 +4,11 @@
 # concatenate ar1-ar5 to get the word
 # font is ./assets/hafs.otf
 
-"""
-This is a function that will be used to convert words to images.
-It will use the database manager to fetch words from the database.
-It will use the pillow library to create images.
-It can be imported to create workflows and to prevent large files, as this is a library monorepo.
+"""Module for converting Arabic text to images using a specific font.
+
+This module provides functionality to render Arabic words into images with
+customizable font size, color, and padding. It is designed to be used
+as part of a larger workflow for Quranic verse image generation.
 """
 
 import os
@@ -18,9 +18,17 @@ from database_manager import DatabaseManager
 db = DatabaseManager()
 
 
-def convert_word_to_image(text, font_size=80, color=(255, 255, 255, 255)):
-    """
-    Converts a word string into an image using the hafs font.
+def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] = (255, 255, 255, 255), padding: tuple[int, int, int, int] = (20, 20, 20, 20)) -> Image.Image:
+    """Converts a word string into an image using the hafs font.
+
+    Args:
+        text: The Arabic text to render.
+        font_size: The font size to use for rendering.
+        color: The RGBA color of the text.
+        padding: A tuple of (top, bottom, left, right) padding values.
+
+    Returns:
+        A PIL Image containing the rendered text with padding.
     """
 
     font_path = "./assets/hafs.otf"
@@ -33,27 +41,28 @@ def convert_word_to_image(text, font_size=80, color=(255, 255, 255, 255)):
     # Width is based on the actual bounding box
     w = bbox[2] - bbox[0]
     # Height is based on the font's maximum possible height (ascent + descent)
-    # to ensure consistency regardless of specific character extensions
     h = ascent + descent
 
     # Create image with padding
-    padding = 20
+    # padding is (top, bottom, left, right)
+    # img width: left + w + right
+    # img height: top + h + bottom
     img = Image.new(
         "RGBA",
-        (w + padding * 2, h + padding * 2),
+        (w + padding[2] + padding[3], h + padding[0] + padding[1]),
         color=(0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(img)
 
     # Draw text using the baseline
-    # padding - bbox[0] ensures the leftmost part of the glyph starts at the padding
-    # padding + ascent draws the baseline at a fixed height from the top
+    # x: padding[2] - bbox[0] ensures the leftmost part starts at the left padding
+    # y: padding[0] + ascent draws the baseline at a fixed height from the top padding
     draw.text(
-        (padding - bbox[0], padding + ascent),
+        (padding[2] - bbox[0], padding[0] + ascent),
         text,
         font=font,
         fill=color,
-        anchor="ls",  # 'l' for left, 's' for baseline (standard in modern PILLOW)
+        anchor="ls",  # 'l' for left, 's' for baseline
     )
 
     return img
@@ -67,6 +76,6 @@ if __name__ == "__main__":
 
     print("Processing 20 words...")
     for i in range(0, 20):
-        img = convert_word_to_image(words[i])
+        img = get_wimage(words[i])
         img.save(f"{output_dir}/word_to_image_{i + 1}.png")
     print("Done.")
