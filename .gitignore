@@ -11,9 +11,4 @@ uv.lock
 .venv
 
 # Cache files
-/suwar-names/processed/
-/ayat/processed/
-/ayat/short/processed/
-/ayat/numbers/processed/
-/ai/dataset_expected/
-/ayat/new/
+/output/

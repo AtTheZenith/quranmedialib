@@ -38,10 +38,10 @@ if __name__ == "__main__":
     # Test color_image function
     test_image = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
     colored_image = color(test_image.copy())
-    with open("./ayat/new/test/colored_image.png", "wb") as f:
+    with open("./output/test/colored_image.png", "wb") as f:
         colored_image.save(f)
 
     # Test pad function
     padded_image = pad(test_image.copy())
-    with open("./ayat/new/test/padded_image.png", "wb") as f:
+    with open("./output/test/padded_image.png", "wb") as f:
         padded_image.save(f)

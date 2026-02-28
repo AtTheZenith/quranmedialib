@@ -97,7 +97,7 @@ if __name__ == "__main__":
     annotated_img = annotate_word(arabic_img, surah, ayah, word_idx, padding=(0, 42, 0, 0))
 
     # 3. Save result
-    output_dir = "./ayat/new/words/test/"
+    output_dir = "./output/words/test/"
     os.makedirs(output_dir, exist_ok=True)
     save_path = f"{output_dir}/word_by_word.png"
     annotated_img.save(save_path)

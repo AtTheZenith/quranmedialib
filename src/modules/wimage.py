@@ -71,11 +71,11 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
 if __name__ == "__main__":
     surah = 2
     words = db.fetch_all_words_from_surah(surah)
-    output_dir = "./ayat/new/words/test/"
+    output_dir = "./output/words/test/"
     os.makedirs(output_dir, exist_ok=True)
 
     print("Processing 20 words...")
-    for i in range(0, 20):
+    for i in range(20):
         img = get_wimage(words[i])
         img.save(f"{output_dir}/word_to_image_{i + 1}.png")
     print("Done.")

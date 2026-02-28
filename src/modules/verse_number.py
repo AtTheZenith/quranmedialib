@@ -80,7 +80,7 @@ if __name__ == "__main__":
     img_custom = verse_number(test_number, padding=custom_padding)
     print(f"Custom padding {custom_padding} size: {img_custom.size}")
 
-    test_output = "./ayat/new/numbers/"
+    test_output = "./output/numbers/"
     os.makedirs(test_output, exist_ok=True)
 
     output_path_default = os.path.join(test_output, f"{test_number:03d}_default_4tuple.png")

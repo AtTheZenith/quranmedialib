@@ -55,8 +55,7 @@ class DatabaseManager:
             A list of words (strings) from the surah.
         """
         self.cursor_quran.execute("SELECT text FROM verses WHERE sura = ? ORDER BY ayah", (surah_number,))
-        words = [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
-        return words
+        return [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
 
     def fetch_all_words_from_verse(self, surah_number: int, ayah_number: int) -> list[str]:
         """Fetches all words from a specific verse.
@@ -69,8 +68,7 @@ class DatabaseManager:
             A list of words (strings) from the verse.
         """
         self.cursor_quran.execute("SELECT text FROM verses WHERE sura = ? AND ayah = ?", (surah_number, ayah_number))
-        words = [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
-        return words
+        return [word for row in self.cursor_quran.fetchall() for word in row[0].split(" ") if word != ""]
 
     def fetch_all_tr_words_from_surah(self, surah_number: int) -> list[str]:
         """Fetches all word-by-word translations for a specific surah.

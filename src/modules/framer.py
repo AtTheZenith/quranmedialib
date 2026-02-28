@@ -46,7 +46,6 @@ def frame(
         words_text.extend([None] * (len(words) - len(words_text)))
 
     all_items = list(zip(words, words_text if words_text else [None] * len(words)))
-    images = []
 
     while all_items:
         current_image_rows = []
@@ -155,7 +154,7 @@ if __name__ == "__main__":
     word_wbw_images.append(verse_number(255, padding=(0, 42, 0, 0)))
     images = frame(word_wbw_images, words_text=words_text)
 
-    output_dir = "./ayat/new/words/test/"
+    output_dir = "./output/words/test/"
     os.makedirs(output_dir, exist_ok=True)
 
     for i, image in enumerate(images):
