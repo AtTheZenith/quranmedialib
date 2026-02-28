@@ -1,5 +1,11 @@
 import os
+import logging
+from typing import Union, Tuple
 from PIL import Image, ImageDraw, ImageFont
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Hardcoded constants
 FONT_PATH = "./assets/hafs.otf"
@@ -7,86 +13,111 @@ FONT_PATH = "./assets/hafs.otf"
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
+# Type aliases
+Color = Union[Tuple[int, int, int], Tuple[int, int, int, int]]
+Padding = Tuple[int, int, int, int]
+
 
 def verse_number(
     number: int,
     font_size: int = 128,
-    color: tuple[int, int, int, int] = (255, 255, 255, 255),
-    padding: tuple[int, int, int, int] = (10, 10, 10, 10),
+    color: Color = (255, 255, 255, 255),
+    padding: Padding = (10, 10, 10, 10),
+    font_path: str = FONT_PATH,
+    background_color: Color = (0, 0, 0, 0),
 ) -> Image.Image:
     """Generates an image of the ayah symbol with the given number using Unicode.
 
+    Padding semantics: (top, bottom, left, right)
+
     Args:
-        number: The ayah number to draw.
+        number: The ayah number to draw (must be non-negative).
         font_size: Font size for the Unicode symbol.
-        color: RGBA color for the text.
-        padding: A tuple of (top, bottom, left, right) padding values.
+        color: RGB or RGBA color for the text.
+        padding: A 4-tuple of (top, bottom, left, right) padding values.
+        font_path: Path to the .otf or .ttf font file.
+        background_color: RGB or RGBA color for the image background.
 
     Returns:
         A PIL Image containing the generated verse number symbol.
+
+    Raises:
+        ValueError: If `number` is negative or `padding` is invalid.
+
+    Example:
+        >>> img = verse_number(286, font_size=64)
+        >>> isinstance(img, Image.Image)
+        True
     """
+    if number < 0:
+        raise ValueError(f"Verse number must be non-negative, got {number}")
+
+    if len(padding) != 4 or any(p < 0 for p in padding):
+        raise ValueError(f"Padding must be a 4-tuple of non-negative integers, got {padding}")
+
     try:
-        symbol_font = ImageFont.truetype(FONT_PATH, font_size)
-    except Exception as e:
-        print(f"Warning: Could not load font from {FONT_PATH}. Falling back to default. Error: {e}")
+        if not os.path.exists(font_path):
+            logger.warning(f"Font path {font_path} does not exist. Falling back to default font.")
+            symbol_font = ImageFont.load_default()
+        else:
+            symbol_font = ImageFont.truetype(font_path, font_size)
+    except (OSError, IOError) as e:
+        logger.warning(f"Could not load font from {font_path}. Falling back to default. Error: {e}")
         symbol_font = ImageFont.load_default()
 
-    # Convert number to Arabic-Indic numerals using translate
+    # Convert number to Arabic-Indic numerals
     number_str = str(number).translate(ARABIC_INDIC_TRANS)
 
-    # Calculate bounding box for the symbol to determine image size
-    dummy_img = Image.new("RGBA", (1, 1))
-    dummy_draw = ImageDraw.Draw(dummy_img)
-    symbol_bbox = dummy_draw.textbbox((0, 0), "١", font=symbol_font, anchor="mm")
+    # Use a dummy image to measure the actual text bounding box
+    # We use "mm" (middle-middle) anchor for easier centering later
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    bbox = dummy_draw.textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
 
-    # symbol_bbox is (left, top, right, bottom) relative to (0,0)
-    symbol_w = symbol_bbox[2] - symbol_bbox[0]
-    symbol_h = symbol_bbox[3] - symbol_bbox[1]
+    # bbox is (left, top, right, bottom) relative to the anchor point (0, 0)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
 
     top, bottom, left, right = padding
 
-    # Determine image size based on symbol size + individual padding
-    w = symbol_w + left + right
-    h = symbol_h + top + bottom
+    # Create image that fits the text plus padding
+    img_w = int(text_w + left + right)
+    img_h = int(text_h + top + bottom)
 
-    # Create a blank transparent image
-    img = Image.new("RGBA", (int(w), int(h)), color=(0, 0, 0, 0))
+    img = Image.new("RGBA", (img_w, img_h), color=background_color)
     draw = ImageDraw.Draw(img)
 
-    # Calculate center position respecting top and left padding
-    # anchor="mm" centers the text at the given coord.
-    # We want the center of the symbol to be at:
-    # x = left + symbol_w / 2
-    # y = top + symbol_h / 2
-    center_x = left + symbol_w / 2
-    center_y = top + symbol_h / 2
+    # Calculate center position to draw the text anchored at "mm"
+    # The anchor "mm" will put the exact center of the text at (center_x, center_y)
+    center_x = left + text_w / 2
+    center_y = top + text_h / 2
 
     draw.text((center_x, center_y), number_str, font=symbol_font, fill=color, anchor="mm")
 
     return img
 
 
-if __name__ == "__main__":
-    # Test generation with a single integer
+def main():
+    """Example usage and demo for verse_number."""
     test_number = 286
-    print(f"Generating ayah number {test_number} using Unicode symbol...")
+    logger.info(f"Generating ayah number {test_number} using Unicode symbol...")
 
-    # Test default padding (10, 10, 10, 10)
+    # Test default padding (10, 10, 10, 10) -> (top, right, bottom, left)
     img_default = verse_number(test_number)
-    print(f"Default padding size: {img_default.size}")
+    logger.info(f"Default padding size: {img_default.size}")
 
-    # Test uneven 4-tuple padding (top, bottom, left, right)
-    custom_padding = (50, 10, 100, 20)
+    # Test custom padding (top=50, right=20, bottom=10, left=100)
+    custom_padding = (50, 20, 10, 100)
     img_custom = verse_number(test_number, padding=custom_padding)
-    print(f"Custom padding {custom_padding} size: {img_custom.size}")
+    logger.info(f"Custom padding {custom_padding} size: {img_custom.size}")
 
-    test_output = "./output/numbers/"
-    os.makedirs(test_output, exist_ok=True)
+    output_dir = "./output/test/"
+    os.makedirs(output_dir, exist_ok=True)
 
-    output_path_default = os.path.join(test_output, f"{test_number:03d}_default_4tuple.png")
-    img_default.save(output_path_default)
+    img_default.save(os.path.join(output_dir, f"verse_number_{test_number:03d}_default.png"))
+    img_custom.save(os.path.join(output_dir, f"verse_number_{test_number:03d}_custom.png"))
 
-    output_path_custom = os.path.join(test_output, f"{test_number:03d}_custom_4tuple.png")
-    img_custom.save(output_path_custom)
+    logger.info(f"Test generation complete. Saved to {output_dir}")
 
-    print(f"Test generation complete. Saved to {test_output}")
+
+if __name__ == "__main__":
+    main()

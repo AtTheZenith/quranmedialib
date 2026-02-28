@@ -1,9 +1,3 @@
-# ./assets/corpus.db
-# table structure:
-# "surah","ayah","word","ar1","ar2","ar3","ar4","ar5","pos1","pos2","pos3","pos4","pos5","count","root_ar","lemma","verb_type","verf_form"
-# concatenate ar1-ar5 to get the word
-# font is ./assets/hafs.otf
-
 """Module for converting Arabic text to images using a specific font.
 
 This module provides functionality to render Arabic words into images with
@@ -13,7 +7,7 @@ as part of a larger workflow for Quranic verse image generation.
 
 import os
 from PIL import Image, ImageDraw, ImageFont
-from database_manager import DatabaseManager
+from src.modules.database_manager import DatabaseManager
 
 db = DatabaseManager()
 
@@ -30,9 +24,7 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
     Returns:
         A PIL Image containing the rendered text with padding.
     """
-
-    font_path = "./assets/hafs.otf"
-    font = ImageFont.truetype(font_path, font_size)
+    font = ImageFont.truetype("./assets/hafs.otf", font_size)
 
     # Calculate text dimensions for dynamic image sizing and alignment
     ascent, descent = font.getmetrics()
@@ -68,14 +60,18 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
     return img
 
 
-if __name__ == "__main__":
+def main():
     surah = 2
     words = db.fetch_all_words_from_surah(surah)
-    output_dir = "./output/words/test/"
+    output_dir = "./output/test/"
     os.makedirs(output_dir, exist_ok=True)
 
     print("Processing 20 words...")
     for i in range(20):
         img = get_wimage(words[i])
-        img.save(f"{output_dir}/word_to_image_{i + 1}.png")
+        img.save(f"{output_dir}/wimage_{i + 1}.png")
     print("Done.")
+
+
+if __name__ == "__main__":
+    main()

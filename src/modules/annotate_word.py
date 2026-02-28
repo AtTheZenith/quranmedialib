@@ -1,14 +1,8 @@
-# ./assets/en_sahih.db
-# table structure:
-# "surah","ayah","word","translation"
-# (INTEGER, INTEGER, INTEGER, TEXT) where the fourth column is the translation of the corresponding arabic word in corpus.db
-# fetch by word only, it is used in parallel with fetch by word from corpus.db (to annotate words with translations)
-
 from PIL import Image, ImageDraw, ImageFont
 
-import database_manager
+from src.modules.database_manager import DatabaseManager
 
-db = database_manager.DatabaseManager()
+db = DatabaseManager()
 
 
 def annotate_word(
@@ -19,6 +13,10 @@ def annotate_word(
     translation_font_size: int = 28,
     color: tuple[int, int, int, int] = (255, 255, 255, 255),
     padding: tuple[int, int, int, int] = (0, 42, 0, 0),
+    db: DatabaseManager | None = None,
+    translation: str | None = None,
+    font_path: str | None = None,
+    background_color: tuple[int, int, int, int] = (0, 0, 0, 0),
 ) -> Image.Image:
     """Annotates a word image with its translation.
 
@@ -33,21 +31,41 @@ def annotate_word(
         translation_font_size: Font size for the translation text.
         color: RGBA color for the translation text.
         padding: A tuple of (top, bottom, left, right) padding values.
+        db: Optional DatabaseManager instance for dependency injection.
+        translation: Optional pre-fetched translation string.
+        font_path: Optional path to a .ttf font file. Defaults to "./assets/inter.ttf".
+        background_color: RGBA color for the new image background.
 
     Returns:
         A new PIL Image containing the Arabic word and its translation.
-    """
-    translation = db.fetch_translation_for_word(surah, ayah, word_index)
 
+    Raises:
+        ValueError: If padding is not a tuple of 4 integers.
+    """
+    # Validate padding
+    if not isinstance(padding, tuple) or len(padding) != 4 or not all(isinstance(p, int) for p in padding):
+        raise ValueError("padding must be a tuple of 4 integers (top, bottom, left, right)")
+
+    # Fetch translation if not provided
+    if translation is None:
+        database = db if db is not None else globals().get("db")
+        if database:
+            translation = database.fetch_translation_for_word(surah, ayah, word_index)
+
+    # Handle missing or empty translations
+    if not translation:
+        return image
     # Font settings for translation
-    font_path = "./assets/inter.ttf"
+    actual_font_path = font_path if font_path is not None else "./assets/inter.ttf"
     try:
-        font = ImageFont.truetype(font_path, translation_font_size)
-    except Exception:
+        font = ImageFont.truetype(actual_font_path, translation_font_size)
+    except (OSError, IOError):
+        print(f"Warning: Could not load font at {actual_font_path}. Falling back to default font.")
         font = ImageFont.load_default()
 
     # Calculate translation dimensions and metrics
     ascent, descent = font.getmetrics()
+    # bbox is (left, top, right, bottom)
     bbox = font.getbbox(translation)
     tw = bbox[2] - bbox[0]
     # Height is based on the font's maximum possible height to ensure consistency
@@ -63,24 +81,25 @@ def annotate_word(
     total_h = ih + padding[0] + th + padding[1]
 
     # Create new image
-    new_img = Image.new("RGBA", (total_w, total_h), color=(0, 0, 0, 0))
+    new_img = Image.new("RGBA", (total_w, total_h), color=background_color)
 
     # Paste original Arabic word (centered horizontally)
     # The Arabic image already has its own internal padding from word_to_image.py
-    new_img.paste(image, ((total_w - iw) // 2, 0))
+    new_img.paste(image, ((total_w - iw) // 2, 0), image if image.mode == "RGBA" else None)
 
     # Draw translation text (centered horizontally below the Arabic word)
     draw = ImageDraw.Draw(new_img)
     tx = (total_w - tw) // 2 - bbox[0]
     # Baseline for translation: Arabic image height + top padding + font's ascent
+    # anchor="ls" means "left, baseline"
     ty = ih + padding[0] + ascent
     draw.text((tx, ty), translation, font=font, fill=color, anchor="ls")
 
     return new_img
 
 
-if __name__ == "__main__":
-    import wimage
+def main():
+    from src.modules.wimage import get_wimage
     import os
 
     surah = 1
@@ -89,15 +108,21 @@ if __name__ == "__main__":
 
     # 1. Fetch Arabic word and convert to image
     arabic_words = db.fetch_all_words_from_verse(surah, ayah)
+
+    # Simple bounds checking
+    if not (1 <= word_idx <= len(arabic_words)):
+        print(f"Error: word_index {word_idx} out of range for Surah {surah}, Ayah {ayah} (max {len(arabic_words)})")
+        exit()
+
     arabic_text = arabic_words[word_idx - 1]
-    arabic_img = wimage.get_wimage(arabic_text)
+    arabic_img = get_wimage(arabic_text)
 
     # 2. Annotate with translation
     # Using top=0, bottom=42 for compatibility with original design if that was the intent
     annotated_img = annotate_word(arabic_img, surah, ayah, word_idx, padding=(0, 42, 0, 0))
 
     # 3. Save result
-    output_dir = "./output/words/test/"
+    output_dir = "./output/test/"
     os.makedirs(output_dir, exist_ok=True)
     save_path = f"{output_dir}/word_by_word.png"
     annotated_img.save(save_path)
@@ -105,3 +130,9 @@ if __name__ == "__main__":
     print(f"Annotated image saved to: {save_path}")
     print(f"Arabic: {arabic_text}")
     print(f"Translation: {db.fetch_translation_for_word(surah, ayah, word_idx)}")
+
+    db.close()
+
+
+if __name__ == "__main__":
+    main()

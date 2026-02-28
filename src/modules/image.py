@@ -34,14 +34,20 @@ def pad(image: Image.Image, padding: tuple[int, int, int, int] = (20, 20, 20, 20
     return padded_image
 
 
-if __name__ == "__main__":
+def main():
     # Test color_image function
     test_image = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
     colored_image = color(test_image.copy())
     with open("./output/test/colored_image.png", "wb") as f:
         colored_image.save(f)
+        print("Saved colored image")
 
     # Test pad function
     padded_image = pad(test_image.copy())
     with open("./output/test/padded_image.png", "wb") as f:
         padded_image.save(f)
+        print("Saved padded image")
+
+
+if __name__ == "__main__":
+    main()
