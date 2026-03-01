@@ -5,7 +5,6 @@ customizable font size, color, and padding. It is designed to be used
 as part of a larger workflow for Quranic verse image generation.
 """
 
-import os
 from PIL import Image, ImageDraw, ImageFont
 from src.modules.database_manager import DatabaseManager
 
@@ -58,20 +57,3 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
     )
 
     return img
-
-
-def main():
-    surah = 2
-    words = db.fetch_all_words_from_surah(surah)
-    output_dir = "./output/test/"
-    os.makedirs(output_dir, exist_ok=True)
-
-    print("Processing 20 words...")
-    for i in range(20):
-        img = get_wimage(words[i])
-        img.save(f"{output_dir}/wimage_{i + 1}.png")
-    print("Done.")
-
-
-if __name__ == "__main__":
-    main()
