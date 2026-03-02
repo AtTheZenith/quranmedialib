@@ -7,22 +7,15 @@ def test_annotate_word():
     print("\nRunning test_annotate_word...")
     surah = 1
     ayah = 1
-    word_idx = 1  # "Bismillah"
+    word_idx = 1  # "Bism"
 
     # 1. Fetch Arabic word and convert to image
     arabic_words = db.fetch_all_words_from_verse(surah, ayah)
-
-    # Simple bounds checking
-    if not (1 <= word_idx <= len(arabic_words)):
-        print(f"Error: word_index {word_idx} out of range for Surah {surah}, Ayah {ayah} (max {len(arabic_words)})")
-        return
-
     arabic_text = arabic_words[word_idx - 1]
     arabic_img = get_wimage(arabic_text)
 
     # 2. Annotate with translation
-    # Using top=0, bottom=42 for compatibility with original design if that was the intent
-    annotated_img = annotate_word(arabic_img, surah, ayah, word_idx, padding=(0, 42, 0, 0))
+    annotated_img = annotate_word(arabic_img, surah, ayah, word_idx)
 
     # 3. Save result
     output_dir = "./output/test/"

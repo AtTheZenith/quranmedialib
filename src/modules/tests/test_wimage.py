@@ -9,10 +9,9 @@ def test_wimage():
     output_dir = "./output/test/"
     os.makedirs(output_dir, exist_ok=True)
 
-    print("Processing 20 words...")
-    for i in range(20):
-        img = get_wimage(words[i])
-        img.save(f"{output_dir}/wimage_{i + 1}.png")
+    print("Processing word...")
+    img = get_wimage(words[0])
+    img.save(f"{output_dir}/wimage.png")
     print("Done.")
     print("test_wimage completed successfully.")
 

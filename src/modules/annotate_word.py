@@ -12,7 +12,6 @@ def annotate_word(
     word_index: int,
     translation_font_size: int = 28,
     color: tuple[int, int, int, int] = (255, 255, 255, 255),
-    padding: tuple[int, int, int, int] = (0, 42, 0, 0),
     db: DatabaseManager | None = None,
     translation: str | None = None,
     font_path: str | None = None,
@@ -30,7 +29,6 @@ def annotate_word(
         word_index: The word index within the ayah.
         translation_font_size: Font size for the translation text.
         color: RGBA color for the translation text.
-        padding: A tuple of (top, bottom, left, right) padding values.
         db: Optional DatabaseManager instance for dependency injection.
         translation: Optional pre-fetched translation string.
         font_path: Optional path to a .ttf font file. Defaults to "./assets/inter.ttf".
@@ -42,10 +40,6 @@ def annotate_word(
     Raises:
         ValueError: If padding is not a tuple of 4 integers.
     """
-    # Validate padding
-    if not isinstance(padding, tuple) or len(padding) != 4 or not all(isinstance(p, int) for p in padding):
-        raise ValueError("padding must be a tuple of 4 integers (top, bottom, left, right)")
-
     # Fetch translation if not provided
     if translation is None:
         database = db if db is not None else globals().get("db")
@@ -74,11 +68,9 @@ def annotate_word(
     # Original image dimensions
     iw, ih = image.size
 
-    # Padding and layout
-    # padding is (top, bottom, left, right)
-    total_w = max(iw, tw + padding[2] + padding[3])
-    # The Arabic word sits at the top, followed by padding[0], then translation, then padding[1]
-    total_h = ih + padding[0] + th + padding[1]
+    # No padding
+    total_w = max(iw, tw)
+    total_h = ih + th
 
     # Create new image
     new_img = Image.new("RGBA", (total_w, total_h), color=background_color)
@@ -92,7 +84,7 @@ def annotate_word(
     tx = (total_w - tw) // 2 - bbox[0]
     # Baseline for translation: Arabic image height + top padding + font's ascent
     # anchor="ls" means "left, baseline"
-    ty = ih + padding[0] + ascent
+    ty = ih + ascent
     draw.text((tx, ty), translation, font=font, fill=color, anchor="ls")
 
     return new_img

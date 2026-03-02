@@ -22,7 +22,7 @@ def verse_number(
     number: int,
     font_size: int = 128,
     color: Color = (255, 255, 255, 255),
-    padding: Padding = (10, 10, 10, 10),
+    padding: Padding = (1, 1, 71, 1),
     font_path: str = FONT_PATH,
     background_color: Color = (0, 0, 0, 0),
 ) -> Image.Image:

@@ -52,14 +52,17 @@ def pad(image: Image.Image, padding: PaddingType = (20, 20, 20, 20), color: Colo
     Returns:
         A new PIL Image containing the original image centered by the padding.
     """
-    # Ensure color is RGBA
     if len(color) == 3:
         color = (*color, 255)
+    if len(image.mode) == 3:
+        image = image.convert("RGBA")
 
-    new_width = image.width + padding[2] + padding[3]
-    new_height = image.height + padding[0] + padding[1]
+    up, down, left, right = padding[0], padding[1], padding[2], padding[3]
+
+    new_width = image.width + left + right
+    new_height = image.height + up + down
     padded_image = Image.new("RGBA", (new_width, new_height), color=color)
-    padded_image.paste(image, (padding[2], padding[0]))
+    padded_image.paste(image, (left, up))
     return padded_image
 
 

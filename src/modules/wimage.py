@@ -6,6 +6,7 @@ as part of a larger workflow for Quranic verse image generation.
 """
 
 from PIL import Image, ImageDraw, ImageFont
+
 from src.modules.database_manager import DatabaseManager
 
 db = DatabaseManager()

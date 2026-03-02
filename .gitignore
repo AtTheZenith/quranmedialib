@@ -11,3 +11,6 @@ wheels/
 
 # Insignificant files
 /output/
+
+# Other files
+.agents

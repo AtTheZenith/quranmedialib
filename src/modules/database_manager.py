@@ -1,3 +1,5 @@
+"""Singleton manager for Quranic and translation databases."""
+
 import logging
 import sqlite3
 import threading
