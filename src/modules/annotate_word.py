@@ -44,7 +44,7 @@ def annotate_word(
     if translation is None:
         database = db if db is not None else globals().get("db")
         if database:
-            translation = database.fetch_translation_for_word(surah, ayah, word_index)
+            translation = database.get_wbw_from_word(surah, ayah, word_index)
 
     # Handle missing or empty translations
     if not translation:

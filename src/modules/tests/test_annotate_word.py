@@ -10,7 +10,7 @@ def test_annotate_word():
     word_idx = 1  # "Bism"
 
     # 1. Fetch Arabic word and convert to image
-    arabic_words = db.fetch_all_words_from_verse(surah, ayah)
+    arabic_words = db.get_verse(surah, ayah).split()
     arabic_text = arabic_words[word_idx - 1]
     arabic_img = get_wimage(arabic_text)
 
@@ -25,7 +25,7 @@ def test_annotate_word():
 
     print(f"Annotated image saved to: {save_path}")
     print(f"Arabic: {arabic_text}")
-    print(f"Translation: {db.fetch_translation_for_word(surah, ayah, word_idx)}")
+    print(f"Translation: {db.get_wbw_from_word(surah, ayah, word_idx)}")
 
     print("test_annotate_word completed successfully.")
 

@@ -5,7 +5,8 @@ from src.modules.wimage import get_wimage, db
 def test_wimage():
     print("\nRunning test_wimage...")
     surah = 2
-    words = db.fetch_all_words_from_surah(surah)
+    verses = db.get_verses_from_surah(surah)
+    words = [word for verse in verses for word in verse.split() if word]
     output_dir = "./output/test/"
     os.makedirs(output_dir, exist_ok=True)
 

@@ -21,14 +21,14 @@ class DatabaseManager:
     _instance: Optional[Self] = None
     _lock = threading.Lock()
 
-    def __new__(cls, quran_path: str = "./assets/quran.db", wbw_path: str = "./assets/wbw_en.db") -> Self:
+    def __new__(cls, quran_path: str = "./assets/quran.db", wbw_path: str = "./assets/wbw_en.db", translation_path: str = "./assets/en_sahih.db") -> Self:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(DatabaseManager, cls).__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self, quran_path: str = "./assets/quran.db", wbw_path: str = "./assets/wbw_en.db"):
+    def __init__(self, quran_path: str = "./assets/quran.db", wbw_path: str = "./assets/wbw_en.db", translation_path: str = "./assets/en_sahih.db"):
         """Initializes database connections. Re-initializes if previously closed.
 
         Args:
@@ -47,8 +47,12 @@ class DatabaseManager:
             self.conn_wbw.row_factory = sqlite3.Row
             self.cursor_wbw = self.conn_wbw.cursor()
 
+            self.conn_translation = sqlite3.connect(translation_path, check_same_thread=False)
+            self.conn_translation.row_factory = sqlite3.Row
+            self.cursor_translation = self.conn_translation.cursor()
+
             self._initialized = True
-            logger.info("DatabaseManager initialized with %s and %s", quran_path, wbw_path)
+            logger.info("DatabaseManager initialized with %s, %s, and %s", quran_path, wbw_path, translation_path)
         except sqlite3.Error as e:
             logger.error("Failed to connect to databases: %s", e)
             raise
@@ -82,7 +86,16 @@ class DatabaseManager:
             logger.error("WBW DB query failed: %s | Query: %s", e, query)
             return []
 
-    def fetch_all_verses_from_surah(self, surah_number: SurahNumber) -> list[str]:
+    def _fetch_translation(self, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        self._validate_state()
+        try:
+            self.cursor_translation.execute(query, params)
+            return self.cursor_translation.fetchall()
+        except sqlite3.Error as e:
+            logger.error("Translation DB query failed: %s | Query: %s", e, query)
+            return []
+
+    def get_verses_from_surah(self, surah_number: SurahNumber) -> list[str]:
         """Fetches all verses from a specific surah.
 
         Returns:
@@ -95,27 +108,22 @@ class DatabaseManager:
 
         return [" ".join(verses_dict[ayah_num]) for ayah_num in sorted(verses_dict)]
 
-    def fetch_all_words_from_surah(self, surah_number: SurahNumber) -> list[str]:
-        """Fetches all words from a specific surah."""
-        rows = self._fetch_quran("SELECT text FROM verses WHERE sura = ? ORDER BY ayah", (surah_number,))
-        return [word for row in rows for word in row["text"].split() if word]
-
-    def fetch_all_words_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
-        """Fetches all words from a specific verse."""
+    def get_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> str:
+        """Fetches a specific verse text."""
         rows = self._fetch_quran("SELECT text FROM verses WHERE sura = ? AND ayah = ?", (surah_number, ayah_number))
-        return [word for row in rows for word in row["text"].split() if word]
+        return " ".join([row["text"] for row in rows])
 
-    def fetch_all_translations_from_surah(self, surah_number: SurahNumber) -> list[str]:
+    def get_wbw_from_surah(self, surah_number: SurahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific surah."""
         rows = self._fetch_wbw("SELECT translation FROM wbw WHERE surah = ? ORDER BY ayah, word", (surah_number,))
         return [row["translation"] for row in rows]
 
-    def fetch_all_translations_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
+    def get_wbw_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific verse."""
         rows = self._fetch_wbw("SELECT translation FROM wbw WHERE surah = ? AND ayah = ? ORDER BY word", (surah_number, ayah_number))
         return [row["translation"] for row in rows]
 
-    def fetch_translation_for_word(self, surah_number: SurahNumber, ayah_number: AyahNumber, word_index: WordIndex) -> Optional[str]:
+    def get_wbw_from_word(self, surah_number: SurahNumber, ayah_number: AyahNumber, word_index: WordIndex) -> Optional[str]:
         """Fetches the translation for a specific word in a specific verse (1-indexed).
 
         Returns:
@@ -130,19 +138,30 @@ class DatabaseManager:
             logger.error("Failed to fetch translation: %s", e)
             return None
 
+    def get_translation_from_surah(self, surah_number: SurahNumber) -> list[str]:
+        """Fetches all verse translations for a specific surah."""
+        rows = self._fetch_translation("SELECT text FROM verses WHERE sura = ? ORDER BY ayah", (surah_number,))
+        return [row["text"] for row in rows]
+
+    def get_translation_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> Optional[str]:
+        """Fetches the translation for a specific verse."""
+        rows = self._fetch_translation("SELECT text FROM verses WHERE sura = ? AND ayah = ?", (surah_number, ayah_number))
+        return rows[0]["text"] if rows else None
+
     def close(self):
         """Closes all database connections and invalidates the instance state."""
         if not getattr(self, "_initialized", False):
             return
 
-        if self.conn_quran:
-            self.conn_quran.close()
-        if self.conn_wbw:
-            self.conn_wbw.close()
+        self.conn_quran.close() if self.conn_quran else None
+        self.conn_wbw.close() if self.conn_wbw else None
+        self.conn_translation.close() if self.conn_translation else None
 
         self.conn_quran = None
         self.cursor_quran = None
         self.conn_wbw = None
         self.cursor_wbw = None
+        self.conn_translation = None
+        self.cursor_translation = None
         self._initialized = False
         logger.info("DatabaseManager connections closed.")

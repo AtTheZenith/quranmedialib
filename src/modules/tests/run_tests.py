@@ -1,10 +1,10 @@
 from src.modules.database_manager import DatabaseManager
-from src.modules.tests.test_database_manager import test_database_manager
-from src.modules.tests.test_wimage import test_wimage
 from src.modules.tests.test_annotate_word import test_annotate_word
+from src.modules.tests.test_database_manager import test_database_manager
+from src.modules.tests.test_framer import test_framer, test_framer_alignment
+from src.modules.tests.test_image import test_color, test_glow, test_pad
 from src.modules.tests.test_verse_number import test_verse_number
-from src.modules.tests.test_image import test_color, test_pad, test_glow
-from src.modules.tests.test_framer import test_framer
+from src.modules.tests.test_wimage import test_wimage
 
 
 def run_all_tests():
@@ -21,6 +21,7 @@ def run_all_tests():
     test_pad()
     test_glow()
     test_framer()
+    test_framer_alignment()
 
     # Close database at the very end
     DatabaseManager().close()

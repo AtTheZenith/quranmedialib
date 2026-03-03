@@ -13,4 +13,4 @@ wheels/
 /output/
 
 # Other files
-.agents
+/.agents/
