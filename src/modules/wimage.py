@@ -12,7 +12,7 @@ from src.modules.database_manager import DatabaseManager
 db = DatabaseManager()
 
 
-def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] = (255, 255, 255, 255), padding: tuple[int, int, int, int] = (20, 20, 20, 20)) -> Image.Image:
+def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] = (255, 255, 255, 255), padding: tuple[int, int, int, int] = (10, 10, 10, 10)) -> Image.Image:
     """Converts a word string into an image using the hafs font.
 
     Args:

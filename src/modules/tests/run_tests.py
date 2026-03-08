@@ -1,5 +1,5 @@
 from src.modules.database_manager import DatabaseManager
-from src.modules.tests.test_annotate_word import test_annotate_word
+from src.modules.tests.test_annotation import test_annotate_word, test_annotate_words
 from src.modules.tests.test_database_manager import test_database_manager
 from src.modules.tests.test_framer import test_framer, test_framer_alignment
 from src.modules.tests.test_image import test_color, test_glow, test_pad
@@ -16,6 +16,7 @@ def run_all_tests():
     test_database_manager()
     test_wimage()
     test_annotate_word()
+    test_annotate_words()
     test_verse_number()
     test_color()
     test_pad()

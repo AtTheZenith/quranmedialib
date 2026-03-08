@@ -1,6 +1,6 @@
 import os
 
-from src.modules.annotate_word import annotate_word
+from src.modules.annotation import annotate_word
 from src.modules.database_manager import DatabaseManager
 from src.modules.framer import frame
 from src.modules.verse_number import verse_number
@@ -38,7 +38,7 @@ def test_framer():
     # We pass the translation as a list of strings, one for each verse segment
     images = frame(word_wbw_images, words_text, verse_translations=verse_translation)
 
-    output_dir = "./output/test/"
+    output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
 
     # Why is this cleaner (yes slower but whatever)
@@ -65,7 +65,7 @@ def test_framer_alignment():
     word_wbw_images.extend(annotate_word(word_images[index], surah, verse, index + 1) for index in range(len(word_images)))
     word_wbw_images.append(verse_number(verse, padding=(1, 41, 1, 1), font_size=100))
 
-    output_dir = "./output/test"
+    output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
 
     # Test cases for alignment

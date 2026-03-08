@@ -16,11 +16,11 @@ def test_verse_number():
     img_custom = verse_number(test_number, padding=custom_padding)
     logger.info(f"Custom padding {custom_padding} size: {img_custom.size}")
 
-    output_dir = "./output/test/"
+    output_dir = "./output/test/verse_number"
     os.makedirs(output_dir, exist_ok=True)
 
-    img_default.save(os.path.join(output_dir, f"verse_number_{test_number:03d}_default.png"))
-    img_custom.save(os.path.join(output_dir, f"verse_number_{test_number:03d}_custom.png"))
+    img_default.save(os.path.join(output_dir, f"{test_number:03d}_default.png"))
+    img_custom.save(os.path.join(output_dir, f"{test_number:03d}_custom.png"))
 
     logger.info(f"Test generation complete. Saved to {output_dir}")
     print("test_verse_number completed successfully.")

@@ -1,4 +1,4 @@
-from src.modules.annotate_word import annotate_word
+from src.modules.annotation import annotate_word
 from src.modules.database_manager import DatabaseManager
 from src.modules.framer import frame
 from src.modules.image import color, glow
