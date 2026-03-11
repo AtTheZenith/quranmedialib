@@ -22,8 +22,6 @@ def test_framer():
     verse_translation = [verse_translation[:split_index], verse_translation[split_index:]]
     split_index = verse_translation[1].find("after them,") + len("after them,") + 1
     verse_translation = [verse_translation[0], verse_translation[1][:split_index], verse_translation[1][split_index:]]
-    split_index = verse_translation[2].find("tires Him not.") + len("tires Him not.") + 1
-    verse_translation = [verse_translation[0], verse_translation[1], verse_translation[2][:split_index], verse_translation[2][split_index:]]
 
     print(f"Converting {len(words_text)} words to images...")
     word_images = [get_wimage(word_text) for word_text in words_text]

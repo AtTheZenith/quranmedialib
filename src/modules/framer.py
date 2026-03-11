@@ -394,4 +394,3 @@ def frame(
         page_index += 1
 
     return images
-
