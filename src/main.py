@@ -20,8 +20,18 @@ def main():
     annotated_images.append(verse_number(verse, font_size=110, padding=(1, 71, 1, 1)))
     annotated_images[1] = color(annotated_images[1], (255, 0, 0))
 
-    # Pass translation to frame
-    final_images = frame(annotated_images, words, verse_translations=[translation])
+    # Pass translation to frame using LayoutConfig
+    from src.modules.framer import LayoutConfig
+    config = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=5,
+        bottom_offset=300,
+    )
+    final_images = frame(annotated_images, words, verse_translations=[translation], config=config)
 
     final_images = [glow(image, strength=1.5, radius=30) for image in final_images]
     for i, image in enumerate(final_images):

@@ -342,16 +342,7 @@ def frame(
     words: list[Image.Image],
     words_text: list[str] | None = None,
     verse_translations: list[str] | list[list[str]] | None = None,
-    max_rows_per_page: int = 5,
-    max_width: int = 1920,
-    image_height: int = 1080,
-    padding: int = 50,
-    word_spacing: int = 20,
-    row_spacing: int = 30,
-    translation_height: int = 300,
-    verse_vertical_align: str = "center",
-    verse_horizontal_align: str = "center",
-    verse_v_offset: int = 0,
+    config: LayoutConfig | None = None,
 ) -> list[Image.Image]:
     """
     Manages the 2D grid layout of word images into one or more pages.
@@ -360,18 +351,17 @@ def frame(
     if not words:
         return []
 
-    config = LayoutConfig(
-        max_width=max_width,
-        image_height=image_height,
-        padding=padding,
-        word_spacing=word_spacing,
-        row_spacing=row_spacing,
-        max_rows_per_page=max_rows_per_page,
-        bottom_offset=translation_height,
-        verse_vertical_align=verse_vertical_align,
-        verse_horizontal_align=verse_horizontal_align,
-        verse_v_offset=verse_v_offset,
-    )
+    # Use provided config or create a default one
+    if config is None:
+        config = LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=5,
+            bottom_offset=300,
+        )
 
     all_items = _normalize_items(words, words_text)
     images: list[Image.Image] = []
@@ -404,3 +394,4 @@ def frame(
         page_index += 1
 
     return images
+

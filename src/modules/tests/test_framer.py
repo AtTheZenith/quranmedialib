@@ -2,7 +2,7 @@ import os
 
 from src.modules.annotation import annotate_word
 from src.modules.database_manager import DatabaseManager
-from src.modules.framer import frame
+from src.modules.framer import LayoutConfig, frame
 from src.modules.verse_number import verse_number
 from src.modules.wimage import get_wimage
 
@@ -74,9 +74,17 @@ def test_framer_alignment():
         word_wbw_images,
         words_text,
         verse_translations=verse_translation,
-        verse_vertical_align="top",
-        verse_horizontal_align="right",
-        max_rows_per_page=3,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=3,
+            bottom_offset=300,
+            verse_vertical_align="top",
+            verse_horizontal_align="right",
+        ),
     )
     images[0].save(f"{output_dir}/framer_alignment_top_right.png")
 
@@ -85,9 +93,17 @@ def test_framer_alignment():
         word_wbw_images,
         words_text,
         verse_translations=verse_translation,
-        verse_vertical_align="center",
-        verse_horizontal_align="center",
-        max_rows_per_page=3,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=3,
+            bottom_offset=300,
+            verse_vertical_align="center",
+            verse_horizontal_align="center",
+        ),
     )
     images[0].save(f"{output_dir}/framer_alignment_center_center.png")
 
@@ -96,9 +112,17 @@ def test_framer_alignment():
         word_wbw_images,
         words_text,
         verse_translations=verse_translation,
-        verse_vertical_align="top",
-        verse_horizontal_align="center",
-        max_rows_per_page=3,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=3,
+            bottom_offset=300,
+            verse_vertical_align="top",
+            verse_horizontal_align="center",
+        ),
     )
     images[0].save(f"{output_dir}/framer_alignment_top_center.png")
 
@@ -107,9 +131,17 @@ def test_framer_alignment():
         word_wbw_images,
         words_text,
         verse_translations=verse_translation,
-        verse_vertical_align="center",
-        verse_horizontal_align="right",
-        max_rows_per_page=3,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=3,
+            bottom_offset=300,
+            verse_vertical_align="center",
+            verse_horizontal_align="right",
+        ),
     )
     images[0].save(f"{output_dir}/framer_alignment_center_right.png")
 
