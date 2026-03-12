@@ -22,6 +22,7 @@ def main():
 
     # Pass translation to frame using LayoutConfig
     from src.modules.framer import LayoutConfig
+
     config = LayoutConfig(
         max_width=1920,
         image_height=1080,
@@ -30,6 +31,7 @@ def main():
         row_spacing=30,
         max_rows_per_page=5,
         bottom_offset=300,
+        balanced_wrapping=True,
     )
     final_images = frame(annotated_images, words, verse_translations=[translation], config=config)
 
