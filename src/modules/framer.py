@@ -27,6 +27,7 @@ class LayoutConfig:
         verse_vertical_align: str = "center",
         verse_horizontal_align: str = "center",
         verse_v_offset: int = 0,
+        balanced_wrapping: bool = False,
     ):
         self.max_width = max_width
         self.image_height = image_height
@@ -38,6 +39,7 @@ class LayoutConfig:
         self.verse_vertical_align = verse_vertical_align
         self.verse_horizontal_align = verse_horizontal_align
         self.verse_v_offset = verse_v_offset
+        self.balanced_wrapping = balanced_wrapping
 
     @property
     def content_width(self) -> int:
@@ -161,6 +163,77 @@ def _apply_stop_sign_adjustment(
                     return adjusted_rows, keep_count
 
     return current_image_rows, items_consumed
+
+
+def _get_image_rows(
+    items: list[tuple[Image.Image, str | None]],
+    config: LayoutConfig,
+    target_width: int,
+) -> list[list[tuple[Image.Image, str | None]]]:
+    """Internal greedy divider that respects a custom width for balancing calculations."""
+    rows = []
+    current_row = []
+    current_width = 0
+
+    for item in items:
+        word_image, _ = item
+        word_width = word_image.size[0]
+        spacing = config.word_spacing if current_row else 0
+
+        if current_width + word_width + spacing <= target_width:
+            current_row.append(item)
+            current_width += word_width + spacing
+        elif current_row:
+            rows.append(current_row)
+            current_row = [item]
+            current_width = word_width
+        else:
+            # Word is wider than target_width, give it its own row
+            rows.append([item])
+            current_row = []
+            current_width = 0
+
+    if current_row:
+        rows.append(current_row)
+    return rows
+
+
+def _balance_image_rows(
+    items: list[tuple[Image.Image, str | None]],
+    target_num_rows: int,
+    config: LayoutConfig,
+) -> list[list[tuple[Image.Image, str | None]]]:
+    """
+    Finds the smallest target_width that maintains the target number of rows
+    while ensuring the layout is 'top-heavy' (Line N >= Line N+1).
+    """
+    if not items:
+        return []
+
+    low = max((it[0].size[0] for it in items), default=0)
+    high = config.content_width
+    best_rows = _get_image_rows(items, config, high)
+
+    while low <= high:
+        mid = (low + high) // 2
+        rows = _get_image_rows(items, config, mid)
+
+        # Calculate widths to check for top-heavy constraint
+        row_widths = []
+        for row in rows:
+            w = sum(it[0].size[0] for it in row) + (len(row) - 1) * config.word_spacing
+            row_widths.append(w)
+
+        # Check if widths are non-increasing (Line N >= Line N+1)
+        is_top_heavy = all(row_widths[i] >= row_widths[i + 1] for i in range(len(row_widths) - 1))
+
+        if len(rows) <= target_num_rows and is_top_heavy:
+            best_rows = rows
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return best_rows
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
@@ -381,6 +454,14 @@ def frame(
         # Adjust page break to end at a stop sign if possible
         if words_text and items_consumed < len(all_items):
             current_rows, items_consumed = _apply_stop_sign_adjustment(current_rows, items_consumed)
+
+        # If balancing is enabled and we have multiple rows, redistribute words symmetrically (top-heavy)
+        if config.balanced_wrapping and len(current_rows) > 1:
+            current_rows = _balance_image_rows(
+                list(itertools.chain.from_iterable(current_rows)),
+                len(current_rows),
+                config,
+            )
 
         # Render the verse content
         page_image = _render_page(current_rows, config)
