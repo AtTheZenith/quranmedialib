@@ -34,15 +34,84 @@ def test_framer():
     word_wbw_images.append(verse_number(verse, padding=(1, 41, 1, 1), font_size=100))
 
     # We pass the translation as a list of strings, one for each verse segment
-    images = frame(word_wbw_images, words_text, verse_translations=verse_translation)
+    images = frame(
+        word_wbw_images,
+        words_text,
+        verse_translations=verse_translation,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=5,
+            bottom_offset=300,
+            balanced_wrapping=False,
+        ),
+    )
 
     output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Why is this cleaner (yes slower but whatever)
-    [image.save(f"{output_dir}/framer_{i}.png") for i, image in enumerate(images)]
+    images[0].save(f"{output_dir}/framer_1.png")
+    images[1].save(f"{output_dir}/framer_2.png")
+    images[2].save(f"{output_dir}/framer_3.png")
 
     print("test_framer completed successfully.")
+
+
+def test_framer_balancing():
+    print("\nRunning test_framer_balancing...")
+    database_manager = DatabaseManager()
+
+    # Using Ayatul Kursi (2:255) for test
+    surah = 2
+    verse = 255
+    words_text = database_manager.get_verse(surah, verse).split()
+    verse_translation = database_manager.get_translation_from_verse(surah, verse)
+
+    # Split up the translation
+    split_index = verse_translation.find("on the earth.") + len("on the earth.") + 1
+    verse_translation = [verse_translation[:split_index], verse_translation[split_index:]]
+    split_index = verse_translation[1].find("after them,") + len("after them,") + 1
+    verse_translation = [verse_translation[0], verse_translation[1][:split_index], verse_translation[1][split_index:]]
+
+    print(f"Converting {len(words_text)} words to images...")
+    word_images = [get_wimage(word_text) for word_text in words_text]
+
+    print("Annotating words with translations...")
+    word_wbw_images = []
+    word_wbw_images.extend(annotate_word(word_images[index], surah, verse, index + 1) for index in range(len(word_images)))
+
+    print("Arranging words into verses with translation...")
+    word_wbw_images.append(verse_number(verse, padding=(1, 41, 1, 1), font_size=100))
+
+    # We pass the translation as a list of strings, one for each verse segment
+    images = frame(
+        word_wbw_images,
+        words_text,
+        verse_translations=verse_translation,
+        config=LayoutConfig(
+            max_width=1920,
+            image_height=1080,
+            padding=50,
+            word_spacing=20,
+            row_spacing=30,
+            max_rows_per_page=5,
+            bottom_offset=300,
+            balanced_wrapping=True,
+        ),
+    )
+
+    output_dir = "./output/test/framer"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save balanced images with a distinct prefix
+    images[0].save(f"{output_dir}/framer_balanced_1.png")
+    images[1].save(f"{output_dir}/framer_balanced_2.png")
+    images[2].save(f"{output_dir}/framer_balanced_3.png")
+
+    print("test_framer_balancing completed successfully.")
 
 
 def test_framer_alignment():
@@ -149,4 +218,5 @@ def test_framer_alignment():
 if __name__ == "__main__":
     test_framer()
     test_framer_alignment()
+    test_framer_balancing()
     DatabaseManager().close()
