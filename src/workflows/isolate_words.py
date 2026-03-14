@@ -1,4 +1,5 @@
 import re
+from typing import NamedTuple
 from PIL import Image
 
 from src.modules.annotation import annotate_word
@@ -6,6 +7,66 @@ from src.modules.framer import frame, LayoutConfig
 from src.modules.verse_number import verse_number
 from src.modules.timage import get_timage, TextConfig
 from src.modules.wimage import get_wimage
+
+
+class ParsedSegment(NamedTuple):
+    """Represents a pre-parsed translation segment."""
+
+    flags: str
+    hex_color: str
+    content: str
+    original_had_tag: bool
+
+
+def _normalize_highlight_style(style: str) -> str:
+    """Ensures highlight_style is in the correct #flags#hex# format."""
+    if not style.startswith("#"):
+        style = f"#{style}"
+    if not style.endswith("#"):
+        style = f"{style}#"
+    # If highlight_style is only flags (e.g. #b#), add separator for empty hex
+    if style.count("#") == 2:
+        style = f"{style}#"
+    return style
+
+
+def _prepare_translation(translation: list[str]) -> list[ParsedSegment]:
+    """Pre-parses translation segments to avoid redundant regex searches in loops."""
+    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
+    parsed = []
+
+    for segment in translation:
+        if match := tag_pattern.search(segment):
+            content = match[3].rstrip("#")
+            parsed.append(ParsedSegment(match[1], match[2], content, True))
+        else:
+            parsed.append(ParsedSegment("", "", segment, False))
+    return parsed
+
+
+def _format_isolated_translation(
+    parsed_segments: list[ParsedSegment],
+    target_index: int,
+    highlight_style: str,
+) -> str:
+    """Constructs the formatted translation string for a specific word isolation."""
+    formatted = []
+    for j, seg in enumerate(parsed_segments):
+        if j == target_index:
+            if seg.original_had_tag:
+                # Keep original formatting if it already has tags
+                formatted.append(f"#{seg.flags}#{seg.hex_color}#{seg.content}#")
+            else:
+                # Apply highlight style to plain text
+                formatted.append(f"{highlight_style}{seg.content}#")
+        elif seg.original_had_tag:
+            # Preserve flags but force transparency
+            formatted.append(f"#{seg.flags}#00000000#{seg.content}#")
+        else:
+            # Wrap plain text with transparent tag
+            formatted.append(f"##00000000#{seg.content}#")
+
+    return " ".join(formatted)
 
 
 def isolate_words(
@@ -24,19 +85,6 @@ def isolate_words(
 
     For each item in the verse, it generates a set of pages where only that item is visible
     (others are made transparent).
-
-    Args:
-        verse_words: List of Arabic words in the verse.
-        translation: List of translation segments matching verse_words.
-        surah_number: The surah index.
-        ayah_number: Optional ayah number to include in the layout.
-        config: Layout configuration. If None, default config is used.
-        annotate: Whether to apply word-level annotations.
-        wbw_translations: Optional list of word-by-word translations for annotation.
-
-    Returns:
-        A list of lists of PIL Images. Each outer list corresponds to an isolated item,
-        and the inner list contains the page(s) generated for that isolation.
     """
     if config is None:
         config = LayoutConfig(
@@ -50,92 +98,59 @@ def isolate_words(
             balanced_wrapping=True,
         )
 
-    # 1. Prepare base images
+    # 1. Prepare base images and transparent placeholders
     word_images = [get_wimage(word) for word in verse_words]
 
     if annotate:
-        annotated_images = [annotate_word(image, surah_number, ayah_number or 1, i + 1, translation=wbw_translations[i] if wbw_translations else None) for i, image in enumerate(word_images)]
+        annotated_images = [
+            annotate_word(
+                img,
+                surah_number,
+                ayah_number or 1,
+                i + 1,
+                translation=wbw_translations[i] if wbw_translations else None,
+            )
+            for i, img in enumerate(word_images)
+        ]
     else:
         annotated_images = word_images
 
     # 2. Add verse number if provided
     items_text = list(verse_words)
     if ayah_number is not None:
-        # Default main.py parameters for verse_number: font_size=110, padding=(1, 71, 1, 1)
         v_img = verse_number(ayah_number, font_size=110, padding=(1, 71, 1, 1))
         annotated_images.append(v_img)
-        items_text.append("")  # Empty text for the verse number symbol
+        items_text.append("")
+
+    # Optimization: Create transparent placeholders once
+    transparent_placeholders = [Image.new("RGBA", img.size, (0, 0, 0, 0)) for img in annotated_images]
 
     # 3. Build isolation table
     isolation_table = []
     total_items = len(annotated_images)
+    parsed_trans = _prepare_translation(translation)
+    norm_highlight = _normalize_highlight_style(highlight_style)
 
     for i in range(total_items):
-        # Create a copy where all items except the i-th one are transparent
-        isolated_images = []
-        for j in range(total_items):
-            if i == j:
-                # Keep original image
-                isolated_images.append(annotated_images[j].copy())
-            else:
-                # Make transparent by creating a new empty image
-                isolated_images.append(Image.new("RGBA", annotated_images[j].size, (0, 0, 0, 0)))
+        # Create image list: all items except i-th are transparent placeholders
+        # We don't need .copy() because frame/render does not mutate inputs
+        isolated_images = list(transparent_placeholders)
+        isolated_images[i] = annotated_images[i]
 
-        # Prepare the full translation sentence with the i-th word highlighted
-        # and others transparent.
-        # Format: #flags#hex#text#
-        tag_pattern = r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)"
-        
-        modified_segments = []
-        for j, segment in enumerate(translation):
-            match = re.search(tag_pattern, segment)
-            
-            if i == j:
-                if match:
-                    # Keep existing format
-                    modified_segments.append(segment)
-                else:
-                    # Wrap with highlight style. Ensure style doesn't double-hash.
-                    # highlight_style should be like "#b#" or "#b#ffffff#"
-                    style = highlight_style
-                    if not style.startswith("#"):
-                        style = f"#{style}"
-                    if not style.endswith("#"):
-                        style = f"{style}#"
-                    
-                    # If highlight_style is only flags (e.g. #b#), we need the extra separator for hex
-                    # Our timage pattern is #flags#hex#content#
-                    if style.count("#") == 2:
-                        style = f"{style}#"  # e.g. #b# -> #b##
-                        
-                    modified_segments.append(f"{style}{segment}#")
-            else:
-                if match:
-                    # Preserve flags but force transparency (00000000)
-                    flags = match.group(1)
-                    content = match.group(3)
-                    # Strip trailing # if present in content
-                    if content.endswith("#"):
-                        content = content[:-1]
-                    modified_segments.append(f"#{flags}#00000000#{content}#")
-                else:
-                    # Not a tag, wrap with transparent tag
-                    modified_segments.append(f"##00000000#{segment}#")
-
-        full_trans_formatted = " ".join(modified_segments)
-        # Verse number isolation (last item) gets an empty translation
-        if i >= len(translation):
-            full_trans_formatted = ""
-
-        t_img = get_timage(full_trans_formatted, config.content_width, text_config) if full_trans_formatted else None
+        # Prepare translation image
+        t_img = None
+        if i < len(parsed_trans):
+            full_trans_formatted = _format_isolated_translation(parsed_trans, i, norm_highlight)
+            t_img = get_timage(full_trans_formatted, config.content_width, text_config)
 
         # Frame the isolated images
         pages = frame(
             isolated_images,
             words_text=items_text,
             translation_images=[t_img] if t_img else None,
-            config=config
+            config=config,
         )
         isolation_table.append(pages)
 
     return isolation_table
+

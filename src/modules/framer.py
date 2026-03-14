@@ -60,6 +60,7 @@ def _build_row(
     """
     row_items = []
     current_row_width = 0
+    max_row_height = 0
     items_consumed = 0
 
     for i in range(start_index, len(all_items)):
@@ -74,13 +75,15 @@ def _build_row(
                 row_items.append(all_items[i])
                 items_consumed += 1
                 current_row_width = word_width
+                max_row_height = word_height
             break
 
         current_row_width += word_width + spacing
+        if word_height > max_row_height:
+            max_row_height = word_height
         row_items.append(all_items[i])
         items_consumed += 1
 
-    max_row_height = max((item[0].size[1] for item in row_items), default=0)
     return row_items, items_consumed, current_row_width, max_row_height
 
 
