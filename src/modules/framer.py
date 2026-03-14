@@ -5,41 +5,28 @@ Framer module for laying out word images into pages with translation support.
 from __future__ import annotations
 
 import itertools
-import logging
-from PIL import Image, ImageDraw, ImageFont
+from dataclasses import dataclass
+from PIL import Image
 
 # Quranic stop signs for wrapping logic
 QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۚ", "ۛ", "ۜ", "ۙ", "ۘ", "ۗ"]
 
 
+@dataclass
 class LayoutConfig:
     """Helper class to store layout-related configuration."""
 
-    def __init__(
-        self,
-        max_width: int,
-        image_height: int,
-        padding: int,
-        word_spacing: int,
-        row_spacing: int,
-        max_rows_per_page: int,
-        bottom_offset: int = 0,
-        verse_vertical_align: str = "center",
-        verse_horizontal_align: str = "center",
-        verse_v_offset: int = 0,
-        balanced_wrapping: bool = False,
-    ):
-        self.max_width = max_width
-        self.image_height = image_height
-        self.padding = padding
-        self.word_spacing = word_spacing
-        self.row_spacing = row_spacing
-        self.max_rows_per_page = max_rows_per_page
-        self.bottom_offset = bottom_offset
-        self.verse_vertical_align = verse_vertical_align
-        self.verse_horizontal_align = verse_horizontal_align
-        self.verse_v_offset = verse_v_offset
-        self.balanced_wrapping = balanced_wrapping
+    max_width: int
+    image_height: int
+    padding: int
+    word_spacing: int
+    row_spacing: int
+    max_rows_per_page: int
+    bottom_offset: int = 0
+    verse_vertical_align: str = "center"
+    verse_horizontal_align: str = "center"
+    verse_v_offset: int = 0
+    balanced_wrapping: bool = False
 
     @property
     def content_width(self) -> int:
@@ -236,74 +223,8 @@ def _balance_image_rows(
     return best_rows
 
 
-def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
-    """Measures the width of a given text string."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[2] - bbox[0]
 
 
-def _get_lines(words: list[str], word_widths: dict[str, int], space_width: int, target_width: int) -> list[str]:
-    res_lines = []
-    current_line = []
-    current_width = 0
-
-    for word in words:
-        word_width = word_widths[word]
-        # Width if we add this word to the current line (including space)
-        added_width = word_width + (space_width if current_line else 0)
-
-        if current_width + added_width <= target_width:
-            current_line.append(word)
-            current_width += added_width
-        elif current_line:
-            res_lines.append(" ".join(current_line))
-            current_line = [word]
-            current_width = word_width
-        else:
-            res_lines.append(word)
-            current_line = []
-            current_width = 0
-
-    if current_line:
-        res_lines.append(" ".join(current_line))
-    return res_lines
-
-
-def _wrap_text_balanced(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
-    """
-    Wraps text into lines such that the line widths are as balanced as possible.
-    Uses a greedy approach combined with binary search on target width.
-    """
-    words = text.split()
-    if not words:
-        return []
-
-    # Cache word widths to avoid redundant text measurement
-    word_widths = {word: _measure_text(draw, word, font) for word in set(words)}
-    space_width = _measure_text(draw, " ", font)
-
-    # First, get a baseline using greedy wrapping at max_width
-    greedy_lines = _get_lines(words, word_widths, space_width, max_width)
-    target_num_lines = len(greedy_lines)
-
-    if target_num_lines <= 1:
-        return greedy_lines
-
-    # Binary search for the smallest width that maintains the same number of lines
-    low = max(word_widths.values())
-    high = max_width
-    best_lines = greedy_lines
-
-    while low <= high:
-        mid = (low + high) // 2
-        lines = _get_lines(words, word_widths, space_width, mid)
-        if len(lines) <= target_num_lines:
-            best_lines = lines
-            high = mid - 1
-        else:
-            low = mid + 1
-
-    return best_lines
 
 
 def _get_verse_start_y(content_height: int, config: LayoutConfig) -> int:
@@ -359,62 +280,12 @@ def _render_page(
     return page_image
 
 
-def _get_translation_layout(
-    translation: str,
-    max_width: int,
-    padding: int,
-) -> tuple[list[str], ImageFont.ImageFont | None]:
-    """Calculates the layout for a translation string and returns lines and font."""
-    try:
-        # Load a modern sans-serif font for translations
-        translation_font = ImageFont.truetype("./assets/inter.ttf", 36)
-        dummy_img = Image.new("RGBA", (1, 1))
-        draw = ImageDraw.Draw(dummy_img)
-
-        # Use balanced wrapping for better aesthetic
-        lines = _wrap_text_balanced(draw, translation, translation_font, max_width - 2 * padding)
-        return lines, translation_font
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Failed to calculate translation layout: {e}")
-        return [], None
-
-
-def _draw_translation(
-    image: Image.Image,
-    lines: list[str],
-    font: ImageFont.ImageFont,
-    config: LayoutConfig,
-):
-    """
-    Draws translation lines onto the bottom of an image with a fixed starting Y.
-    Uses 'mt' anchor to center each line horizontally.
-    """
-    if not lines or not font:
-        return
-
-    draw = ImageDraw.Draw(image)
-    metrics = font.getmetrics()
-    ascent, descent = metrics
-    spacing = 10  # Vertical spacing between translation lines
-
-    # Fixed starting Y position for the first line based on bottom reserved area
-    current_y = config.image_height - config.padding - config.bottom_offset
-
-    for line in lines:
-        draw.text(
-            (config.max_width // 2, current_y),
-            line,
-            font=font,
-            fill=(255, 255, 255, 255),
-            anchor="mt",
-        )
-        current_y += ascent + descent + spacing
 
 
 def frame(
     words: list[Image.Image],
     words_text: list[str] | None = None,
-    verse_translations: list[str] | list[list[str]] | None = None,
+    translation_images: list[Image.Image | None] | None = None,
     config: LayoutConfig | None = None,
 ) -> list[Image.Image]:
     """
@@ -438,16 +309,9 @@ def frame(
 
     all_items = _normalize_items(words, words_text)
     images: list[Image.Image] = []
-    flat_translations = verse_translations or []
 
     page_index = 0
     while all_items:
-        current_translation = flat_translations[page_index] if page_index < len(flat_translations) else None
-
-        trans_lines, trans_font = [], None
-        if current_translation:
-            trans_lines, trans_font = _get_translation_layout(current_translation, config.max_width, config.padding)
-
         # Plan the rows for this page
         current_rows, items_consumed = _group_items_into_rows(all_items, config)
 
@@ -466,9 +330,19 @@ def frame(
         # Render the verse content
         page_image = _render_page(current_rows, config)
 
-        # Draw the translation if present
-        if trans_lines:
-            _draw_translation(page_image, trans_lines, trans_font, config)
+        # Paste the pre-rendered translation image at the bottom if present
+        if translation_images and page_index < len(translation_images):
+            if trans_img := translation_images[page_index]:
+                # Vertical position matches the old starting Y logic
+                trans_y = config.image_height - config.padding - config.bottom_offset
+                # Horizontal centering: trans_img should ideally be max_width (or config.max_width)
+                # but we'll center it explicitly just in case.
+                trans_x = (config.max_width - trans_img.width) // 2
+                page_image.paste(
+                    trans_img,
+                    (trans_x, trans_y),
+                    mask=trans_img if trans_img.mode == "RGBA" else None,
+                )
 
         images.append(page_image)
         all_items = all_items[items_consumed:]
