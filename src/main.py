@@ -22,6 +22,7 @@ def main():
 
     # Pass translation to frame using LayoutConfig
     from src.modules.framer import LayoutConfig
+    from src.modules.timage import get_timage
 
     config = LayoutConfig(
         max_width=1920,
@@ -33,7 +34,9 @@ def main():
         bottom_offset=300,
         balanced_wrapping=True,
     )
-    final_images = frame(annotated_images, words, verse_translations=[translation], config=config)
+
+    t_img = get_timage(translation, config.content_width)
+    final_images = frame(annotated_images, words, translation_images=[t_img], config=config)
 
     final_images = [glow(image, strength=1.5, radius=30) for image in final_images]
     for i, image in enumerate(final_images):

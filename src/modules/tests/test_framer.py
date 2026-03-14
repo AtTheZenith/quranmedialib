@@ -4,6 +4,7 @@ from src.modules.annotation import annotate_word
 from src.modules.database_manager import DatabaseManager
 from src.modules.framer import LayoutConfig, frame
 from src.modules.verse_number import verse_number
+from src.modules.timage import get_timage
 from src.modules.wimage import get_wimage
 
 
@@ -33,21 +34,26 @@ def test_framer():
     print("Arranging words into verses with translation...")
     word_wbw_images.append(verse_number(verse, padding=(1, 41, 1, 1), font_size=100))
 
-    # We pass the translation as a list of strings, one for each verse segment
+    config = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=5,
+        bottom_offset=300,
+        balanced_wrapping=False,
+    )
+
+    # Pre-render translations
+    translation_images = [get_timage(t, config.content_width) for t in verse_translation]
+
+    # We pass the translation as a list of images, one for each verse segment
     images = frame(
         word_wbw_images,
         words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=5,
-            bottom_offset=300,
-            balanced_wrapping=False,
-        ),
+        translation_images=translation_images,
+        config=config,
     )
 
     output_dir = "./output/test/framer"
@@ -86,21 +92,26 @@ def test_framer_balancing():
     print("Arranging words into verses with translation...")
     word_wbw_images.append(verse_number(verse, padding=(1, 41, 1, 1), font_size=100))
 
-    # We pass the translation as a list of strings, one for each verse segment
+    config = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=5,
+        bottom_offset=300,
+        balanced_wrapping=True,
+    )
+
+    # Pre-render translations
+    translation_images = [get_timage(t, config.content_width) for t in verse_translation]
+
+    # We pass the translation as a list of images, one for each verse segment
     images = frame(
         word_wbw_images,
         words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=5,
-            bottom_offset=300,
-            balanced_wrapping=True,
-        ),
+        translation_images=translation_images,
+        config=config,
     )
 
     output_dir = "./output/test/framer"
@@ -137,79 +148,67 @@ def test_framer_alignment():
 
     # Test cases for alignment
     print("Testing top_right (Vertical: top, Horizontal: right)...")
-    images = frame(
-        word_wbw_images,
-        words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=3,
-            bottom_offset=300,
-            verse_vertical_align="top",
-            verse_horizontal_align="right",
-        ),
+    config_tr = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=3,
+        bottom_offset=300,
+        verse_vertical_align="top",
+        verse_horizontal_align="right",
     )
+    t_imgs_tr = [get_timage(t, config_tr.content_width) for t in verse_translation]
+    images = frame(word_wbw_images, words_text, translation_images=t_imgs_tr, config=config_tr)
     images[0].save(f"{output_dir}/framer_alignment_top_right.png")
 
     print("Testing center_center (Vertical: center, Horizontal: center)...")
-    images = frame(
-        word_wbw_images,
-        words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=3,
-            bottom_offset=300,
-            verse_vertical_align="center",
-            verse_horizontal_align="center",
-        ),
+    config_cc = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=3,
+        bottom_offset=300,
+        verse_vertical_align="center",
+        verse_horizontal_align="center",
     )
+    t_imgs_cc = [get_timage(t, config_cc.content_width) for t in verse_translation]
+    images = frame(word_wbw_images, words_text, translation_images=t_imgs_cc, config=config_cc)
     images[0].save(f"{output_dir}/framer_alignment_center_center.png")
 
     print("Testing top_center (Vertical: top, Horizontal: center)...")
-    images = frame(
-        word_wbw_images,
-        words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=3,
-            bottom_offset=300,
-            verse_vertical_align="top",
-            verse_horizontal_align="center",
-        ),
+    config_tc = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=3,
+        bottom_offset=300,
+        verse_vertical_align="top",
+        verse_horizontal_align="center",
     )
+    t_imgs_tc = [get_timage(t, config_tc.content_width) for t in verse_translation]
+    images = frame(word_wbw_images, words_text, translation_images=t_imgs_tc, config=config_tc)
     images[0].save(f"{output_dir}/framer_alignment_top_center.png")
 
     print("Testing center_right (Vertical: center, Horizontal: right)...")
-    images = frame(
-        word_wbw_images,
-        words_text,
-        verse_translations=verse_translation,
-        config=LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            padding=50,
-            word_spacing=20,
-            row_spacing=30,
-            max_rows_per_page=3,
-            bottom_offset=300,
-            verse_vertical_align="center",
-            verse_horizontal_align="right",
-        ),
+    config_cr = LayoutConfig(
+        max_width=1920,
+        image_height=1080,
+        padding=50,
+        word_spacing=20,
+        row_spacing=30,
+        max_rows_per_page=3,
+        bottom_offset=300,
+        verse_vertical_align="center",
+        verse_horizontal_align="right",
     )
+    t_imgs_cr = [get_timage(t, config_cr.content_width) for t in verse_translation]
+    images = frame(word_wbw_images, words_text, translation_images=t_imgs_cr, config=config_cr)
     images[0].save(f"{output_dir}/framer_alignment_center_right.png")
 
     print("test_framer_alignment completed successfully.")

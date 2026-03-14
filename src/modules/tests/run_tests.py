@@ -4,16 +4,18 @@ from src.modules.tests.test_database_manager import test_database_manager
 from src.modules.tests.test_framer import test_framer, test_framer_alignment, test_framer_balancing
 from src.modules.tests.test_image import test_color, test_glow, test_pad
 from src.modules.tests.test_verse_number import test_verse_number
+from src.modules.tests.test_timage import test_timage_formatting
 from src.modules.tests.test_wimage import test_wimage
 
 
 def run_all_tests():
-    print("Starting all tests...")
+    print("=== Starting module tests ===")
 
     # Order matters if there are dependencies, but here they are mostly independent
     # except for DatabaseManager singleton.
 
     test_database_manager()
+    test_timage_formatting()
     test_wimage()
     test_annotate_word()
     test_annotate_words()
@@ -27,7 +29,7 @@ def run_all_tests():
 
     # Close database at the very end
     DatabaseManager().close()
-    print("\nAll tests completed.")
+    print("\n=== Modules tests completed ===")
 
 
 if __name__ == "__main__":
