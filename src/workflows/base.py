@@ -6,7 +6,6 @@ from typing import Iterator, TYPE_CHECKING
 from PIL import Image
 
 if TYPE_CHECKING:
-    from src.modules.database_manager import DatabaseManager
     from src.modules.framer import LayoutConfig
     from src.modules.timage import TextConfig
 
@@ -20,11 +19,9 @@ class VerseWorkflow(ABC):
         self,
         layout_config: LayoutConfig,
         text_config: TextConfig,
-        database_manager: DatabaseManager | None = None,
     ):
         self.layout_config = layout_config
         self.text_config = text_config
-        self.database_manager = database_manager
 
     @abstractmethod
     def process_verse(
@@ -32,9 +29,10 @@ class VerseWorkflow(ABC):
         verse_data: dict,
         translation_data: str | list[str],
         **kwargs,
-    ) -> Iterator[list[Image.Image]]:
+    ) -> Iterator[list[tuple[Image.Image, str]]]:
         """
         Processes a single verse and yields lists of generated images (pages).
+        Each page is a tuple of (Image, suffix).
         """
         pass
 
@@ -48,19 +46,18 @@ class SurahWorkflow(ABC):
         self,
         layout_config: LayoutConfig,
         text_config: TextConfig,
-        database_manager: DatabaseManager | None = None,
     ):
         self.layout_config = layout_config
         self.text_config = text_config
-        self.database_manager = database_manager
 
     @abstractmethod
     def process_surah(
         self,
         surah_data: dict,
         **kwargs,
-    ) -> Iterator[list[Image.Image]]:
+    ) -> Iterator[list[tuple[Image.Image, str]]]:
         """
         Processes an entire surah and yields lists of generated images.
+        Each page is a tuple of (Image, suffix).
         """
         pass
