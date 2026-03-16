@@ -1,7 +1,8 @@
 from src.modules.annotation import annotate_word
 from src.modules.database_manager import DatabaseManager
-from src.modules.framer import frame
+from src.modules.framer import LayoutConfig, frame
 from src.modules.image import color, glow
+from src.modules.timage import get_timage
 from src.modules.verse_number import verse_number
 from src.modules.wimage import get_wimage
 
@@ -21,8 +22,6 @@ def main():
     annotated_images[1] = color(annotated_images[1], (255, 0, 0))
 
     # Pass translation to frame using LayoutConfig
-    from src.modules.framer import LayoutConfig
-    from src.modules.timage import get_timage
 
     config = LayoutConfig(
         max_width=1920,
@@ -35,6 +34,7 @@ def main():
         balanced_wrapping=True,
     )
 
+    translation = translation.replace("grieve you", "##ff0000ff#grieve you#")
     t_img = get_timage(translation, config.content_width)
     final_images = frame(annotated_images, words, translation_images=[t_img], config=config)
 
