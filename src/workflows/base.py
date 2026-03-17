@@ -5,7 +5,7 @@ from typing import Iterator
 
 from PIL import Image
 
-from src.modules.configs import LayoutConfig, TextConfig, WordConfig
+from src.modules.types import LayoutConfig, TextConfig, WordConfig
 
 
 class VerseWorkflow(ABC):

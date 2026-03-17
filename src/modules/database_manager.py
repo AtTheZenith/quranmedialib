@@ -5,10 +5,7 @@ import sqlite3
 import threading
 from typing import Optional, Any, Self
 
-# Type Aliases
-SurahNumber = int
-AyahNumber = int
-WordIndex = int
+from src.modules.types import AyahNumber, SurahNumber, WordIndex
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

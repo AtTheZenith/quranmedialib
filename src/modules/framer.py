@@ -7,7 +7,7 @@ from __future__ import annotations
 import itertools
 from PIL import Image
 
-from src.modules.configs import LayoutConfig, WordConfig
+from src.modules.types import LayoutConfig, WordConfig
 
 # Quranic stop signs for wrapping logic
 QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۚ", "ۛ", "ۜ", "ۙ", "ۘ", "ۗ"]
