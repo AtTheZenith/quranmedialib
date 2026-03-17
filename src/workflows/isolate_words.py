@@ -159,4 +159,5 @@ class IsolateWordsWorkflow(VerseWorkflow):
                 words_text=items_text,
                 translation_images=[t_img] if t_img else None,
                 config=self.layout_config,
+                word_config=self.word_config,
             )

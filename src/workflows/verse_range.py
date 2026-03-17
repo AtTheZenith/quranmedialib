@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterator, TYPE_CHECKING
+from typing import Iterator
 
 from PIL import Image
 
@@ -10,10 +10,6 @@ from src.modules.timage import get_timage
 from src.modules.verse_number import verse_number
 from src.modules.wimage import get_wimage
 from src.workflows.base import VerseWorkflow
-
-if TYPE_CHECKING:
-    from src.modules.framer import LayoutConfig
-    from src.modules.timage import TextConfig
 
 
 class VerseRangeWorkflow(VerseWorkflow):
@@ -52,10 +48,10 @@ class VerseRangeWorkflow(VerseWorkflow):
         # Iterate through each verse
         for i, verse_text in enumerate(arabic_verses):
             current_verse_num = start_verse + i
-            
+
             # Split verse text into words (as requested: "split in function")
             words = verse_text.split()
-            
+
             # 1. Generate Arabic images (words + verse number)
             word_images = []
             for j, word in enumerate(words):
@@ -67,53 +63,53 @@ class VerseRangeWorkflow(VerseWorkflow):
                     ann_img = annotate_word(w_img, surah_number, current_verse_num, j + 1)
                 else:
                     ann_img = w_img
-                
+
                 word_images.append(ann_img)
 
             # Add verse number image after the verse's words
-            v_num_img = verse_number(current_verse_num, font_size=110, padding=(1, 71, 1, 1))
+            v_num_img = verse_number(
+                current_verse_num,
+                font_size=self.word_config.verse_number_size,
+                padding=self.word_config.verse_number_padding,
+            )
             word_images.append(v_num_img)
 
             # 2. Prepare translation images (drawn separately in the frame area)
             # translations[i] is a list of strings, each string representing a page of translation
             verse_pages_translations = translations[i]
-            translation_images = [
-                get_timage(text, self.layout_config.content_width, self.text_config)
-                for text in verse_pages_translations
-            ]
+            translation_images = [get_timage(text, self.layout_config.content_width, self.text_config) for text in verse_pages_translations]
 
             # 3. Frame this verse iteration's images
             if separate_translations:
                 # Arabic pages only (limit rows to 2)
                 import dataclasses
-                arabic_config = dataclasses.replace(self.layout_config, max_rows_per_page=2)
-                
+
+                arabic_word_config = dataclasses.replace(self.word_config, max_rows_per_page=2)
+
                 arabic_pages = frame(
                     word_images,
                     words_text=words + [""],
                     translation_images=None,
-                    config=arabic_config,
+                    config=self.layout_config,
+                    word_config=arabic_word_config,
                 )
-                
+
                 # Yield Arabic pages
                 pages = [(img, "a") for img in arabic_pages]
-                
+
                 # Each translation image should be bottom-aligned on its own full-sized canvas
-                # matching the Y position in combined mode.
-                trans_y = self.layout_config.image_height - self.layout_config.padding - self.layout_config.bottom_offset
+                # matching the Y position in combined mode (vertical center within bottom area).
+                reserved_top_y = self.layout_config.image_height - self.layout_config.padding - self.layout_config.bottom_offset
                 for trans_img in translation_images:
                     if trans_img:
                         # Create a transparent canvas of the standard size
-                        canvas = Image.new(
-                            "RGBA", 
-                            (self.layout_config.max_width, self.layout_config.image_height), 
-                            (0, 0, 0, 0)
-                        )
-                        # Center the translation image horizontally and place at trans_y
+                        canvas = Image.new("RGBA", (self.layout_config.max_width, self.layout_config.image_height), (0, 0, 0, 0))
+                        # Center the translation image vertically and horizontally
+                        ty = reserved_top_y + (self.layout_config.bottom_offset - trans_img.height) // 2
                         tx = (self.layout_config.max_width - trans_img.width) // 2
-                        canvas.paste(trans_img, (tx, trans_y), mask=trans_img if trans_img.mode == "RGBA" else None)
+                        canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
                         pages.append((canvas, "t"))
-                
+
                 yield pages
             else:
                 # Combined pages (default behavior)
@@ -122,6 +118,7 @@ class VerseRangeWorkflow(VerseWorkflow):
                     words_text=words + [""],
                     translation_images=translation_images,
                     config=self.layout_config,
+                    word_config=self.word_config,
                 )
                 yield [(img, "a") for img in combined_pages]
 

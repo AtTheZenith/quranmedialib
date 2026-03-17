@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Iterator, TYPE_CHECKING
+from typing import Iterator
 
 from PIL import Image
 
-if TYPE_CHECKING:
-    from src.modules.framer import LayoutConfig
-    from src.modules.timage import TextConfig
+from src.modules.configs import LayoutConfig, TextConfig, WordConfig
 
 
 class VerseWorkflow(ABC):
@@ -19,9 +17,11 @@ class VerseWorkflow(ABC):
         self,
         layout_config: LayoutConfig,
         text_config: TextConfig,
+        word_config: WordConfig,
     ):
         self.layout_config = layout_config
         self.text_config = text_config
+        self.word_config = word_config
 
     @abstractmethod
     def process_verse(
@@ -46,9 +46,11 @@ class SurahWorkflow(ABC):
         self,
         layout_config: LayoutConfig,
         text_config: TextConfig,
+        word_config: WordConfig,
     ):
         self.layout_config = layout_config
         self.text_config = text_config
+        self.word_config = word_config
 
     @abstractmethod
     def process_surah(

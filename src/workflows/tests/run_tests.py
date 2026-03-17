@@ -1,13 +1,13 @@
 from src.workflows.tests.test_isolate_words import test_isolate_words
 from src.workflows.tests.test_verse_range import test_verse_range
-from src.workflows.tests.test_surah import test_surah
+from src.workflows.tests.test_surah import test_surah_stress
 
 
 def run_tests():
     print("=== Starting Workflow Tests ===")
     test_isolate_words()
     test_verse_range()
-    test_surah()
+    test_surah_stress()
     print("=== Workflow Tests Completed ===")
 
 

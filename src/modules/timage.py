@@ -10,23 +10,10 @@ import re
 from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFont
 
+from src.modules.configs import TextConfig
+
 # Logger setup
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TextConfig:
-    """Configuration for text rendering."""
-
-    font_size: int = 36
-    color: tuple[int, int, int, int] = (255, 255, 255, 255)
-    font_path: str = "./assets/inter.ttf"
-    bold_font_path: str = "./assets/inter_bold.ttf"
-    italic_font_path: str = "./assets/inter_italic.ttf"
-    bold_italic_font_path: str = "./assets/inter_bold_italic.ttf"
-    line_spacing: int = 10
-    horizontal_align: str = "center"  # "left", "center", "right"
-    vertical_align: str = "top"  # "top", "center", "bottom"
 
 
 @dataclass
@@ -269,7 +256,9 @@ def get_timage(
     line_height = ascent + descent
     total_text_height = len(lines) * line_height + (len(lines) - 1) * config.line_spacing
 
-    canvas_height = max_height if max_height is not None else total_text_height
+    # Determine canvas height
+    actual_max_height = max_height if max_height is not None else config.height
+    canvas_height = actual_max_height if actual_max_height is not None else total_text_height
     timage = Image.new("RGBA", (max_width, canvas_height), (0, 0, 0, 0))
     timage_draw = ImageDraw.Draw(timage)
 

@@ -1,8 +1,7 @@
 import os
 from src.modules.database_manager import DatabaseManager
-from src.modules.framer import LayoutConfig
-from src.modules.timage import TextConfig
 from src.workflows.isolate_words import IsolateWordsWorkflow
+from src.modules.presets import LANDSCAPE_PRESET
 
 
 def test_isolate_words():
@@ -19,21 +18,11 @@ def test_isolate_words():
     
     db.close()
 
-    layout_config = LayoutConfig(
-        max_width=1920,
-        image_height=1080,
-        padding=50,
-        word_spacing=20,
-        row_spacing=30,
-        max_rows_per_page=5,
-        bottom_offset=300,
-        balanced_wrapping=True,
-    )
-    text_config = TextConfig()
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah}, Verse {verse} ({len(words)} words)...")
 
-    workflow = IsolateWordsWorkflow(layout_config, text_config)
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
     
     verse_data = {
         "words": words,

@@ -1,7 +1,6 @@
 import os
 from src.modules.database_manager import DatabaseManager
-from src.modules.framer import LayoutConfig
-from src.modules.timage import TextConfig
+from src.modules.presets import LANDSCAPE_PRESET
 from src.workflows.verse_range import VerseRangeWorkflow
 
 
@@ -29,19 +28,9 @@ def test_verse_range():
     # translations: list[list[str]] (Per verse, per page)
     translations = [[t1], [t2], [t3]]
     
-    layout_config = LayoutConfig(
-        max_width=1920,
-        image_height=1080,
-        padding=50,
-        word_spacing=20,
-        row_spacing=30,
-        max_rows_per_page=5,
-        bottom_offset=300,
-        balanced_wrapping=True,
-    )
-    text_config = TextConfig()
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
-    workflow = VerseRangeWorkflow(layout_config, text_config)
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
     
     print(f"Processing Surah {surah}, Verses {start_verse}-{end_verse}...")
 
@@ -66,21 +55,21 @@ def test_verse_range():
     v1_pages = results[0]
     print(f"Verse 1 generated {len(v1_pages)} pages.")
     save_path1 = os.path.join(output_dir, "v1_page_1.png")
-    v1_pages[0].save(save_path1)
+    v1_pages[0][0].save(save_path1)
     print(f"Saved {save_path1}")
 
     # Verse 2
     v2_pages = results[1]
     print(f"Verse 2 generated {len(v2_pages)} pages.")
     save_path2 = os.path.join(output_dir, "v2_page_1.png")
-    v2_pages[0].save(save_path2)
+    v2_pages[0][0].save(save_path2)
     print(f"Saved {save_path2}")
 
     # Verse 3
     v3_pages = results[2]
     print(f"Verse 3 generated {len(v3_pages)} pages.")
     save_path3 = os.path.join(output_dir, "v3_page_1.png")
-    v3_pages[0].save(save_path3)
+    v3_pages[0][0].save(save_path3)
     print(f"Saved {save_path3}")
 
     db.close()
