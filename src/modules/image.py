@@ -1,8 +1,7 @@
 from typing import TypeAlias
 from PIL import Image, ImageChops, ImageFilter, ImageEnhance
 
-ColorType: TypeAlias = tuple[int, int, int] | tuple[int, int, int, int]
-PaddingType: TypeAlias = tuple[int, int, int, int]
+from src.modules.types import Color, Padding
 
 
 # === Helper Functions ===
@@ -16,7 +15,7 @@ def _compute_downscaled_size(image: Image.Image, scale: int) -> tuple[int, int]:
 # === Color Function ===
 
 
-def color(image: Image.Image, color: ColorType = (255, 255, 255, 255)) -> Image.Image:
+def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Image:
     """Multiplies the luminance of each pixel with the specified color.
 
     This function colorizes the image by converting it to grayscale and then
@@ -41,7 +40,7 @@ def color(image: Image.Image, color: ColorType = (255, 255, 255, 255)) -> Image.
 # === Pad Function ===
 
 
-def pad(image: Image.Image, padding: PaddingType = (20, 20, 20, 20), color: ColorType = (0, 0, 0, 0)) -> Image.Image:
+def pad(image: Image.Image, padding: Padding = (20, 20, 20, 20), color: Color = (0, 0, 0, 0)) -> Image.Image:
     """Adds padding around the image filled with a solid color.
 
     Args:

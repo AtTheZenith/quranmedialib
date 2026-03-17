@@ -7,35 +7,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
-from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFont
 
-from src.modules.configs import TextConfig
+from src.modules.types import Line, StyledWord, TextConfig
 
 # Logger setup
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class StyledWord:
-    text: str
-    font: ImageFont.ImageFont
-    color: tuple[int, int, int, int]
-    width: int
-    is_transparent: bool = False
-    simulate_bold: bool = False
-
-
-class Line:
-    def __init__(self):
-        self.words: list[StyledWord] = []
-        self.width: int = 0
-
-    def add_word(self, word: StyledWord, space_width: int):
-        if self.words:
-            self.width += space_width
-        self.words.append(word)
-        self.width += word.width
 
 
 def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.ImageFont, bool]:

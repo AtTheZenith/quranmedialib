@@ -1,4 +1,4 @@
-from src.modules.configs import LayoutConfig, TextConfig, WordConfig
+from src.modules.types import LayoutConfig, TextConfig, WordConfig
 
 # Common Presets
 
