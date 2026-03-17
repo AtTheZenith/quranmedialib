@@ -1,9 +1,8 @@
 import os
 import time
 from src.modules.database_manager import DatabaseManager
-from src.modules.framer import LayoutConfig
-from src.modules.timage import TextConfig
 from src.workflows.surah import SurahWorkflow
+from src.modules.presets import LANDSCAPE_PRESET
 
 
 def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: str):
@@ -14,21 +13,11 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     # Verify Surah exists
     arabic_verses = db.get_verses_from_surah(surah_num)
 
-    layout_config = LayoutConfig(
-        max_width=1920,
-        image_height=1080,
-        padding=50,
-        word_spacing=20,
-        row_spacing=30,
-        max_rows_per_page=2,
-        bottom_offset=300,
-        balanced_wrapping=True,
-    )
-    text_config = TextConfig()
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah_num} ({len(arabic_verses)} verses)...")
 
-    workflow = SurahWorkflow(layout_config, text_config)
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
     surah_data = {"surah": surah_num}
 
     # Call process_surah with the requested flag
