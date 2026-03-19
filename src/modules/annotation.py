@@ -1,6 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
 from src.modules.database_manager import DatabaseManager
+from src.modules.types import WordConfig
 
 db = DatabaseManager()
 
@@ -57,12 +58,9 @@ def annotate_word(
     surah: int,
     ayah: int,
     word_index: int,
-    translation_font_size: int = 28,
-    color: tuple[int, int, int, int] = (255, 255, 255, 255),
     db: DatabaseManager | None = None,
     translation: str | None = None,
-    font_path: str | None = None,
-    background_color: tuple[int, int, int, int] = (0, 0, 0, 0),
+    word_config: WordConfig | None = None,
 ) -> Image.Image:
     """Annotates a single word image with its translation."""
     if translation is None:
@@ -73,13 +71,18 @@ def annotate_word(
     if not translation:
         return image
 
-    actual_font_path = font_path if font_path is not None else "./assets/inter.ttf"
-    try:
-        font = ImageFont.truetype(actual_font_path, translation_font_size)
-    except (OSError, IOError):
-        font = ImageFont.load_default()
+    # Determine font size
+    if word_config is None:
+        raise ValueError("word_config is required for annotation.")
 
-    return _annotate_image(image, translation, font, color, background_color)
+    annotation_font_size = word_config.annotation_font_size
+
+    try:
+        font = ImageFont.truetype(word_config.annotation_font_path, annotation_font_size)
+    except (OSError, IOError) as e:
+        raise e
+
+    return _annotate_image(image, translation, font, word_config.annotation_color, word_config.background_color)
 
 
 def annotate_words(
@@ -87,14 +90,10 @@ def annotate_words(
     surah: int,
     ayah: int,
     start: int,
-    end: int | None = None,
-    translation_font_size: int = 28,
-    color: tuple[int, int, int, int] = (255, 255, 255, 255),
     db: DatabaseManager | None = None,
-    font_path: str | None = None,
-    background_color: tuple[int, int, int, int] = (0, 0, 0, 0),
-    word_spacing: int = 10,
-) -> list[Image.Image]:
+    word_config: WordConfig | None = None,
+    texts: list[str] | None = None,
+) -> list[Image.Image] | tuple[list[Image.Image], list[str]]:  # sourcery skip: low-code-quality
     """Annotates a list of word images, batching those with identical translations.
 
     Args:
@@ -102,13 +101,8 @@ def annotate_words(
         surah: The surah number.
         ayah: The ayah number.
         start: The 1-indexed database start index for the first word in the list.
-        end: Optional 1-indexed database end index.
-        translation_font_size: Font size for the translation text.
-        color: RGBA color for the translation text.
         db: Optional DatabaseManager instance.
-        font_path: Optional path to a .ttf font file.
-        background_color: RGBA color for the new image background.
-        word_spacing: Spacing between words when combined RTL.
+        word_config: Optional WordConfig instance to source annotation_font_size.
 
     Returns:
         A list of annotated PIL Images (some may contain multiple Arabic words).
@@ -124,29 +118,27 @@ def annotate_words(
     verse_wbws = database.get_wbw_from_verse(surah, ayah)
     verse_len = len(verse_wbws)
 
-    if end is None:
-        end = start + len(images) - 1
-
-    range_len = end - start + 1
-    if len(images) != range_len:
-        raise IndexError(f"Expected {range_len} images for range {start}-{end}, but got {len(images)}.")
-
-    if start < 1 or end > verse_len:
-        raise IndexError(f"Range {start}-{end} is out of bounds for verse {surah}:{ayah} (length {verse_len}).")
+    range_len = len(images)
+    if start < 1 or range_len > verse_len:
+        raise ValueError(f"Range {start}-{start + range_len - 1} is out of bounds for verse {surah}:{ayah} (length {verse_len}).")
 
     # WBWs for our range (0-indexed slice from 1-indexed database indices)
-    target_wbws = verse_wbws[start - 1 : end]
+    target_wbws = verse_wbws[start - 1 : start - 1 + range_len]
 
-    annotated_list = []
+    # Determine font size
+    if word_config is None:
+        raise ValueError("word_config is required for annotation.")
 
     # Load font once for all annotations in this batch
-    actual_font_path = font_path if font_path is not None else "./assets/inter.ttf"
     try:
-        font = ImageFont.truetype(actual_font_path, translation_font_size)
-    except (OSError, IOError):
-        font = ImageFont.load_default()
+        font = ImageFont.truetype(word_config.annotation_font_path, word_config.annotation_font_size)
+    except (OSError, IOError) as e:
+        raise e
 
     i = 0
+    annotated_images = []
+    annotated_texts = []
+
     while i < len(images):
         current_wbw = target_wbws[i]
 
@@ -163,23 +155,30 @@ def annotate_words(
             # To combine RTL: [wordN, ..., word2, word1]
             rtl_images = list(reversed(batch_images))
 
-            total_w = sum(img.width for img in rtl_images) + word_spacing * (batch_count - 1)
+            total_w = sum(img.width for img in rtl_images) + word_config.word_spacing * (batch_count - 1)
             max_h = max(img.height for img in rtl_images)
 
-            combined_canvas = Image.new("RGBA", (total_w, max_h), color=(0, 0, 0, 0))
+            combined_canvas = Image.new("RGBA", (total_w, max_h), color=word_config.background_color)
             current_x = 0
             for img in rtl_images:
                 # Vertical alignment: center within max_h
                 y_offset = (max_h - img.height) // 2
                 combined_canvas.paste(img, (current_x, y_offset), img if img.mode == "RGBA" else None)
-                current_x += img.width + word_spacing
+                current_x += img.width + word_config.word_spacing
 
             # Annotate combined image
-            annotated_list.append(_annotate_image(combined_canvas, current_wbw, font, color, background_color))
+            annotated_images.append(_annotate_image(combined_canvas, current_wbw, font, word_config.annotation_color, word_config.background_color))
+            if texts is not None:
+                # Concatenate text for the batched items
+                annotated_texts.append(" ".join(texts[i : i + batch_count]))
         else:
             # Single word annotation
-            annotated_list.append(_annotate_image(images[i], current_wbw, font, color, background_color))
+            annotated_images.append(_annotate_image(images[i], current_wbw, font, word_config.annotation_color, word_config.background_color))
+            if texts is not None:
+                annotated_texts.append(texts[i])
 
         i += batch_count
 
-    return annotated_list
+    if texts is not None:
+        return annotated_images, annotated_texts
+    return annotated_images

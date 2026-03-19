@@ -1,13 +1,15 @@
 import re
 from typing import Iterator, NamedTuple
+
 from PIL import Image
 
 from src.modules.annotation import annotate_word
 from src.modules.framer import frame
-from src.modules.verse_number import verse_number
 from src.modules.timage import get_timage
+from src.modules.verse_number import verse_number
 from src.modules.wimage import get_wimage
-from src.workflows.base import VerseWorkflow
+from src.modules.types import WordItem
+from src.workflows.base import BaseWorkflow
 
 
 class ParsedSegment(NamedTuple):
@@ -70,12 +72,12 @@ def _format_isolated_translation(
     return " ".join(formatted)
 
 
-class IsolateWordsWorkflow(VerseWorkflow):
+class IsolateWordsWorkflow(BaseWorkflow):
     """
     Workflow for isolating each word of a verse in its layout context.
     """
 
-    def process_verse(
+    def get_iterator(
         self,
         verse_data: dict,
         translation_data: list[str],
@@ -107,7 +109,7 @@ class IsolateWordsWorkflow(VerseWorkflow):
         highlight_style = kwargs.get("highlight_style", "#b#")
 
         # 1. Prepare base images and transparent placeholders
-        word_images = [get_wimage(word) for word in verse_words]
+        word_images = [get_wimage(word, self.word_config) for word in verse_words]
 
         if annotate:
             annotated_images = [
@@ -117,6 +119,7 @@ class IsolateWordsWorkflow(VerseWorkflow):
                     ayah_number or 1,
                     i + 1,
                     translation=wbw_translations[i] if wbw_translations else None,
+                    word_config=self.word_config,
                 )
                 for i, img in enumerate(word_images)
             ]
@@ -126,7 +129,7 @@ class IsolateWordsWorkflow(VerseWorkflow):
         # 2. Add verse number if provided
         items_text = list(verse_words)
         if ayah_number is not None:
-            v_img = verse_number(ayah_number, font_size=110, padding=(1, 71, 1, 1))
+            v_img = verse_number(ayah_number, self.word_config)
             annotated_images.append(v_img)
             items_text.append("")
 
@@ -149,14 +152,15 @@ class IsolateWordsWorkflow(VerseWorkflow):
                 full_trans_formatted = _format_isolated_translation(parsed_trans, i, norm_highlight)
                 t_img = get_timage(
                     full_trans_formatted,
-                    self.layout_config.content_width,
                     self.text_config,
                 )
 
+            # Bundle into WordItems for layout
+            items = [WordItem(img, text) for img, text in zip(isolated_images, items_text)]
+
             # Frame the isolated images
             yield frame(
-                isolated_images,
-                words_text=items_text,
+                items,
                 translation_images=[t_img] if t_img else None,
                 config=self.layout_config,
                 word_config=self.word_config,

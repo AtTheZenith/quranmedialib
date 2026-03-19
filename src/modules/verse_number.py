@@ -1,30 +1,22 @@
-import os
 import logging
-from typing import Union, Tuple
+import os
+
 from PIL import Image, ImageDraw, ImageFont
+
+from src.modules.types import WordConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Hardcoded constants
-FONT_PATH = "./assets/hafs.otf"
-
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
-
-# Type aliases
-Color = Union[Tuple[int, int, int], Tuple[int, int, int, int]]
-Padding = Tuple[int, int, int, int]
 
 
 def verse_number(
     number: int,
-    font_size: int = 128,
-    color: Color = (255, 255, 255, 255),
-    padding: Padding = (1, 1, 71, 1),
-    font_path: str = FONT_PATH,
-    background_color: Color = (0, 0, 0, 0),
+    word_config: WordConfig,
+    font_path: str = "./assets/hafs.otf",
 ) -> Image.Image:
     """Generates an image of the ayah symbol with the given number using Unicode.
 
@@ -52,15 +44,15 @@ def verse_number(
     if number < 0:
         raise ValueError(f"Verse number must be non-negative, got {number}")
 
-    if len(padding) != 4 or any(p < 0 for p in padding):
-        raise ValueError(f"Padding must be a 4-tuple of non-negative integers, got {padding}")
+    if len(word_config.verse_number_padding) != 4 or any(p < 0 for p in word_config.verse_number_padding):
+        raise ValueError(f"Padding must be a 4-tuple of non-negative integers, got {word_config.verse_number_padding}")
 
     try:
         if not os.path.exists(font_path):
             logger.warning(f"Font path {font_path} does not exist. Falling back to default font.")
             symbol_font = ImageFont.load_default()
         else:
-            symbol_font = ImageFont.truetype(font_path, font_size)
+            symbol_font = ImageFont.truetype(font_path, word_config.verse_number_size)
     except (OSError, IOError) as e:
         logger.warning(f"Could not load font from {font_path}. Falling back to default. Error: {e}")
         symbol_font = ImageFont.load_default()
@@ -77,13 +69,13 @@ def verse_number(
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
 
-    top, bottom, left, right = padding
+    top, bottom, left, right = word_config.verse_number_padding
 
     # Create image that fits the text plus padding
     img_w = int(text_w + left + right)
     img_h = int(text_h + top + bottom)
 
-    img = Image.new("RGBA", (img_w, img_h), color=background_color)
+    img = Image.new("RGBA", (img_w, img_h), color=word_config.background_color)
     draw = ImageDraw.Draw(img)
 
     # Calculate center position to draw the text anchored at "mm"
@@ -91,6 +83,6 @@ def verse_number(
     center_x = left + text_w / 2
     center_y = top + text_h / 2
 
-    draw.text((center_x, center_y), number_str, font=symbol_font, fill=color, anchor="mm")
+    draw.text((center_x, center_y), number_str, font=symbol_font, fill=word_config.verse_number_color, anchor="mm")
 
     return img

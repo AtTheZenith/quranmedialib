@@ -1,8 +1,9 @@
 import os
 import time
+
 from src.modules.database_manager import DatabaseManager
-from src.workflows.surah import SurahWorkflow
 from src.modules.presets import LANDSCAPE_PRESET
+from src.workflows.surah import SurahWorkflow
 
 
 def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: str):
@@ -16,18 +17,17 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah_num} ({len(arabic_verses)} verses)...")
-
     workflow = SurahWorkflow(layout_config, text_config, word_config)
-    surah_data = {"surah": surah_num}
 
-    # Call process_surah with the requested flag
-    surah_generator = workflow.process_surah(surah_data=surah_data, annotate=True, separate_translations=separate_translations)
+    surah_data = {"surah": surah_num}
+    # Call get_iterator with the requested flag
+    surah_generator = workflow.get_iterator(surah_data=surah_data, annotate=True, separate_translations=separate_translations)
 
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
     os.makedirs(output_dir, exist_ok=True)
-
     verse_count = 0
+
     # Process and save each verse as it is yielded
     for i, page_tuples in enumerate(surah_generator):
         # page_tuples is a list[tuple[Image.Image, str]]

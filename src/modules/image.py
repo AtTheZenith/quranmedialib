@@ -1,8 +1,6 @@
-from typing import TypeAlias
-from PIL import Image, ImageChops, ImageFilter, ImageEnhance
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter
 
 from src.modules.types import Color, Padding
-
 
 # === Helper Functions ===
 
