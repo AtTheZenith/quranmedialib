@@ -8,23 +8,22 @@ as part of a larger workflow for Quranic verse image generation.
 from PIL import Image, ImageDraw, ImageFont
 
 from src.modules.database_manager import DatabaseManager
+from src.modules.types import WordConfig
 
 db = DatabaseManager()
 
 
-def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] = (255, 255, 255, 255), padding: tuple[int, int, int, int] = (10, 10, 10, 10)) -> Image.Image:
+def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
     """Converts a word string into an image using the hafs font.
 
     Args:
         text: The Arabic text to render.
-        font_size: The font size to use for rendering.
-        color: The RGBA color of the text.
-        padding: A tuple of (top, bottom, left, right) padding values.
+        word_config: The word configuration.
 
     Returns:
         A PIL Image containing the rendered text with padding.
     """
-    font = ImageFont.truetype("./assets/hafs.otf", font_size)
+    font = ImageFont.truetype("./assets/hafs.otf", word_config.font_size)
 
     # Calculate text dimensions for dynamic image sizing and alignment
     ascent, descent = font.getmetrics()
@@ -41,7 +40,7 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
     # img height: top + h + bottom
     img = Image.new(
         "RGBA",
-        (w + padding[2] + padding[3], h + padding[0] + padding[1]),
+        (w + word_config.word_padding[2] + word_config.word_padding[3], h + word_config.word_padding[0] + word_config.word_padding[1]),
         color=(0, 0, 0, 0),
     )
     draw = ImageDraw.Draw(img)
@@ -50,10 +49,10 @@ def get_wimage(text: str, font_size: int = 80, color: tuple[int, int, int, int] 
     # x: padding[2] - bbox[0] ensures the leftmost part starts at the left padding
     # y: padding[0] + ascent draws the baseline at a fixed height from the top padding
     draw.text(
-        (padding[2] - bbox[0], padding[0] + ascent),
+        (word_config.word_padding[2] - bbox[0], word_config.word_padding[0] + ascent),
         text,
         font=font,
-        fill=color,
+        fill=word_config.word_color,
         anchor="ls",  # 'l' for left, 's' for baseline
     )
 

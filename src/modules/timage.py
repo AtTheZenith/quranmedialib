@@ -152,13 +152,6 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, m
     return best_lines
 
 
-def _calculate_vertical_start(canvas_height: int, text_height: int, alignment: str) -> int:
-    """Calculates the starting Y coordinate based on vertical alignment."""
-    if alignment == "center":
-        return (canvas_height - text_height) // 2
-    return canvas_height - text_height if alignment == "bottom" else 0
-
-
 def _draw_lines(
     draw: ImageDraw.ImageDraw,
     lines: list[Line],
@@ -173,12 +166,8 @@ def _draw_lines(
     current_y = start_y
 
     for line in lines:
-        if config.horizontal_align == "center":
-            current_x = (max_width - line.width) // 2
-        elif config.horizontal_align == "right":
-            current_x = max_width - line.width
-        else:  # left
-            current_x = 0
+        # Default to centered internal layout for the text block itself
+        current_x = (max_width - line.width) // 2
 
         for i, word in enumerate(line.words):
             if i > 0:
@@ -203,7 +192,6 @@ def _draw_lines(
 
 def get_timage(
     text: str,
-    max_width: int,
     config: TextConfig | None = None,
     max_height: int | None = None,
 ) -> Image.Image | None:
@@ -225,7 +213,7 @@ def get_timage(
     default_font, _ = _get_font("", config)
     space_width = int(draw.textlength(" ", font=default_font))
 
-    lines = _wrap_rich_text_balanced(styled_words, space_width, max_width)
+    lines = _wrap_rich_text_balanced(styled_words, space_width, config.max_width)
     if not lines:
         return None
 
@@ -236,12 +224,12 @@ def get_timage(
     # Determine canvas height
     actual_max_height = max_height if max_height is not None else config.height
     canvas_height = actual_max_height if actual_max_height is not None else total_text_height
-    timage = Image.new("RGBA", (max_width, canvas_height), (0, 0, 0, 0))
+    timage = Image.new("RGBA", (config.max_width, canvas_height), (0, 0, 0, 0))
     timage_draw = ImageDraw.Draw(timage)
 
-    start_y = _calculate_vertical_start(canvas_height, total_text_height, config.vertical_align)
+    start_y = 0  # Default to top alignment internally
 
-    _draw_lines(timage_draw, lines, start_y, max_width, space_width, ascent, line_height, config)
+    _draw_lines(timage_draw, lines, start_y, config.max_width, space_width, ascent, line_height, config)
 
     return timage
 

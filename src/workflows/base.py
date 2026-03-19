@@ -8,7 +8,7 @@ from PIL import Image
 from src.modules.types import LayoutConfig, TextConfig, WordConfig
 
 
-class VerseWorkflow(ABC):
+class BaseWorkflow(ABC):
     """
     Abstract base class for workflows that process a single verse.
     """
@@ -24,7 +24,7 @@ class VerseWorkflow(ABC):
         self.word_config = word_config
 
     @abstractmethod
-    def process_verse(
+    def get_iterator(
         self,
         verse_data: dict,
         translation_data: str | list[str],
@@ -32,34 +32,6 @@ class VerseWorkflow(ABC):
     ) -> Iterator[list[tuple[Image.Image, str]]]:
         """
         Processes a single verse and yields lists of generated images (pages).
-        Each page is a tuple of (Image, suffix).
-        """
-        pass
-
-
-class SurahWorkflow(ABC):
-    """
-    Abstract base class for workflows that process an entire surah.
-    """
-
-    def __init__(
-        self,
-        layout_config: LayoutConfig,
-        text_config: TextConfig,
-        word_config: WordConfig,
-    ):
-        self.layout_config = layout_config
-        self.text_config = text_config
-        self.word_config = word_config
-
-    @abstractmethod
-    def process_surah(
-        self,
-        surah_data: dict,
-        **kwargs,
-    ) -> Iterator[list[tuple[Image.Image, str]]]:
-        """
-        Processes an entire surah and yields lists of generated images.
         Each page is a tuple of (Image, suffix).
         """
         pass

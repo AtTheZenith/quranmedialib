@@ -1,5 +1,10 @@
 import os
-from src.modules.wimage import get_wimage, db
+
+from src.modules.database_manager import DatabaseManager
+from src.modules.presets import LANDSCAPE_PRESET
+from src.modules.wimage import get_wimage
+
+db = DatabaseManager()
 
 
 def test_wimage():
@@ -11,7 +16,7 @@ def test_wimage():
     os.makedirs(output_dir, exist_ok=True)
 
     print("Processing word...")
-    img = get_wimage(words[0])
+    img = get_wimage(words[0], LANDSCAPE_PRESET["default"]["1080p"][2])
     img.save(f"{output_dir}/wimage.png")
     print("Done.")
     print("test_wimage completed successfully.")

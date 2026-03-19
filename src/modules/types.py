@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated
 
-from PIL import ImageFont
+from PIL import Image, ImageFont
 
 # === Basic Types ===
 # Using the 'type' keyword for cleaner aliases
@@ -16,6 +16,23 @@ type AyahNumber = Annotated[int, range(1, 287)]
 type WordIndex = int
 
 
+# === Data Transmission Types ===
+@dataclass(frozen=True)
+class WordItem:
+    """Combines a word image with its text metadata for layout processing."""
+
+    image: Image.Image
+    text: str | None = None
+
+    @property
+    def width(self) -> int:
+        return self.image.width
+
+    @property
+    def height(self) -> int:
+        return self.image.height
+
+
 # === Configuration Types ===
 @dataclass(frozen=True)
 class LayoutConfig:
@@ -24,7 +41,14 @@ class LayoutConfig:
     max_width: int
     image_height: int
     padding: Padding = (0, 0, 0, 0)
-    bottom_offset: int = 0
+    wimage_x_offset: int = 0
+    wimage_y_offset: int = 0
+    timage_x_offset: int = 0
+    timage_y_offset: int = 0
+    timage_vertical_align: str = "center"
+    timage_horizontal_align: str = "center"
+    wimage_vertical_align: str = "center"
+    wimage_horizontal_align: str = "center"
 
     @property
     def content_width(self) -> int:
@@ -34,24 +58,30 @@ class LayoutConfig:
 
     @property
     def available_height(self) -> int:
-        """The available height for vertical layout (height - top - bottom - offset)."""
+        """The available height for vertical layout (height - top - bottom)."""
         # Fixed: Accessing tuple indices (top: 0, bottom: 1)
-        return self.image_height - self.padding[0] - self.padding[1] - self.bottom_offset
+        return self.image_height - self.padding[0] - self.padding[1]
 
 
 @dataclass(frozen=True)
 class WordConfig:
     """Configuration for word and verse layout behavior."""
 
-    word_spacing: int
-    row_spacing: int
+    font_size: int
     max_rows_per_page: int
-    verse_vertical_align: str = "center"
-    verse_horizontal_align: str = "center"
+    row_spacing: int
+    word_spacing: int
+    word_padding: Padding = (10, 10, 10, 10)
     verse_v_offset: int = 0
     balanced_wrapping: bool = False
     verse_number_size: int = 110
-    verse_number_padding: Padding = (1, 71, 1, 1)
+    verse_number_padding: Padding = (1, 41, 1, 1)
+    verse_number_color: Color = (255, 255, 255, 255)
+    annotation_font_size: int = 28
+    word_color: Color = (255, 255, 255, 255)
+    annotation_color: Color = (255, 255, 255, 255)
+    annotation_font_path: str = "./assets/inter.ttf"
+    background_color: Color = (0, 0, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -65,9 +95,8 @@ class TextConfig:
     italic_font_path: str = "./assets/inter_italic.ttf"
     bold_italic_font_path: str = "./assets/inter_bold_italic.ttf"
     line_spacing: int = 10
-    horizontal_align: str = "center"  # "left", "center", "right"
-    vertical_align: str = "top"  # "top", "center", "bottom"
     height: int | None = None
+    max_width: int | None = None
 
 
 # === Text Rendering Types ===

@@ -5,26 +5,27 @@ from typing import Iterator
 from PIL import Image
 
 from src.modules.database_manager import DatabaseManager
-from src.workflows.base import SurahWorkflow as BaseSurahWorkflow
 from src.workflows.verse_range import VerseRangeWorkflow
 
 
-class SurahWorkflow(VerseRangeWorkflow, BaseSurahWorkflow):
+class SurahWorkflow(VerseRangeWorkflow):
     """
     Workflow for processing an entire Surah.
     """
 
-    def process_surah(
+    def get_iterator(
         self,
         surah_data: dict,
-        **kwargs,
+        annotate: bool = True,
+        separate_translations: bool = False,
     ) -> Iterator[list[tuple[Image.Image, str]]]:
         """
         Processes an entire surah and yields lists of generated images.
         Each page is a tuple of (Image, suffix).
         Args:
             surah_data: Dictionary containing 'surah' number.
-            **kwargs: Additional arguments passed to process_range.
+            annotate: Whether to annotate the words.
+            separate_translations: Whether to separate the translations.
 
         Yields:
             Iterator[list[tuple[Image.Image, str]]]: A list of pages for each verse iteration, where each page is a tuple of (Image, suffix).
@@ -36,9 +37,11 @@ class SurahWorkflow(VerseRangeWorkflow, BaseSurahWorkflow):
         # Use the existing DatabaseManager instance if available, otherwise create a new one
         db = DatabaseManager()
 
+        start_verse = 1
         # Fetch Arabic verses
         # db.get_verses_from_surah returns list[str] (verses -> text)
         arabic_verses = db.get_verses_from_surah(surah_number)
+        end_verse = len(arabic_verses)
 
         if not arabic_verses:
             raise ValueError(f"No verses found for Surah {surah_number}")
@@ -49,19 +52,15 @@ class SurahWorkflow(VerseRangeWorkflow, BaseSurahWorkflow):
         raw_translations = db.get_translation_from_surah(surah_number)
 
         # Each verse translation is currently a single string.
-        # Since we don't have page splitting logic for translations here yet (it might be handled in frame() or elsewhere),
-        # we wrap each translation string in a list, effectively treating it as a single page translation per verse.
+        # We wrap each translation string in a list, effectively treating it as a single page translation per verse.
         translations = [[t] for t in raw_translations]
 
-        start_verse = 1
-        end_verse = len(arabic_verses)
-
         # Delegate to VerseRangeWorkflow's process_range
-        return self.process_range(
+        return self._process_range(
+            surah=surah_number,
             start_verse=start_verse,
             end_verse=end_verse,
             translations=translations,
-            arabic_verses=arabic_verses,
-            surah=surah_number,
-            **kwargs,
+            annotate=annotate,
+            separate_translations=separate_translations,
         )

@@ -1,46 +1,44 @@
 import os
+
 from src.modules.database_manager import DatabaseManager
 from src.modules.presets import LANDSCAPE_PRESET
 from src.workflows.verse_range import VerseRangeWorkflow
 
 
 def test_verse_range():
+
     print("Starting test_verse_range (Surah 108 - Per-Verse Iteration)...")
+
     db = DatabaseManager()
 
     # Define inputs explicitly for Surah 108 (Al-Kawthar)
+
     surah = 108
+
     start_verse = 1
+
     end_verse = 3
-    
-    # Explicitly fetch verses (No loops)
-    v1 = db.get_verse(surah, 1)
-    v2 = db.get_verse(surah, 2)
-    v3 = db.get_verse(surah, 3)
-    arabic_verses = [v1, v2, v3]
-    
+
     # Explicitly fetch translations (No loops)
-    t1 = db.get_translation_from_verse(surah, 1)
-    t2 = db.get_translation_from_verse(surah, 2)
-    t3 = db.get_translation_from_verse(surah, 3)
-    
-    # Argument order: (start, end, translations, arabic_verses)
+
+    translations = db.get_translation_from_surah(surah)
+
+    # Argument order: (start, end, translations)
+
     # translations: list[list[str]] (Per verse, per page)
-    translations = [[t1], [t2], [t3]]
-    
+
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
-    
+
     print(f"Processing Surah {surah}, Verses {start_verse}-{end_verse}...")
 
     # Execute workflow (generator yields a list of pages per verse)
-    generator = workflow.process_range(
+    generator = workflow._process_range(
+        surah=surah,
         start_verse=start_verse,
         end_verse=end_verse,
         translations=translations,
-        arabic_verses=arabic_verses,
-        surah=surah
     )
 
     # Output directory
