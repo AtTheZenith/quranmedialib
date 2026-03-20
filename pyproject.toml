@@ -1,15 +1,52 @@
 [project]
 name = "quranmedialib"
-version = "0.1.0"
-description = "Media producing library for Quranic texts."
+version = "1.0.0"
+description = "A media-editing library for Quranic texts."
 readme = "README.md"
 requires-python = ">=3.13, <3.14"
+license = "Apache-2.0"
 dependencies = [
     "Pillow<13.0.0",
 ]
 
-[ruff]
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5.0",
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quranmedialib"]
+exclude = [
+    "**/tests/**",
+    "**/test_*.py",
+    "**/__pycache__/**",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/quranmedialib/**",
+]
+exclude = [
+    "**/tests/**",
+    "**/test_*.py",
+    "**/__pycache__/**",
+]
+
+[tool.ruff]
 line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
 indent-style = "space"
-end-of-line = "lf"
-insert-final-newline = true
+line-ending = "lf"
+skip-magic-trailing-comma = false
+quote-style = "double"

@@ -5,9 +5,16 @@ build/
 dist/
 wheels/
 *.egg-info
+.ruff_cache/
 
 # Virtual environments
 .venv
 
 # Insignificant files
 /output/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+tests/output/
