@@ -86,13 +86,13 @@ class DatabaseManager:
 
         try:
             # Import presets lazily to avoid circular import issues
-            from quranmedialib.presets import DATABASE_EN_SAHICH, DATABASE_QURAN, DATABASE_WBW_EN
+            from quranmedialib.presets import DATABASE_EN_SAHIH, DATABASE_QURAN, DATABASE_WBW_EN
 
             # Register packaged databases with default names
             # (skip validation during initialization)
             self._add_connection_internal(self.DEFAULT_QURAN_NAME, DATABASE_QURAN)
             self._add_connection_internal(self.DEFAULT_WBW_NAME, DATABASE_WBW_EN)
-            self._add_connection_internal(self.DEFAULT_TRANSLATION_NAME, DATABASE_EN_SAHICH)
+            self._add_connection_internal(self.DEFAULT_TRANSLATION_NAME, DATABASE_EN_SAHIH)
 
             # Set default active translation
             self._active_translation = self.DEFAULT_TRANSLATION_NAME
@@ -212,9 +212,7 @@ class DatabaseManager:
             logger.error("Query failed on '%s': %s | Query: %s", self._active_translation, e, query)
             return []
 
-    def _aggregate_verses(
-        self, rows: list[sqlite3.Row], config: DatabaseConfig | WbwDatabaseConfig, order_by_word: bool = False
-    ) -> list[str]:
+    def _aggregate_verses(self, rows: list[sqlite3.Row], config: DatabaseConfig | WbwDatabaseConfig, order_by_word: bool = False) -> list[str]:
         """Helper to aggregate verses by ayah number.
 
         Args:
@@ -354,9 +352,7 @@ class DatabaseManager:
             logger.error("Failed to fetch WBW from verse: %s", e)
             return []
 
-    def get_wbw_from_word(
-        self, surah_number: SurahNumber, ayah_number: AyahNumber, word_index: WordIndex
-    ) -> Optional[str]:
+    def get_wbw_from_word(self, surah_number: SurahNumber, ayah_number: AyahNumber, word_index: WordIndex) -> Optional[str]:
         """Fetches the translation for a specific word in a specific verse.
 
         Always uses the "wbw" connection regardless of active translation.
