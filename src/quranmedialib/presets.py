@@ -43,7 +43,7 @@ DATABASE_QURAN = DatabaseConfig.from_packaged(
 )
 
 #: Default English translation database configuration (Sahih International)
-DATABASE_EN_SAHICH = DatabaseConfig.from_packaged(
+DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
     db_name="en_sahih.db",
     tablename="verses",
     surah_col="sura",

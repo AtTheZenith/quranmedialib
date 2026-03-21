@@ -41,7 +41,7 @@ __version__ = "0.1.0"
 # Expose types and presets at package level for convenience
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.presets import (
-    DATABASE_EN_SAHICH,
+    DATABASE_EN_SAHIH,
     DATABASE_QURAN,
     DATABASE_WBW_EN,
     FONT_HAFS,
