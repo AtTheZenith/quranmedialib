@@ -58,13 +58,8 @@ def test_glow():
     print("test_glow passed.")
 
 
-def test_image():
-    print("\nRunning test_image...")
+if __name__ == "__main__":
     test_color()
     test_pad()
     test_glow()
-    print("test_image completed successfully.")
-
-
-if __name__ == "__main__":
-    test_image()
+    print("All image tests completed successfully.")
