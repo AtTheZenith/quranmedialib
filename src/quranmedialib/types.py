@@ -337,14 +337,17 @@ class WordConfig:
 
 @dataclass(frozen=True)
 class TextConfig:
-    """Configuration for text rendering."""
+    """Configuration for text rendering.
+
+    For variable fonts (like Inter), bold and italic variants are handled
+    via font variations (weight axis) and separate italic font files.
+    Bold weight (700) is applied via font_variation when rendering.
+    """
 
     font_size: int = 36
     color: Color = (255, 255, 255, 255)
     font_path: Path | None = field(default=None, init=False)
-    bold_font_path: Path | None = field(default=None, init=False)
     italic_font_path: Path | None = field(default=None, init=False)
-    bold_italic_font_path: Path | None = field(default=None, init=False)
     line_spacing: int = 10
     height: int | None = None
     max_width: int | None = None
@@ -354,14 +357,16 @@ class TextConfig:
         font_size: int = 36,
         color: Color = (255, 255, 255, 255),
         font_path: Path | str | FontResource | None = None,
-        bold_font_path: Path | str | FontResource | None = None,
         italic_font_path: Path | str | FontResource | None = None,
-        bold_italic_font_path: Path | str | FontResource | None = None,
         line_spacing: int = 10,
         height: int | None = None,
         max_width: int | None = None,
     ):
-        """Initialize TextConfig with resolved font paths."""
+        """Initialize TextConfig with resolved font paths.
+
+        Note: bold_font_path and bold_italic_font_path parameters are deprecated.
+        Bold weight is now applied via font variations (wght axis) during rendering.
+        """
         from quranmedialib.resources import get_font_path
 
         def _resolve_path(path: Path | str | FontResource | None, default: str) -> Path:
@@ -377,9 +382,7 @@ class TextConfig:
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "color", color)
         object.__setattr__(self, "font_path", _resolve_path(font_path, "inter.ttf"))
-        object.__setattr__(self, "bold_font_path", _resolve_path(bold_font_path, "inter_bold.ttf"))
         object.__setattr__(self, "italic_font_path", _resolve_path(italic_font_path, "inter_italic.ttf"))
-        object.__setattr__(self, "bold_italic_font_path", _resolve_path(bold_italic_font_path, "inter_bold_italic.ttf"))
         object.__setattr__(self, "line_spacing", line_spacing)
         object.__setattr__(self, "height", height)
         object.__setattr__(self, "max_width", max_width)

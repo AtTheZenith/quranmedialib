@@ -3,8 +3,16 @@ from typing import Literal
 
 from PIL import Image
 
-from quranmedialib import DatabaseManager, LayoutConfig, TextConfig, WordConfig, WordItem
-from quranmedialib import LANDSCAPE_PRESET, SQUARE_PRESET, STORY_PRESET
+from quranmedialib import (
+    LANDSCAPE_PRESET,
+    SQUARE_PRESET,
+    STORY_PRESET,
+    DatabaseManager,
+    LayoutConfig,
+    TextConfig,
+    WordConfig,
+    WordItem,
+)
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.image import glow

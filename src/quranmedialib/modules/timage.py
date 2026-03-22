@@ -18,40 +18,32 @@ logger = logging.getLogger(__name__)
 
 
 def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.ImageFont, bool]:
-    """Selects the correct font variant based on flags. Returns (font, simulate_bold)."""
-    wants_bold = "b" in flags
-    simulate_bold = False
+    """Selects the correct font variant based on flags. Returns (font, simulate_bold).
 
-    # Determine which font path to use based on flags
-    if "b" in flags and "i" in flags:
-        path = config.bold_italic_font_path
-    elif "b" in flags:
-        path = config.bold_font_path
-    elif "i" in flags:
-        path = config.italic_font_path
+    For variable fonts (like Inter), uses font variations (weight axis) instead of
+    separate font files.
+    """
+    wants_bold = "b" in flags
+    wants_italic = "i" in flags
+
+    # Determine base font path (italic or regular)
+    if wants_italic:
+        base_path = config.italic_font_path
     else:
-        path = config.font_path
+        base_path = config.font_path
 
     # Convert Path to string for ImageFont.truetype
-    path_str = str(path) if isinstance(path, Path) else path
+    base_path_str = str(base_path) if isinstance(base_path, Path) else base_path
 
-    try:
-        font = ImageFont.truetype(path_str, config.font_size)
-        return font, False
-    except (OSError, IOError):
-        logger.debug(f"Font variant not found: {path_str}. Falling back to default.")
-
-        # Determine fallback path
-        fallback_path = config.italic_font_path if "i" in flags else config.font_path
-        fallback_str = str(fallback_path) if isinstance(fallback_path, Path) else fallback_path
-
-        try:
-            font = ImageFont.truetype(fallback_str, config.font_size)
-            if wants_bold:
-                simulate_bold = True  # Bold requested but file missing, so we simulate it
-            return font, simulate_bold
-        except (OSError, IOError):
-            return ImageFont.load_default(), False
+    # Load the font
+    font = ImageFont.truetype(base_path_str, config.font_size)
+    
+    # For variable fonts, use font variations for weight
+    # Inter variable font uses 'wght' axis (100-900, regular=400, bold=700)
+    if wants_bold:
+        font.set_variation_by_axes([700])  # wght axis value
+    
+    return font, False
 
 
 def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -> list[StyledWord]:

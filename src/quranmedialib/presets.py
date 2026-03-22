@@ -25,12 +25,6 @@ FONT_INTER = FontResource.from_packaged("inter.ttf", "Inter")
 #: Inter italic font for English italic text rendering
 FONT_INTER_ITALIC = FontResource.from_packaged("inter_italic.ttf", "Inter Italic")
 
-#: Inter bold font for English bold text rendering
-FONT_INTER_BOLD = FontResource.from_packaged("inter_bold.ttf", "Inter Bold")
-
-#: Inter bold italic font for English bold italic text rendering
-FONT_INTER_BOLD_ITALIC = FontResource.from_packaged("inter_bold_italic.ttf", "Inter Bold Italic")
-
 
 # === Database Presets ===
 #: Default Quran text database configuration

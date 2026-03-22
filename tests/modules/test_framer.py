@@ -19,12 +19,10 @@ def test_framer():
     surah = 2
     verse = 255
 
-    # Switch to Quran database for Arabic text
-    database_manager.set_active_translation("quran")
+    # Get Arabic text (always uses "quran" database)
     words_text = database_manager.get_verse(surah, verse).split()
 
-    # Switch back to translation for English translation
-    database_manager.set_active_translation("translation")
+    # Get English translation (uses "translation" database by default)
     verse_translation = database_manager.get_translation_from_verse(surah, verse)
 
     # Split up the translation
@@ -74,12 +72,10 @@ def test_framer_alignment():
     surah = 108
     verse = 1
 
-    # Switch to Quran database for Arabic text
-    database_manager.set_active_translation("quran")
+    # Get Arabic text (always uses "quran" database)
     words_text = database_manager.get_verse(surah, verse).split()
 
-    # Switch back to translation for English translation
-    database_manager.set_active_translation("translation")
+    # Get English translation (uses "translation" database by default)
     verse_translation = [database_manager.get_translation_from_verse(surah, verse)]
     config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
@@ -215,4 +211,3 @@ if __name__ == "__main__":
     test_framer()
     test_framer_alignment()
     test_framer_offsets()
-    DatabaseManager().close()

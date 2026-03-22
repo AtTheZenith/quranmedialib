@@ -16,7 +16,10 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
-db = DatabaseManager()
+
+def _get_db() -> DatabaseManager:
+    """Get a fresh DatabaseManager instance."""
+    return DatabaseManager()
 
 
 class VerseRangeWorkflow(BaseWorkflow):
@@ -69,6 +72,7 @@ class VerseRangeWorkflow(BaseWorkflow):
         Yields:
             list[tuple[Image.Image, str]]: A list of (image, suffix) for each verse iteration.
         """
+        db = _get_db()
 
         arabic_verses = db.get_verses_from_surah(surah)
 
@@ -87,7 +91,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                     surah=surah,
                     ayah=current_verse_num,
                     start=1,
-                    db=db,
+                    db=_get_db(),
                     word_config=self.word_config,
                     texts=list(words),
                 )

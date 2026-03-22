@@ -5,10 +5,7 @@ def test_database_manager():
     print("\nRunning test_database_manager...")
     db = DatabaseManager()
 
-    # Switch to Quran database for Arabic text
-    db.set_active_translation("quran")
-
-    # Test renamed methods
+    # Test Quran methods (always use "quran" database)
     verses = db.get_verses_from_surah(1)
     print(f"Verses in Surah 1: {verses[:2]}")
     assert len(verses) > 0
@@ -17,9 +14,7 @@ def test_database_manager():
     print(f"Verse 1:1 text: {verse_text}")
     assert "بِسْمِ" in verse_text
 
-    # Switch to WBW for word-by-word lookups
-    db.set_active_translation("wbw")
-
+    # Test WBW methods (always use "wbw" database)
     wbw_surah = db.get_wbw_from_surah(1)
     print(f"WBW translations in Surah 1: {wbw_surah[:5]}")
     assert len(wbw_surah) > 0
@@ -32,10 +27,7 @@ def test_database_manager():
     print(f"WBW translation for 1:1:1: {wbw_word}")
     assert wbw_word is not None
 
-    # Switch back to translation for verse translation tests
-    db.set_active_translation("translation")
-
-    # Test New Translation methods (en_sahih.db)
+    # Test Translation methods (uses "translation" database by default)
     trans_surah = db.get_translation_from_surah(1)
     print(f"Full translations in Surah 1: {trans_surah[:2]}")
     assert len(trans_surah) == 7
@@ -50,4 +42,3 @@ def test_database_manager():
 
 if __name__ == "__main__":
     test_database_manager()
-    DatabaseManager().close()
