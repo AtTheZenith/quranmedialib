@@ -38,8 +38,7 @@ class SurahWorkflow(VerseRangeWorkflow):
 
         db = DatabaseManager()
 
-        # Get Arabic verses from Quran database
-        db.set_active_translation("quran")
+        # Get Arabic verses from Quran database (always uses "quran" database)
         arabic_verses = db.get_verses_from_surah(surah_number)
         start_verse = 1
         end_verse = len(arabic_verses)
@@ -48,12 +47,8 @@ class SurahWorkflow(VerseRangeWorkflow):
             raise ValueError(f"No verses found for Surah {surah_number}")
 
         # Get English translations from translation database
-        db.set_active_translation("translation")
         raw_translations = db.get_translation_from_surah(surah_number)
         translations = [[t] for t in raw_translations]
-
-        # Set back to Quran for the verse range processing
-        db.set_active_translation("quran")
 
         return self._process_range(
             surah=surah_number,

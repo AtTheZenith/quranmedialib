@@ -20,8 +20,7 @@ def test_isolate_words():
     surah = 1
     verse = 2
 
-    # Switch to Quran database for Arabic text
-    db.set_active_translation("quran")
+    # Get Arabic verse text (always uses "quran" database)
     words_str = db.get_verse(surah, verse)
     words = words_str.split()
 
@@ -29,8 +28,6 @@ def test_isolate_words():
     wbw_translations = db.get_wbw_from_verse(surah, verse)
     # Use WBW translations as the list of strings for the bottom translation area
     translation_list = list(wbw_translations)
-
-    db.close()
 
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 

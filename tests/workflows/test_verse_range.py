@@ -17,12 +17,8 @@ def test_verse_range():
 
     end_verse = 3
 
-    # Fetch English translations first
-    db.set_active_translation("translation")
+    # Fetch English translations (uses "translation" database by default)
     translations = db.get_translation_from_surah(surah)
-
-    # Switch to Quran database for Arabic text (workflow will use this)
-    db.set_active_translation("quran")
 
     # Argument order: (start, end, translations)
 
@@ -71,7 +67,6 @@ def test_verse_range():
     v3_pages[0][0].save(save_path3)
     print(f"Saved {save_path3}")
 
-    db.close()
     print(f"Test complete. Results saved to {output_dir}")
 
 

@@ -23,4 +23,3 @@ def test_wimage():
 
 if __name__ == "__main__":
     test_wimage()
-    db.close()
