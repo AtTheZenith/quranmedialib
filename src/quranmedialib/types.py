@@ -108,6 +108,38 @@ class DatabaseConfig:
             text_col=text_col,
         )
 
+    @classmethod
+    def from_path(
+        cls,
+        db_path: str | Path,
+        tablename: str,
+        surah_col: str = "sura",
+        ayah_col: str = "ayah",
+        text_col: str = "text",
+    ) -> DatabaseConfig:
+        """Create a DatabaseConfig from an external database file path.
+
+        This method allows loading databases from arbitrary file paths,
+        not just packaged assets. Useful for loading external or custom databases.
+
+        Args:
+            db_path: Path to the SQLite database file (relative or absolute).
+            tablename: Name of the table containing verse data.
+            surah_col: Column name for surah number. Defaults to "sura".
+            ayah_col: Column name for ayah number. Defaults to "ayah".
+            text_col: Column name for text content. Defaults to "text".
+
+        Returns:
+            DatabaseConfig with the provided path.
+        """
+        return cls(
+            filepath=Path(db_path),
+            tablename=tablename,
+            surah_col=surah_col,
+            ayah_col=ayah_col,
+            text_col=text_col,
+        )
+
 
 @dataclass(frozen=True)
 class WbwDatabaseConfig(DatabaseConfig):
@@ -148,6 +180,41 @@ class WbwDatabaseConfig(DatabaseConfig):
 
         return cls(
             filepath=get_db_path(db_name),
+            tablename=tablename,
+            surah_col=surah_col,
+            ayah_col=ayah_col,
+            text_col=text_col,
+            word_id_col=word_id_col,
+        )
+
+    @classmethod
+    def from_path(
+        cls,
+        db_path: str | Path,
+        tablename: str,
+        surah_col: str = "surah",
+        ayah_col: str = "ayah",
+        text_col: str = "translation",
+        word_id_col: str = "word",
+    ) -> WbwDatabaseConfig:
+        """Create a WbwDatabaseConfig from an external database file path.
+
+        This method allows loading word-by-word databases from arbitrary file paths,
+        not just packaged assets. Useful for loading external or custom databases.
+
+        Args:
+            db_path: Path to the SQLite database file (relative or absolute).
+            tablename: Name of the table containing word-by-word data.
+            surah_col: Column name for surah number. Defaults to "surah".
+            ayah_col: Column name for ayah number. Defaults to "ayah".
+            text_col: Column name for translation text. Defaults to "translation".
+            word_id_col: Column name for word index. Defaults to "word".
+
+        Returns:
+            WbwDatabaseConfig with the provided path.
+        """
+        return cls(
+            filepath=Path(db_path),
             tablename=tablename,
             surah_col=surah_col,
             ayah_col=ayah_col,
