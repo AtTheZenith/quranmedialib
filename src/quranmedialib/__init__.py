@@ -52,7 +52,6 @@ from quranmedialib.presets import (
     SQUARE_PRESET,
     STORY_PRESET,
 )
-from quranmedialib.workflows.verse import VerseWorkflow
 from quranmedialib.types import (
     AyahNumber,
     Color,
@@ -69,6 +68,7 @@ from quranmedialib.types import (
     WordIndex,
     WordItem,
 )
+from quranmedialib.workflows.verse import VerseWorkflow
 
 __all__ = [
     # Version

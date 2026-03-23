@@ -104,8 +104,7 @@ class VerseWorkflow(BaseWorkflow):
 
         # Convert translation strings to images
         translation_images = [
-            get_timage(translation, self.text_config) if translation else None
-            for translation in translations
+            get_timage(translation, self.text_config) if translation else None for translation in translations
         ]
 
         # Frame with translation pages

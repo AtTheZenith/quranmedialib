@@ -32,12 +32,7 @@ def test_verse() -> None:
     surah = 1
     ayah = 1
 
-    # Fetch word-by-word translations for creating the translation list
-    wbw_translations = db.get_wbw_from_verse(surah, ayah)
-
-    # Use WBW translations as the list of strings for the translation area
-    # User determines the split based on how framer divides Arabic verses
-    translations = list(wbw_translations)
+    translations = [db.get_translation_from_verse(surah_number=surah, ayah_number=ayah)]
 
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
@@ -61,7 +56,7 @@ def test_verse() -> None:
     results = list(verse_generator)
 
     # Verify we have at least one result
-    assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
+    assert results, f"Expected at least 1 result, got {len(results)}"
 
     # Save first page to verify output
     if results:
@@ -77,11 +72,10 @@ def test_verse_without_annotation() -> None:
     surah = 108
     ayah = 1
 
-    # Fetch word-by-word translations for creating the translation list
-    wbw_translations = db.get_wbw_from_verse(surah, ayah)
-    translations = list(wbw_translations)
+    translations = [db.get_translation_from_verse(surah_number=surah, ayah_number=ayah)]
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    layout_config, text_config = LANDSCAPE_PRESET["default"]["1080p"][:2]
+    word_config = LANDSCAPE_PRESET["arabic"]["1080p"][2]
 
     print(f"Processing Surah {surah}, Ayah {ayah} (without annotation)...")
 
@@ -103,7 +97,7 @@ def test_verse_without_annotation() -> None:
     results = list(verse_generator)
 
     # Verify we have at least one result
-    assert len(results) >= 1, f"Expected at least 1 result, got {len(results)}"
+    assert results, f"Expected at least 1 result, got {len(results)}"
 
     # Save first page to verify output
     if results:

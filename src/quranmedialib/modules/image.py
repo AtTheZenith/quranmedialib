@@ -176,7 +176,7 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
     glow_color_size = color_base.size
     glow_color = Image.new("RGB", glow_color_size, (0, 0, 0))
     glow_alpha = None if is_opaque else Image.new("L", glow_color_size, 0)
-    
+
     # Downscale alpha channel to match color_base size
     alpha_small = None if is_opaque else alpha.resize(glow_color_size, resample=Image.Resampling.BOX)
 
