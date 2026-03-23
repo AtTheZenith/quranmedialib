@@ -37,7 +37,7 @@ class VerseRangeWorkflow(BaseWorkflow):
     ) -> Iterator[list[Image.Image]]:
         """
         Processes a range of verses and yields lists of generated images (pages).
-        
+
         Args:
             surah: The surah number.
             translations: List of verse translations, each verse being a list of page strings.
@@ -50,7 +50,7 @@ class VerseRangeWorkflow(BaseWorkflow):
         """
         if end_ayah is None:
             end_ayah = start_ayah
-            
+
         return self._process_range(
             surah=surah,
             start_verse=start_ayah,

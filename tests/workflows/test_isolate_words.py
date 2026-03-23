@@ -42,7 +42,7 @@ def test_isolate_words():
         translations=translation_list,
         ayah=verse,
         wbw_translations=wbw_translations,
-        annotate=True
+        annotate=True,
     )
 
     # Save results

@@ -8,6 +8,7 @@ import contextlib
 import logging
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -15,6 +16,66 @@ from quranmedialib.types import Line, StyledWord, TextConfig
 
 # Logger setup
 logger = logging.getLogger(__name__)
+
+
+class ParsedSegment(NamedTuple):
+    """Represents a pre-parsed translation segment."""
+
+    flags: str
+    hex_color: str
+    content: str
+    original_had_tag: bool
+
+
+def normalize_highlight_style(style: str) -> str:
+    """Ensures highlight_style is in the correct #flags#hex# format."""
+    if not style.startswith("#"):
+        style = f"#{style}"
+    if not style.endswith("#"):
+        style = f"{style}#"
+    # If highlight_style is only flags (e.g. #b#), add separator for empty hex
+    if style.count("#") == 2:
+        style = f"{style}#"
+    return style
+
+
+def prepare_translation_segments(translation: list[str]) -> list[ParsedSegment]:
+    """Pre-parses translation segments to avoid redundant regex searches in loops."""
+    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
+    parsed = []
+
+    for segment in translation:
+        if match := tag_pattern.search(segment):
+            content = match[3].rstrip("#")
+            parsed.append(ParsedSegment(match[1], match[2], content, True))
+        else:
+            parsed.append(ParsedSegment("", "", segment, False))
+    return parsed
+
+
+def format_isolation_text(
+    parsed_segments: list[ParsedSegment],
+    target_index: int,
+    highlight_style: str,
+) -> str:
+    """Constructs a formatted rich text string where one segment is highlighted and others are transparent."""
+    formatted = []
+    for j, seg in enumerate(parsed_segments):
+        if j == target_index:
+            if seg.original_had_tag:
+                # Keep original formatting if it already has tags
+                formatted.append(f"#{seg.flags}#{seg.hex_color}#{seg.content}#")
+            else:
+                # Apply highlight style to plain text
+                formatted.append(f"{highlight_style}{seg.content}#")
+        elif seg.original_had_tag:
+            # Preserve flags but force transparency
+            formatted.append(f"#{seg.flags}#00000000#{seg.content}#")
+        else:
+            # Wrap plain text with transparent tag
+            formatted.append(f"##00000000#{seg.content}#")
+
+    return " ".join(formatted)
 
 
 def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.ImageFont, bool]:
@@ -27,22 +88,18 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.ImageFont, bool
     wants_italic = "i" in flags
 
     # Determine base font path (italic or regular)
-    if wants_italic:
-        base_path = config.italic_font_path
-    else:
-        base_path = config.font_path
-
+    base_path = config.italic_font_path if wants_italic else config.font_path
     # Convert Path to string for ImageFont.truetype
     base_path_str = str(base_path) if isinstance(base_path, Path) else base_path
 
     # Load the font
     font = ImageFont.truetype(base_path_str, config.font_size)
-    
+
     # For variable fonts, use font variations for weight
     # Inter variable font uses 'wght' axis (100-900, regular=400, bold=700)
     if wants_bold:
         font.set_variation_by_axes([700])  # wght axis value
-    
+
     return font, False
 
 
@@ -126,30 +183,99 @@ def _wrap_rich_text(styled_words: list[StyledWord], space_width: int, max_width:
 
 
 def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, max_width: int) -> list[Line]:
-    """Balanced wrapping for rich text."""
+    """
+    Wraps text into a 'Balanced Inverted Pyramid' shape.
+    Rules:
+    1. Line[i].width >= Line[i+1].width (Inverted Pyramid)
+    2. Minimize the width of the longest line (Balanced)
+    3. Minimize total variance/raggedness.
+    """
     if not styled_words:
         return []
 
+    # 1. Estimate target number of lines (k) using greedy wrap
+    # We use this as a reference, but we may need fewer or more lines
+    # to satisfy the Inverted Pyramid constraint.
     greedy_lines = _wrap_rich_text(styled_words, space_width, max_width)
-    target_num_lines = len(greedy_lines)
-
-    if target_num_lines <= 1:
+    initial_k = len(greedy_lines)
+    if initial_k <= 1:
         return greedy_lines
 
-    low = max(w.width for w in styled_words)
-    high = max_width
-    best_lines = greedy_lines
+    n = len(styled_words)
+    # Precompute cumulative widths for O(1) range sums
+    cum_widths = [0] * (n + 1)
+    for i in range(n):
+        cum_widths[i + 1] = cum_widths[i] + styled_words[i].width
 
-    while low <= high:
-        mid = (low + high) // 2
-        lines = _wrap_rich_text(styled_words, space_width, mid)
-        if len(lines) <= target_num_lines:
-            best_lines = lines
-            high = mid - 1
-        else:
-            low = mid + 1
+    def get_line_width(start_idx: int, end_idx: int) -> int:
+        if start_idx > end_idx:
+            return 0
+        w_sum = cum_widths[end_idx + 1] - cum_widths[start_idx]
+        spaces = max(0, end_idx - start_idx) * space_width
+        return w_sum + spaces
 
-    return best_lines
+    # 2. DP to find optimal breaks
+    max_k = min(n, initial_k * 2)
+    # Use a dictionary for DP table to save memory on sparse/simple cases (L238)
+    # Key: (line_idx, word_idx), Value: (cost, curr_width, prev_word_idx)
+    dp: dict[tuple[int, int], tuple[float, int, int]] = {}
+
+    # Base case: 1 line
+    for j in range(n):
+        w = get_line_width(0, j)
+        if w <= max_width:
+            # For the first line, we want it to be as wide as possible
+            # to allow subsequent lines to fit under it in a pyramid.
+            cost = max_width - w
+            dp[(1, j)] = (float(cost), w, -1)
+
+    # Fill DP table for 2..max_k lines
+    for i in range(2, max_k + 1):
+        for j in range(n):
+            for p in range(j):
+                if (i - 1, p) not in dp:
+                    continue
+
+                prev_cost, prev_width, _ = dp[(i - 1, p)]
+                curr_width = get_line_width(p + 1, j)
+
+                # Inverted Pyramid Constraint: Line[i] <= Line[i-1]
+                if 0 < curr_width <= prev_width:
+                    diff = prev_width - curr_width
+                    # Minimize variance and maximize line lengths (to keep line count low)
+                    cost = prev_cost + diff * diff + (max_width - curr_width)
+
+                    # Tie-breaking (L256): prioritize wider previous lines for stability
+                    if (
+                        (i, j) not in dp
+                        or cost < dp[(i, j)][0]
+                        or (cost == dp[(i, j)][0] and prev_width > dp[(i, j)][1])
+                    ):
+                        dp[(i, j)] = (cost, curr_width, p)
+
+    # 3. Backtrack: Find the k that minimizes line count first, then cost
+    best_i = -1
+    for i in range(1, max_k + 1):
+        if (i, n - 1) in dp:
+            best_i = i
+            break
+
+    if best_i == -1:
+        logger.debug("DP failed to find an inverted pyramid solution. Falling back to greedy.")
+        return greedy_lines
+
+    lines = []
+    curr_j = n - 1
+    for i in range(best_i, 0, -1):
+        prev_j = dp[(i, curr_j)][2]
+        line = Line()
+        for idx in range(prev_j + 1, curr_j + 1):
+            line.add_word(styled_words[idx], space_width)
+        lines.append(line)
+        curr_j = prev_j
+
+    res = lines[::-1]
+    return res
 
 
 def _draw_lines(

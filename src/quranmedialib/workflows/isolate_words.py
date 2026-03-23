@@ -1,77 +1,21 @@
 """Workflow for isolating individual words within a verse."""
 
-import re
-from typing import Iterator, NamedTuple
+from typing import Iterator
 
 from PIL import Image
 
 from quranmedialib.modules.annotation import annotate_word
 from quranmedialib.modules.framer import frame
-from quranmedialib.modules.timage import get_timage
+from quranmedialib.modules.timage import (
+    format_isolation_text,
+    get_timage,
+    normalize_highlight_style,
+    prepare_translation_segments,
+)
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
-
-
-class ParsedSegment(NamedTuple):
-    """Represents a pre-parsed translation segment."""
-
-    flags: str
-    hex_color: str
-    content: str
-    original_had_tag: bool
-
-
-def _normalize_highlight_style(style: str) -> str:
-    """Ensures highlight_style is in the correct #flags#hex# format."""
-    if not style.startswith("#"):
-        style = f"#{style}"
-    if not style.endswith("#"):
-        style = f"{style}#"
-    # If highlight_style is only flags (e.g. #b#), add separator for empty hex
-    if style.count("#") == 2:
-        style = f"{style}#"
-    return style
-
-
-def _prepare_translation(translation: list[str]) -> list[ParsedSegment]:
-    """Pre-parses translation segments to avoid redundant regex searches in loops."""
-    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
-    parsed = []
-
-    for segment in translation:
-        if match := tag_pattern.search(segment):
-            content = match[3].rstrip("#")
-            parsed.append(ParsedSegment(match[1], match[2], content, True))
-        else:
-            parsed.append(ParsedSegment("", "", segment, False))
-    return parsed
-
-
-def _format_isolated_translation(
-    parsed_segments: list[ParsedSegment],
-    target_index: int,
-    highlight_style: str,
-) -> str:
-    """Constructs the formatted translation string for a specific word isolation."""
-    formatted = []
-    for j, seg in enumerate(parsed_segments):
-        if j == target_index:
-            if seg.original_had_tag:
-                # Keep original formatting if it already has tags
-                formatted.append(f"#{seg.flags}#{seg.hex_color}#{seg.content}#")
-            else:
-                # Apply highlight style to plain text
-                formatted.append(f"{highlight_style}{seg.content}#")
-        elif seg.original_had_tag:
-            # Preserve flags but force transparency
-            formatted.append(f"#{seg.flags}#00000000#{seg.content}#")
-        else:
-            # Wrap plain text with transparent tag
-            formatted.append(f"##00000000#{seg.content}#")
-
-    return " ".join(formatted)
 
 
 class IsolateWordsWorkflow(BaseWorkflow):
@@ -137,8 +81,8 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
         # 3. Build isolation table
         total_items = len(annotated_images)
-        parsed_trans = _prepare_translation(translations)
-        norm_highlight = _normalize_highlight_style(highlight_style)
+        parsed_trans = prepare_translation_segments(translations)
+        norm_highlight = normalize_highlight_style(highlight_style)
 
         for i in range(total_items):
             # Create image list: all items except i-th are transparent placeholders
@@ -148,7 +92,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             # Prepare translation image
             t_img = None
             if i < len(parsed_trans):
-                full_trans_formatted = _format_isolated_translation(parsed_trans, i, norm_highlight)
+                full_trans_formatted = format_isolation_text(parsed_trans, i, norm_highlight)
                 t_img = get_timage(
                     full_trans_formatted,
                     self.text_config,

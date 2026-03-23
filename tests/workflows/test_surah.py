@@ -19,9 +19,7 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     workflow = SurahWorkflow(layout_config, text_config, word_config)
 
     # Call get_iterator with the requested flag and explicit args
-    surah_generator = workflow.get_iterator(
-        surah=surah_num, annotate=True, separate_translations=separate_translations
-    )
+    surah_generator = workflow.get_iterator(surah=surah_num, annotate=True, separate_translations=separate_translations)
 
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
@@ -35,7 +33,7 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
 
         for j, img in enumerate(page_images):
             page_num = j + 1
-            
+
             # Naming Logic:
             # Surah and Verse: 3-digit zero-padded
             s_str = f"{surah_num:03d}"
