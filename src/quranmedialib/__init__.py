@@ -19,6 +19,7 @@ Package Structure:
         - surah: Surah-level processing
         - verse_range: Verse range processing
         - isolate_words: Word isolation workflows
+        - verse: Single verse rendering with translation
 
 Example:
     from quranmedialib import DatabaseManager
@@ -51,6 +52,7 @@ from quranmedialib.presets import (
     SQUARE_PRESET,
     STORY_PRESET,
 )
+from quranmedialib.workflows.verse import VerseWorkflow
 from quranmedialib.types import (
     AyahNumber,
     Color,
@@ -101,4 +103,5 @@ __all__ = [
     "LANDSCAPE_PRESET",
     "STORY_PRESET",
     "SQUARE_PRESET",
+    "VerseWorkflow",
 ]

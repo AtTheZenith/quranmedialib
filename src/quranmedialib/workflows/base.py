@@ -28,12 +28,9 @@ class BaseWorkflow(ABC):
     @abstractmethod
     def get_iterator(
         self,
-        verse_data: dict,
-        translation_data: str | list[str],
         **kwargs,
-    ) -> Iterator[list[tuple[Image.Image, str]]]:
+    ) -> Iterator[list[Image.Image]]:
         """
-        Processes a single verse and yields lists of generated images (pages).
-        Each page is a tuple of (Image, suffix).
+        Processes data and yields lists of generated images (pages).
         """
         pass

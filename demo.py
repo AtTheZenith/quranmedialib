@@ -34,8 +34,8 @@ def run_workflow_demo(
         text_config=text_config,
         word_config=word_config,
     )
-    iterator = workflow.get_iterator(data, annotate=annotate)
-    return [imgtuple[0] for page in iterator for imgtuple in page]
+    iterator = workflow.get_iterator(surah=data["surah"], annotate=annotate)
+    return [img for page in iterator for img in page]
 
 
 def _process_verse_words(

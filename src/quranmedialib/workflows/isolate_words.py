@@ -81,20 +81,22 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
     def get_iterator(
         self,
-        verse_data: dict,
-        translation_data: list[str],
+        surah: int,
+        verse_words: list[str],
+        translations: list[str],
+        ayah: int | None = None,
+        wbw_translations: list[str] | None = None,
         **kwargs,
     ) -> Iterator[list[Image.Image]]:
         """
         Isolates each word (and optionally the verse number) of a verse in its layout context.
 
         Args:
-            verse_data: Dictionary containing:
-                - "words": list[str]
-                - "surah": int
-                - "ayah": int | None (optional)
-                - "wbw_translations": list[str] | None (optional)
-            translation_data: List of translation segments (list[str]).
+            surah: The Surah number.
+            verse_words: List of Arabic words in the verse.
+            translations: List of translation segments (list[str]).
+            ayah: Ayah number (optional).
+            wbw_translations: List of word-by-word translations (optional).
             **kwargs:
                 - annotate: bool (default: True)
                 - highlight_style: str (default: "#b#")
@@ -102,11 +104,6 @@ class IsolateWordsWorkflow(BaseWorkflow):
         Yields:
             list[Image.Image]: A list of pages for each isolated state.
         """
-        verse_words = verse_data["words"]
-        surah_number = verse_data["surah"]
-        ayah_number = verse_data.get("ayah")
-        wbw_translations = verse_data.get("wbw_translations")
-
         annotate = kwargs.get("annotate", True)
         highlight_style = kwargs.get("highlight_style", "#b#")
 
@@ -117,8 +114,8 @@ class IsolateWordsWorkflow(BaseWorkflow):
             annotated_images = [
                 annotate_word(
                     img,
-                    surah_number,
-                    ayah_number or 1,
+                    surah,
+                    ayah or 1,
                     i + 1,
                     translation=wbw_translations[i] if wbw_translations else None,
                     word_config=self.word_config,
@@ -130,8 +127,8 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
         # 2. Add verse number if provided
         items_text = list(verse_words)
-        if ayah_number is not None:
-            v_img = verse_number(ayah_number, self.word_config)
+        if ayah is not None:
+            v_img = verse_number(ayah, self.word_config)
             annotated_images.append(v_img)
             items_text.append("")
 
@@ -140,7 +137,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
         # 3. Build isolation table
         total_items = len(annotated_images)
-        parsed_trans = _prepare_translation(translation_data)
+        parsed_trans = _prepare_translation(translations)
         norm_highlight = _normalize_highlight_style(highlight_style)
 
         for i in range(total_items):

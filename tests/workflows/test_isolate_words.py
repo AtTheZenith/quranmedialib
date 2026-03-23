@@ -35,10 +35,15 @@ def test_isolate_words():
 
     workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
 
-    verse_data = {"words": words, "surah": surah, "ayah": verse, "wbw_translations": wbw_translations}
-
-    # Call get_iterator
-    isolation_generator = workflow.get_iterator(verse_data=verse_data, translation_data=translation_list, annotate=True)
+    # Call get_iterator with explicit arguments
+    isolation_generator = workflow.get_iterator(
+        surah=surah,
+        verse_words=words,
+        translations=translation_list,
+        ayah=verse,
+        wbw_translations=wbw_translations,
+        annotate=True
+    )
 
     # Save results
     output_dir = "output/test/isolate_words"
