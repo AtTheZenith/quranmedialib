@@ -29,26 +29,36 @@ class VerseRangeWorkflow(BaseWorkflow):
 
     def get_iterator(
         self,
-        data: dict,
+        surah: int,
+        translations: list[list[str]],
+        start_ayah: int = 1,
+        end_ayah: int | None = None,
         **kwargs,
-    ) -> Iterator[list[tuple[Image.Image, str]]]:
+    ) -> Iterator[list[Image.Image]]:
         """
-        Processes a single verse and yields lists of generated images (pages).
-        Each page is a tuple of (Image, suffix).
-        """
-        surah = data.get("surah")
-        translation_data = data.get("translation")
+        Processes a range of verses and yields lists of generated images (pages).
+        
+        Args:
+            surah: The surah number.
+            translations: List of verse translations, each verse being a list of page strings.
+            start_ayah: The starting verse number (inclusive).
+            end_ayah: The ending verse number (inclusive). If None, defaults to start_ayah.
+            **kwargs: Additional arguments passed to _process_range.
 
-        if surah and translation_data:
-            return self._process_range(
-                surah=surah,
-                start_verse=data.get("ayah", 1),
-                end_verse=data.get("ayah", 1),
-                translations=[translation_data] if isinstance(translation_data, list) else [[translation_data]],
-                **kwargs,
-            )
-        else:
-            raise ValueError(f"Data incorrect or missing required fields 'surah' and 'translation'. Got: {data}")
+        Yields:
+            Iterator[list[Image.Image]]: A list of images for each verse iteration.
+        """
+        if end_ayah is None:
+            end_ayah = start_ayah
+            
+        return self._process_range(
+            surah=surah,
+            start_verse=start_ayah,
+            end_verse=end_ayah,
+            translations=translations,
+            annotate=kwargs.get("annotate", True),
+            separate_translations=kwargs.get("separate_translations", False),
+        )
 
     def _process_range(
         self,
@@ -58,19 +68,20 @@ class VerseRangeWorkflow(BaseWorkflow):
         translations: list[list[str]],
         annotate: bool = True,
         separate_translations: bool = False,
-    ) -> Iterator[list[tuple[Image.Image, str]]]:
+    ) -> Iterator[list[Image.Image]]:
         """
-        Processes a range of verses and yields lists of (image, suffix) tuples.
+        Processes a range of verses and yields lists of images.
 
         Args:
             surah: The surah number.
             start_verse: The starting verse number.
+            end_verse: The ending verse number.
             translations: List of verse translations, each verse being a list of page strings.
             annotate: Whether to annotate the words.
             separate_translations: Whether to separate the translations.
 
         Yields:
-            list[tuple[Image.Image, str]]: A list of (image, suffix) for each verse iteration.
+            list[Image.Image]: A list of images for each verse iteration.
         """
         db = _get_db()
 
@@ -91,7 +102,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                     surah=surah,
                     ayah=current_verse_num,
                     start=1,
-                    db=_get_db(),
+                    db=db,
                     word_config=self.word_config,
                     texts=list(words),
                 )
@@ -125,7 +136,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 )
 
                 # Yield Arabic pages
-                pages = [(img, "a") for img in arabic_pages]
+                pages = list(arabic_pages)
 
                 # Each translation image should be bottom-aligned on its own full-sized canvas
                 for trans_img in translation_images:
@@ -140,7 +151,7 @@ class VerseRangeWorkflow(BaseWorkflow):
 
                         tx = (self.layout_config.max_width - trans_img.width) // 2 + self.layout_config.timage_x_offset
                         canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
-                        pages.append((canvas, "t"))
+                        pages.append(canvas)
 
                 yield pages
             else:
@@ -154,27 +165,4 @@ class VerseRangeWorkflow(BaseWorkflow):
                     config=self.layout_config,
                     word_config=self.word_config,
                 )
-                yield [(img, "a") for img in combined_pages]
-
-    def get_verse(
-        self,
-        verse_data: dict,
-        translation_data: list[str],
-        **kwargs,
-    ) -> Iterator[list[tuple[Image.Image, str]]]:
-        """
-        Implementation of the abstract base method for a single verse.
-        Wraps process_range for compatibility.
-        """
-        surah = verse_data.get("surah", 1)
-        start_verse = verse_data.get("ayah", 1)
-        # Wrap translation_data into a list of list of strings (one verse, list of page strings)
-        translations = [translation_data] if isinstance(translation_data, list) else [[translation_data]]
-
-        return self._process_range(
-            surah=surah,
-            start_verse=start_verse,
-            end_verse=start_verse,
-            translations=translations,
-            **kwargs,
-        )
+                yield list(combined_pages)
