@@ -40,36 +40,47 @@ def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Imag
 # === Pad Function ===
 
 
-def pad(image: Image.Image, padding: Padding = (20, 20, 20, 20), color: Color = (0, 0, 0, 0)) -> Image.Image:
+def pad(image: Image.Image, padding: Padding = Padding(20, 20, 20, 20), color: Color = (0, 0, 0, 0)) -> Image.Image:
     """Adds padding around the image filled with a solid color.
 
     Args:
         image: The input PIL Image.
-        padding: A 4-tuple of (top, bottom, left, right) padding in pixels.
+        padding: A Padding object or 4-tuple of (top, bottom, left, right).
         color: The RGBA color for the padded border area.
 
     Returns:
-        A new PIL Image containing the original image centered by the padding.
+        A new PIL Image containing the original image offset by the padding.
     """
+    # Ensure color is RGBA
     if len(color) == 3:
         color = (*color, 255)
-    if len(image.mode) == 3:
+
+    # Ensure image is RGBA for transparency support in padding
+    if image.mode != "RGBA":
         image = image.convert("RGBA")
 
-    up, down, left, right = padding[0], padding[1], padding[2], padding[3]
+    # If padding is a tuple, convert to Padding object for attribute access
+    if not isinstance(padding, Padding):
+        padding = Padding(*padding)
 
-    new_width = image.width + left + right
-    new_height = image.height + up + down
+    new_width = image.width + padding.horizontal
+    new_height = image.height + padding.vertical
     padded_image = Image.new("RGBA", (new_width, new_height), color=color)
-    padded_image.paste(image, (left, up))
+    padded_image.paste(image, (padding.left, padding.top))
+
     return padded_image
 
 
 # === Glow Function ===
 
 
-def _glow_rgba(strength, glow_alpha, glow_color, img_rgba):
-    # Composite BEHIND original content for RGBA images
+def _glow_rgba(
+    strength: float,
+    glow_alpha: Image.Image,
+    glow_color: Image.Image,
+    img_rgba: Image.Image,
+) -> Image.Image:
+    """Composite glow layer behind original content for RGBA images."""
     if strength != 1.0:
         glow_alpha = glow_alpha.point(lambda p: min(255, int(p * strength)))
 
@@ -111,7 +122,7 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
 
     **Performance Note:**
     Large images combined with large radius values (> 100) can be computationally
-    expensive due to multiple Gaussian blur passes.
+    expensive due to multiple blur passes.
 
     Args:
         image: The input PIL Image to process.
@@ -130,43 +141,67 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
     # Capture initial state
     initial_mode = image.mode
 
-    # Prepare RGBA and RGB versions for processing
+    # Determine opacity early (skip expensive getextrema for RGB mode)
+    is_opaque = initial_mode == "RGB"
+
+    # Prepare RGBA version and alpha channel
     img_rgba = image.convert("RGBA")
-    img_rgb = img_rgba.convert("RGB")
     alpha = img_rgba.getchannel("A")
 
-    # Determine opacity (inline as it is trivial)
-    is_opaque = (initial_mode == "RGB") or (alpha.getextrema() == (255, 255))
+    # For non-opaque images, verify full opacity by checking alpha channel
+    if not is_opaque:
+        is_opaque = alpha.getextrema() == (255, 255)
 
-    # 1. Prepare the color base for the glow
+    # Defer RGB conversion until needed
+    img_rgb = None if is_opaque else img_rgba.convert("RGB")
+
+    # 1. Prepare the color base for the glow (downscaled for efficient blurring)
+    color_base_scale = 8
     if is_opaque:
-        # For opaque images, the glow base is simply the image content
-        color_base = img_rgb
+        # For opaque images, downscale directly from RGB for efficiency
+        img_rgb = img_rgba.convert("RGB")
+        color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
+        color_base = img_rgb.resize(color_base_size, resample=Image.Resampling.BOX)
     else:
         # For RGBA, "bleed" colors into transparent areas to avoid grey edges
         color_base = _prepare_color_base(img_rgba, img_rgb, alpha)
+        # Downscale the color base for efficient blurring
+        color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
+        color_base = color_base.resize(color_base_size, resample=Image.Resampling.BOX)
 
-    # 2. Multi-scale blur sequence
-    # We combine multiple radii to create a smoother, more natural falloff (Airy disk mimicry)
-    radii = [radius // 4, radius // 2, radius, int(radius * 1.5)]
+    # 2. Multi-scale blur sequence (downscaled)
+    # Scaled radii to match downsampled space for equivalent visual effect
+    # Original: [r/4, r/2, r, r*1.5] at full res → now scaled by 1/color_base_scale
+    radii = [
+        max(1, radius // 4 // color_base_scale),
+        max(1, radius // 2 // color_base_scale),
+        max(1, radius // color_base_scale),
+        max(1, int(radius * 1.5) // color_base_scale),
+    ]
 
-    glow_color = Image.new("RGB", img_rgba.size, (0, 0, 0))
-    glow_alpha = None if is_opaque else Image.new("L", img_rgba.size, 0)
+    glow_color_size = color_base.size
+    glow_color = Image.new("RGB", glow_color_size, (0, 0, 0))
+    glow_alpha = None if is_opaque else Image.new("L", glow_color_size, 0)
+
+    # Downscale alpha channel to match color_base size
+    alpha_small = None if is_opaque else alpha.resize(glow_color_size, resample=Image.Resampling.BOX)
 
     for r in radii:
-        if r < 1:
-            continue
-
-        # Color component: Screen blending maintains vibrancy and avoids clipping
-        blur_c = color_base.filter(ImageFilter.GaussianBlur(r))
+        # Color component: BoxBlur is O(1) vs GaussianBlur O(radius²)
+        blur_c = color_base.filter(ImageFilter.BoxBlur(r))
         glow_color = ImageChops.screen(glow_color, blur_c)
 
         if glow_alpha is not None:
             # Alpha component: Use 'lighter' (MAX) blend to maximize spread
-            blur_a = alpha.filter(ImageFilter.GaussianBlur(r))
+            blur_a = alpha_small.filter(ImageFilter.BoxBlur(r))
             glow_alpha = ImageChops.lighter(glow_alpha, blur_a)
 
-    # 3. Final Assembly
+    # 3. Upscale glow result to original size
+    glow_color = glow_color.resize(img_rgba.size, resample=Image.Resampling.BILINEAR)
+    if glow_alpha is not None:
+        glow_alpha = glow_alpha.resize(img_rgba.size, resample=Image.Resampling.BILINEAR)
+
+    # 4. Final Assembly
     if is_opaque:
         # Additive Screen blend for RGB images
         if strength != 1.0:

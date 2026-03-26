@@ -84,8 +84,5 @@ def test_annotate_words():
 
 
 if __name__ == "__main__":
-    try:
-        test_annotate_word()
-        test_annotate_words()
-    finally:
-        db.close()
+    test_annotate_word()
+    test_annotate_words()

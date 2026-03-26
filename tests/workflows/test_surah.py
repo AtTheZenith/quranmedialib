@@ -18,11 +18,8 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     print(f"Processing Surah {surah_num} ({len(arabic_verses)} verses)...")
     workflow = SurahWorkflow(layout_config, text_config, word_config)
 
-    surah_data = {"surah": surah_num}
-    # Call get_iterator with the requested flag
-    surah_generator = workflow.get_iterator(
-        surah_data=surah_data, annotate=True, separate_translations=separate_translations
-    )
+    # Call get_iterator with the requested flag and explicit args
+    surah_generator = workflow.get_iterator(surah=surah_num, annotate=True, separate_translations=separate_translations)
 
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
@@ -30,29 +27,19 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     verse_count = 0
 
     # Process and save each verse as it is yielded
-    for i, page_tuples in enumerate(surah_generator):
-        # page_tuples is a list[tuple[Image.Image, str]]
+    for i, page_images in enumerate(surah_generator):
+        # page_images is a list[Image.Image]
         verse_num = i + 1
 
-        # Track page numbers per suffix to handle multi-page Arabic or multi-page translation
-        # (Though usually it's page 1a, page 2a... or page 1t, page 2t...)
-        suffix_counts = {}
-
-        for img, suffix in page_tuples:
-            suffix_counts[suffix] = suffix_counts.get(suffix, 0) + 1
-            page_num = suffix_counts[suffix]
+        for j, img in enumerate(page_images):
+            page_num = j + 1
 
             # Naming Logic:
             # Surah and Verse: 3-digit zero-padded
-            # Combined mode: surah_002_verse_001_page_1.png
-            # Separate mode: surah_002_verse_001_page_1a.png / 1t.png
             s_str = f"{surah_num:03d}"
             v_str = f"{verse_num:03d}"
 
-            if separate_translations and suffix == "a" or not separate_translations:
-                filename = f"surah_{s_str}_verse_{v_str}_page_{page_num}.png"
-            else:
-                filename = f"surah_{s_str}_verse_{v_str}_page_{suffix}.png"
+            filename = f"surah_{s_str}_verse_{v_str}_page_{page_num}.png"
             save_path = os.path.join(output_dir, filename)
             img.save(save_path)
             # print(f"Saved {save_path}") # Optional: can be noisy for 286 verses

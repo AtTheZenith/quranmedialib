@@ -19,6 +19,7 @@ Package Structure:
         - surah: Surah-level processing
         - verse_range: Verse range processing
         - isolate_words: Word isolation workflows
+        - verse: Single verse rendering with translation
 
 Example:
     from quranmedialib import DatabaseManager
@@ -46,8 +47,6 @@ from quranmedialib.presets import (
     DATABASE_WBW_EN,
     FONT_HAFS,
     FONT_INTER,
-    FONT_INTER_BOLD,
-    FONT_INTER_BOLD_ITALIC,
     FONT_INTER_ITALIC,
     LANDSCAPE_PRESET,
     SQUARE_PRESET,
@@ -69,6 +68,7 @@ from quranmedialib.types import (
     WordIndex,
     WordItem,
 )
+from quranmedialib.workflows.verse import VerseWorkflow
 
 __all__ = [
     # Version
@@ -97,12 +97,11 @@ __all__ = [
     "FONT_HAFS",
     "FONT_INTER",
     "FONT_INTER_ITALIC",
-    "FONT_INTER_BOLD",
-    "FONT_INTER_BOLD_ITALIC",
     "DATABASE_QURAN",
-    "DATABASE_EN_SAHICH",
+    "DATABASE_EN_SAHIH",
     "DATABASE_WBW_EN",
     "LANDSCAPE_PRESET",
     "STORY_PRESET",
     "SQUARE_PRESET",
+    "VerseWorkflow",
 ]

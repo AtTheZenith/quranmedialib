@@ -1,4 +1,11 @@
-"""Module for annotating word images with translations."""
+"""Module for annotating word images with translations.
+
+This module provides functionality to draw translation text (annotation) below
+Arabic word images. It supports batching consecutive words that share the same
+translation into a single annotated block, maintaining Right-to-Left (RTL) order.
+"""
+
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -6,6 +13,59 @@ from PIL import Image, ImageDraw, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.types import WordConfig
+
+
+def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load the font specified in WordConfig for annotations.
+
+    Args:
+        word_config: Configuration containing font path and size.
+
+    Returns:
+        A loaded PIL font object.
+
+    Raises:
+        OSError: If the font file cannot be loaded.
+    """
+    font_path = word_config.annotation_font_path
+    if isinstance(font_path, Path):
+        font_path = str(font_path)
+
+    try:
+        return ImageFont.truetype(font_path, word_config.annotation_font_size)
+    except (OSError, IOError) as e:
+        # Re-raise with a bit more context if needed, but keeping it simple for now as requested.
+        raise e
+
+
+def _combine_images_rtl(images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]) -> Image.Image:
+    """Combines multiple word images into a single canvas in RTL order.
+
+    Args:
+        images: List of images to combine.
+        word_spacing: Pixels of horizontal space between words.
+        background_color: RGBA color for the canvas background.
+
+    Returns:
+        A single combined PIL Image.
+    """
+    # Quranic layout is RTL, so the first word in the list (start of verse range)
+    # should be on the RIGHT side of the combined image.
+    rtl_images = list(reversed(images))
+    batch_count = len(rtl_images)
+
+    total_w = sum(img.width for img in rtl_images) + word_spacing * (batch_count - 1)
+    max_h = max(img.height for img in rtl_images)
+
+    combined_canvas = Image.new("RGBA", (total_w, max_h), color=background_color)
+    current_x = 0
+    for img in rtl_images:
+        # Vertical alignment: center each word within the maximum height of the batch.
+        y_offset = (max_h - img.height) // 2
+        combined_canvas.paste(img, (current_x, y_offset), img if img.mode == "RGBA" else None)
+        current_x += img.width + word_spacing
+
+    return combined_canvas
 
 
 def _annotate_image(
@@ -64,31 +124,31 @@ def annotate_word(
     translation: str | None = None,
     word_config: WordConfig | None = None,
 ) -> Image.Image:
-    """Annotates a single word image with its translation."""
+    """Annotates a single word image with its translation.
+
+    Args:
+        image: The source word image.
+        surah: Surah number for DB lookup.
+        ayah: Ayah number for DB lookup.
+        word_index: Word index in verse for DB lookup.
+        db: Optional database manager instance.
+        translation: Optional pre-fetched translation text.
+        word_config: Rendering configuration.
+
+    Returns:
+        Annotated image.
+    """
     if translation is None:
         database = db if db is not None else DatabaseManager()
-        if database:
-            translation = database.get_wbw_from_word(surah, ayah, word_index)
+        translation = database.get_wbw_from_word(surah, ayah, word_index)
 
     if not translation:
         return image
 
-    # Determine font size
     if word_config is None:
         raise ValueError("word_config is required for annotation.")
 
-    annotation_font_size = word_config.annotation_font_size
-
-    # Resolve font path
-    font_path = word_config.annotation_font_path
-    if isinstance(font_path, Path):
-        font_path = str(font_path)
-
-    try:
-        font = ImageFont.truetype(font_path, annotation_font_size)
-    except (OSError, IOError) as e:
-        raise e
-
+    font = _get_annotation_font(word_config)
     return _annotate_image(image, translation, font, word_config.annotation_color, word_config.background_color)
 
 
@@ -103,99 +163,65 @@ def annotate_words(
 ) -> list[Image.Image] | tuple[list[Image.Image], list[str]]:
     """Annotates a list of word images, batching those with identical translations.
 
+    Consecutive words sharing the same WBW translation are combined into a single
+    block before annotation is applied.
+
     Args:
-        images: List of PIL Images of the Arabic words.
-        surah: The surah number.
-        ayah: The ayah number.
-        start: The 1-indexed database start index for the first word in the list.
+        images: List of word images.
+        surah: Surah number.
+        ayah: Ayah number.
+        start: 1-indexed database start index for the first word in images.
         db: Optional DatabaseManager instance.
-        word_config: Optional WordConfig instance to source annotation_font_size.
-        texts: Optional list of original word texts to return alongside annotated images.
+        word_config: Rendering configuration.
+        texts: Optional list of word strings to return alongside annotated images.
 
     Returns:
-        A list of annotated PIL Images (some may contain multiple Arabic words),
-        and optionally a list of concatenated texts if `texts` was provided.
+        List of annotated images (may be fewer than input images due to batching).
+        If texts is provided, returns (annotated_images, annotated_texts).
 
     Raises:
-        ValueError: If the range or image count is invalid for the verse.
+        ValueError: If range is out of bounds or config is missing.
     """
     database = db if db is not None else DatabaseManager()
-    if not database:
-        raise RuntimeError("DatabaseManager is not provided or initialized.")
-
-    # Validation and index handling
-    verse_wbws = database.get_wbw_from_verse(surah, ayah)
-    verse_len = len(verse_wbws)
-
-    range_len = len(images)
-    if start < 1 or range_len > verse_len:
-        raise ValueError(
-            f"Range {start}-{start + range_len - 1} is out of bounds for verse {surah}:{ayah} (length {verse_len})."
-        )
-
-    # WBWs for our range (0-indexed slice from 1-indexed database indices)
-    target_wbws = verse_wbws[start - 1 : start - 1 + range_len]
-
-    # Determine font size
-    if word_config is None:
+    if not word_config:
         raise ValueError("word_config is required for annotation.")
 
-    # Load font once for all annotations in this batch
-    font_path = word_config.annotation_font_path
-    if isinstance(font_path, Path):
-        font_path = str(font_path)
+    # Fetch all WBW translations for the verse to optimize lookups
+    verse_wbws = database.get_wbw_from_verse(surah, ayah)
+    range_len = len(images)
 
-    try:
-        font = ImageFont.truetype(font_path, word_config.annotation_font_size)
-    except (OSError, IOError) as e:
-        raise e
+    if start < 1 or (start + range_len - 1) > len(verse_wbws):
+        raise ValueError(f"Range {start}-{start + range_len - 1} out of bounds for verse {surah}:{ayah}.")
+
+    # Slice the translations needed for our specific images
+    target_wbws = verse_wbws[start - 1 : start - 1 + range_len]
+    font = _get_annotation_font(word_config)
 
     i = 0
     annotated_images = []
     annotated_texts = []
 
-    while i < len(images):
+    while i < range_len:
         current_wbw = target_wbws[i]
 
-        # Find consecutive words with identical WBW
+        # Find how many consecutive words share this translation
         batch_count = 1
-        while (i + batch_count < len(images)) and (target_wbws[i + batch_count] == current_wbw):
+        while (i + batch_count < range_len) and (target_wbws[i + batch_count] == current_wbw):
             batch_count += 1
 
         if batch_count >= 2:
-            # Combine batch words RTL
+            # Multi-word batch: Combine first, then annotate
             batch_images = images[i : i + batch_count]
-            # Quranic layout is RTL, so the first word (index i) is leftmost in the list but rightmost in image
-            # However, the images list reflects the reading order (start to end).
-            # To combine RTL: [wordN, ..., word2, word1]
-            rtl_images = list(reversed(batch_images))
-
-            total_w = sum(img.width for img in rtl_images) + word_config.word_spacing * (batch_count - 1)
-            max_h = max(img.height for img in rtl_images)
-
-            combined_canvas = Image.new("RGBA", (total_w, max_h), color=word_config.background_color)
-            current_x = 0
-            for img in rtl_images:
-                # Vertical alignment: center within max_h
-                y_offset = (max_h - img.height) // 2
-                combined_canvas.paste(img, (current_x, y_offset), img if img.mode == "RGBA" else None)
-                current_x += img.width + word_config.word_spacing
-
-            # Annotate combined image
+            combined = _combine_images_rtl(batch_images, word_config.word_spacing, word_config.background_color)
             annotated_images.append(
-                _annotate_image(
-                    combined_canvas, current_wbw, font, word_config.annotation_color, word_config.background_color
-                )
+                _annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color)
             )
             if texts is not None:
-                # Concatenate text for the batched items
                 annotated_texts.append(" ".join(texts[i : i + batch_count]))
         else:
-            # Single word annotation
+            # Single word
             annotated_images.append(
-                _annotate_image(
-                    images[i], current_wbw, font, word_config.annotation_color, word_config.background_color
-                )
+                _annotate_image(images[i], current_wbw, font, word_config.annotation_color, word_config.background_color)
             )
             if texts is not None:
                 annotated_texts.append(texts[i])

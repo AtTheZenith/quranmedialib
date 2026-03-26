@@ -2,9 +2,13 @@
 
 This module provides a DatabaseManager that:
 - Maintains a registry of named database connections
-- Supports dynamic switching between active translation databases
+- Provides dedicated methods for each data source (Quran, WBW, Translation)
+- Supports dynamic switching between WBW and translation databases
 - Auto-registers packaged databases on initialization
 - Handles both standard verse-by-verse and word-by-word databases
+
+Quran methods always use the "quran" database (unchangeable).
+WBW and Translation methods use their respective active databases (configurable).
 """
 
 from __future__ import annotations
@@ -28,25 +32,16 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Singleton manager for multiple database connections with active state switching.
+    """Manager for multiple database connections with dedicated methods for each data source.
 
-    The DatabaseManager maintains a registry of named connections and allows
-    switching between them using set_active_translation(). All fetch methods
-    operate on the currently active connection.
+    The DatabaseManager maintains separate connections for:
+    - Quran text (always uses the "quran" database - unchangeable)
+    - Word-by-word translations (uses active WBW database, default "wbw")
+    - Verse translations (uses active translation database, default "translation")
 
-    Example:
-        db = DatabaseManager()
-
-        # Use default English translation
-        verses = db.get_verses_from_surah(1)
-
-        # Switch to a custom translation
-        db.set_active_translation("my_custom_db")
-        verses = db.get_verses_from_surah(1)
-
-        # Access word-by-word data
-        db.set_active_translation("wbw")
-        wbw = db.get_wbw_from_verse(1, 1)
+    Quran methods always use the "quran" database.
+    WBW methods use the active WBW database (configurable via set_active_wbw).
+    Translation methods use the active translation database (configurable via set_active_translation).
     """
 
     _instance: Optional[Self] = None
@@ -71,8 +66,6 @@ class DatabaseManager:
         - "quran": Default Quran text database
         - "wbw": Default word-by-word translation database
         - "translation": Default English translation (Sahih International)
-
-        The active translation is set to "translation" by default.
         """
         if getattr(self, "_initialized", False):
             return
@@ -81,6 +74,7 @@ class DatabaseManager:
         self._cursors: dict[str, sqlite3.Cursor] = {}
         self._connections: dict[str, sqlite3.Connection] = {}
         self._configs: dict[str, Union[DatabaseConfig, WbwDatabaseConfig]] = {}
+        self._active_wbw: Optional[str] = None
         self._active_translation: Optional[str] = None
         self._lock = threading.Lock()
 
@@ -89,12 +83,12 @@ class DatabaseManager:
             from quranmedialib.presets import DATABASE_EN_SAHIH, DATABASE_QURAN, DATABASE_WBW_EN
 
             # Register packaged databases with default names
-            # (skip validation during initialization)
             self._add_connection_internal(self.DEFAULT_QURAN_NAME, DATABASE_QURAN)
             self._add_connection_internal(self.DEFAULT_WBW_NAME, DATABASE_WBW_EN)
             self._add_connection_internal(self.DEFAULT_TRANSLATION_NAME, DATABASE_EN_SAHIH)
 
-            # Set default active translation
+            # Set default active databases
+            self._active_wbw = self.DEFAULT_WBW_NAME
             self._active_translation = self.DEFAULT_TRANSLATION_NAME
             self._initialized = True
 
@@ -114,38 +108,42 @@ class DatabaseManager:
         if not getattr(self, "_initialized", False):
             raise RuntimeError("DatabaseManager is not initialized.")
 
-    def _get_active_config(self) -> Union[DatabaseConfig, WbwDatabaseConfig]:
-        """Get the config for the currently active translation."""
-        if self._active_translation is None:
-            raise RuntimeError("No active translation set. Call set_active_translation() first.")
-        if self._active_translation not in self._configs:
-            raise KeyError(f"Unknown translation: {self._active_translation}")
-        return self._configs[self._active_translation]
+    def _get_config(self, name: str) -> Union[DatabaseConfig, WbwDatabaseConfig]:
+        """Get the config for a named database."""
+        if name not in self._configs:
+            raise KeyError(f"Unknown database: {name}")
+        return self._configs[name]
 
-    def _get_active_cursor(self) -> sqlite3.Cursor:
-        """Get the cursor for the currently active translation."""
-        if self._active_translation is None:
-            raise RuntimeError("No active translation set. Call set_active_translation() first.")
-        if self._active_translation not in self._cursors:
-            raise KeyError(f"Unknown translation: {self._active_translation}")
-        return self._cursors[self._active_translation]
+    def _get_cursor(self, name: str) -> sqlite3.Cursor:
+        """Get the cursor for a named database."""
+        if name not in self._cursors:
+            raise KeyError(f"Unknown database: {name}")
+        return self._cursors[name]
+
+    def _register_connection(self, name: str, config: Union[DatabaseConfig, WbwDatabaseConfig]) -> None:
+        """Registers a connection and its cursor into the internal registry.
+
+        Args:
+            name: Unique name for the connection.
+            config: Configuration object.
+        """
+        conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        self._connections[name] = conn
+        self._cursors[name] = cursor
+        self._configs[name] = config
+        self._registry[name] = {
+            "config": config,
+            "connection": conn,
+            "cursor": cursor,
+        }
 
     def _add_connection_internal(self, name: str, config: Union[DatabaseConfig, WbwDatabaseConfig]) -> None:
         """Internal method to add a connection without validation (used during initialization)."""
         try:
-            conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            self._connections[name] = conn
-            self._cursors[name] = cursor
-            self._configs[name] = config
-            self._registry[name] = {
-                "config": config,
-                "connection": conn,
-                "cursor": cursor,
-            }
-
+            self._register_connection(name, config)
             logger.debug("Added internal database connection '%s' -> %s", name, config.filepath)
         except sqlite3.Error as e:
             logger.error("Failed to add internal connection '%s': %s", name, e)
@@ -155,35 +153,25 @@ class DatabaseManager:
         """Add a database connection to the registry.
 
         Args:
-            name: Unique name for this connection (used with set_active_translation).
+            name: Unique name for this connection.
             config: DatabaseConfig or WbwDatabaseConfig with connection details.
         """
         self._validate_state()
 
         try:
-            conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-
-            self._connections[name] = conn
-            self._cursors[name] = cursor
-            self._configs[name] = config
-            self._registry[name] = {
-                "config": config,
-                "connection": conn,
-                "cursor": cursor,
-            }
-
+            self._register_connection(name, config)
             logger.info("Added database connection '%s' -> %s", name, config.filepath)
         except sqlite3.Error as e:
             logger.error("Failed to add connection '%s': %s", name, e)
             raise
 
     def set_active_translation(self, name: str) -> None:
-        """Set the active translation database for subsequent fetch operations.
+        """Set the active translation database for subsequent translation fetch operations.
+
+        Does not affect Quran or WBW methods.
 
         Args:
-            name: Name of a registered connection (e.g., "translation", "wbw").
+            name: Name of a registered translation database (e.g., "translation", "ur_jalandhry").
 
         Raises:
             KeyError: If the name is not a registered connection.
@@ -198,29 +186,56 @@ class DatabaseManager:
         """Get the name of the currently active translation."""
         return self._active_translation
 
-    def list_connections(self) -> list[str]:
-        """List all registered connection names."""
-        return list(self._registry.keys())
+    def set_active_wbw(self, name: str) -> None:
+        """Set the active WBW database for subsequent WBW fetch operations.
 
-    def _fetch(self, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
-        """Execute a query on the active translation database."""
-        cursor = self._get_active_cursor()
+        Does not affect Quran or Translation methods.
+
+        Args:
+            name: Name of a registered WBW database (e.g., "wbw", "wbw_urdu").
+
+        Raises:
+            KeyError: If the name is not a registered connection.
+        """
+        self._validate_state()
+        if name not in self._registry:
+            raise KeyError(f"Unknown WBW database: {name}. Available: {list(self._registry.keys())}")
+        self._active_wbw = name
+        logger.debug("Active WBW set to: %s", name)
+
+    def get_active_wbw_name(self) -> Optional[str]:
+        """Get the name of the currently active WBW database."""
+        return self._active_wbw
+
+    def _fetch(self, name: str, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+        """Execute a query on a named database and return all rows.
+
+        Args:
+            name: Registered connection name.
+            query: SQL query string.
+            params: Parameters to bind to the query.
+
+        Returns:
+            List of result rows. Returns empty list on sqlite3 errors after logging.
+        """
+        cursor = self._get_cursor(name)
         try:
             cursor.execute(query, params)
             return cursor.fetchall()
         except sqlite3.Error as e:
-            logger.error("Query failed on '%s': %s | Query: %s", self._active_translation, e, query)
+            logger.error("Query failed on DB '%s': %s | Query: %s", name, e, query)
             return []
 
-    def _aggregate_verses(self, rows: list[sqlite3.Row], config: DatabaseConfig | WbwDatabaseConfig, order_by_word: bool = False) -> list[str]:
+    def _aggregate_verses(
+        self,
+        rows: list[sqlite3.Row],
+        config: DatabaseConfig | WbwDatabaseConfig,
+    ) -> list[str]:
         """Helper to aggregate verses by ayah number.
 
         Args:
             rows: Query results containing ayah and text columns.
             config: Database configuration for column name mapping.
-            order_by_word: If True, rows are ordered by word_id within each ayah
-                and words are concatenated. If False, rows are concatenated
-                as complete verses.
 
         Returns:
             A list of verse strings, ordered by ayah number.
@@ -234,81 +249,57 @@ class DatabaseManager:
 
         return [" ".join(verses_dict[ayah]) for ayah in sorted(verses_dict.keys())]
 
-    def get_verses_from_surah(self, surah_number: SurahNumber) -> list[str]:
-        """Fetches all verses from a specific surah.
+    # === Quran Database Methods (always use "quran" database) ===
 
-        Uses the active translation database. For WBW databases, returns
-        concatenated word translations per verse. For standard databases,
-        returns verse text.
+    def get_verses_from_surah(self, surah_number: SurahNumber) -> list[str]:
+        """Fetches all Arabic verses from a specific surah.
+
+        Always uses the "quran" database.
 
         Returns:
-            A list of strings, where each string is the text of a verse.
+            A list of Arabic verse strings, ordered by ayah number.
         """
-        config = self._get_active_config()
+        config = self._get_config(self.DEFAULT_QURAN_NAME)
 
-        # Handle WBW database differently - group by ayah and concatenate words
-        if isinstance(config, WbwDatabaseConfig):
-            query = f"""
-                SELECT {config.ayah_col}, {config.text_col}
-                FROM {config.tablename}
-                WHERE {config.surah_col} = ?
-                ORDER BY {config.ayah_col}, {config.word_id_col}
-            """
-            rows = self._fetch(query, (surah_number,))
-            return self._aggregate_verses(rows, config, order_by_word=True)
-        else:
-            # Standard verse-by-verse database
-            query = f"""
-                SELECT {config.ayah_col}, {config.text_col}
-                FROM {config.tablename}
-                WHERE {config.surah_col} = ?
-                ORDER BY {config.ayah_col}
-            """
-            rows = self._fetch(query, (surah_number,))
-            return self._aggregate_verses(rows, config)
+        query = f"""
+            SELECT {config.ayah_col}, {config.text_col}
+            FROM {config.tablename}
+            WHERE {config.surah_col} = ?
+            ORDER BY {config.ayah_col}
+        """
+        rows = self._fetch(self.DEFAULT_QURAN_NAME, query, (surah_number,))
+        return self._aggregate_verses(rows, config)
 
     def get_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> str:
-        """Fetches a specific verse text from the active database.
+        """Fetches a specific Arabic verse text.
 
-        For WBW databases, returns concatenated word translations.
-        For standard databases, returns the verse text.
+        Always uses the "quran" database.
 
         Returns:
-            The verse text as a string.
+            The Arabic verse text as a string.
         """
-        config = self._get_active_config()
+        config = self._get_config(self.DEFAULT_QURAN_NAME)
 
-        if isinstance(config, WbwDatabaseConfig):
-            query = f"""
-                SELECT {config.text_col}
-                FROM {config.tablename}
-                WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
-                ORDER BY {config.word_id_col}
-            """
-            rows = self._fetch(query, (surah_number, ayah_number))
-            return " ".join(row[config.text_col] for row in rows)
-        else:
-            query = f"""
-                SELECT {config.text_col}
-                FROM {config.tablename}
-                WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
-            """
-            rows = self._fetch(query, (surah_number, ayah_number))
-            return " ".join(row[config.text_col] for row in rows)
+        query = f"""
+            SELECT {config.text_col}
+            FROM {config.tablename}
+            WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
+        """
+        rows = self._fetch(self.DEFAULT_QURAN_NAME, query, (surah_number, ayah_number))
+        return " ".join(row[config.text_col] for row in rows)
+
+    # === WBW Database Methods (use active WBW database) ===
 
     def get_wbw_from_surah(self, surah_number: SurahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific surah.
 
-        Always uses the "wbw" connection regardless of active translation.
+        Uses the active WBW database (set via set_active_wbw, default "wbw").
 
         Returns:
             List of word translations in order.
         """
-        # Always use the WBW connection
-        if self.DEFAULT_WBW_NAME not in self._configs:
-            raise RuntimeError("WBW database not initialized.")
-        config = self._configs[self.DEFAULT_WBW_NAME]
-        cursor = self._cursors[self.DEFAULT_WBW_NAME]
+        name = self._active_wbw or self.DEFAULT_WBW_NAME
+        config = self._get_config(name)
 
         query = f"""
             SELECT {config.text_col}
@@ -316,27 +307,19 @@ class DatabaseManager:
             WHERE {config.surah_col} = ?
             ORDER BY {config.ayah_col}, {config.word_id_col}
         """
-        try:
-            cursor.execute(query, (surah_number,))
-            rows = cursor.fetchall()
-            return [row[config.text_col] for row in rows]
-        except sqlite3.Error as e:
-            logger.error("Failed to fetch WBW from surah: %s", e)
-            return []
+        rows = self._fetch(name, query, (surah_number,))
+        return [row[config.text_col] for row in rows]
 
     def get_wbw_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific verse.
 
-        Always uses the "wbw" connection regardless of active translation.
+        Uses the active WBW database (set via set_active_wbw, default "wbw").
 
         Returns:
             List of word translations in order.
         """
-        # Always use the WBW connection
-        if self.DEFAULT_WBW_NAME not in self._configs:
-            raise RuntimeError("WBW database not initialized.")
-        config = self._configs[self.DEFAULT_WBW_NAME]
-        cursor = self._cursors[self.DEFAULT_WBW_NAME]
+        name = self._active_wbw or self.DEFAULT_WBW_NAME
+        config = self._get_config(name)
 
         query = f"""
             SELECT {config.text_col}
@@ -344,18 +327,18 @@ class DatabaseManager:
             WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
             ORDER BY {config.word_id_col}
         """
-        try:
-            cursor.execute(query, (surah_number, ayah_number))
-            rows = cursor.fetchall()
-            return [row[config.text_col] for row in rows]
-        except sqlite3.Error as e:
-            logger.error("Failed to fetch WBW from verse: %s", e)
-            return []
+        rows = self._fetch(name, query, (surah_number, ayah_number))
+        return [row[config.text_col] for row in rows]
 
-    def get_wbw_from_word(self, surah_number: SurahNumber, ayah_number: AyahNumber, word_index: WordIndex) -> Optional[str]:
+    def get_wbw_from_word(
+        self,
+        surah_number: SurahNumber,
+        ayah_number: AyahNumber,
+        word_index: WordIndex,
+    ) -> Optional[str]:
         """Fetches the translation for a specific word in a specific verse.
 
-        Always uses the "wbw" connection regardless of active translation.
+        Uses the active WBW database (set via set_active_wbw, default "wbw").
 
         Args:
             surah_number: The surah number.
@@ -365,32 +348,36 @@ class DatabaseManager:
         Returns:
             The translation string or None if not found.
         """
-        # Always use the WBW connection
-        if self.DEFAULT_WBW_NAME not in self._configs:
-            raise RuntimeError("WBW database not initialized.")
-        config = self._configs[self.DEFAULT_WBW_NAME]
-        cursor = self._cursors[self.DEFAULT_WBW_NAME]
+        name = self._active_wbw or self.DEFAULT_WBW_NAME
+        config = self._get_config(name)
 
         query = f"""
             SELECT {config.text_col}
             FROM {config.tablename}
             WHERE {config.surah_col} = ? AND {config.ayah_col} = ? AND {config.word_id_col} = ?
         """
-        try:
-            cursor.execute(query, (surah_number, ayah_number, word_index))
-            result = cursor.fetchone()
-            return result[config.text_col] if result else None
-        except sqlite3.Error as e:
-            logger.error("Failed to fetch word translation: %s", e)
-            return None
+        rows = self._fetch(name, query, (surah_number, ayah_number, word_index))
+        return rows[0][config.text_col] if rows else None
 
-    def get_translation_from_surah(self, surah_number: SurahNumber) -> list[str]:
+    # === Translation Database Methods (use active translation database) ===
+
+    def get_translation_from_surah(
+        self,
+        surah_number: SurahNumber,
+        translation_name: str | None = None,
+    ) -> list[str]:
         """Fetches all verse translations for a specific surah.
+
+        Args:
+            surah_number: The surah number.
+            translation_name: Optional name of the translation database to use.
+                If None, uses the active translation (set via set_active_translation).
 
         Returns:
             List of verse translations (one per verse).
         """
-        config = self._get_active_config()
+        name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
+        config = self._get_config(name)
 
         query = f"""
             SELECT {config.text_col}
@@ -398,30 +385,40 @@ class DatabaseManager:
             WHERE {config.surah_col} = ?
             ORDER BY {config.ayah_col}
         """
-        rows = self._fetch(query, (surah_number,))
-
-        # For WBW, we need to group by ayah
-        if isinstance(config, WbwDatabaseConfig):
-            # Re-use get_verses_from_surah logic
-            return self.get_verses_from_surah(surah_number)
-
+        rows = self._fetch(name, query, (surah_number,))
         return [row[config.text_col] for row in rows]
 
-    def get_translation_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> Optional[str]:
+    def get_translation_from_verse(
+        self,
+        surah_number: SurahNumber,
+        ayah_number: AyahNumber,
+        translation_name: str | None = None,
+    ) -> str | None:
         """Fetches the translation for a specific verse.
+
+        Args:
+            surah_number: The surah number.
+            ayah_number: The ayah (verse) number.
+            translation_name: Optional name of the translation database to use.
+                If None, uses the active translation (set via set_active_translation).
 
         Returns:
             The verse translation string or None if not found.
         """
-        config = self._get_active_config()
+        name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
+        config = self._get_config(name)
 
         query = f"""
             SELECT {config.text_col}
             FROM {config.tablename}
             WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
         """
-        rows = self._fetch(query, (surah_number, ayah_number))
+        rows = self._fetch(name, query, (surah_number, ayah_number))
         return rows[0][config.text_col] if rows else None
+
+    def list_connections(self) -> list[str]:
+        """List all registered connection names."""
+        return list(self._registry.keys())
 
     def close(self) -> None:
         """Closes all database connections and invalidates the instance state."""
@@ -437,7 +434,11 @@ class DatabaseManager:
         self._cursors.clear()
         self._configs.clear()
         self._registry.clear()
+        self._active_wbw = None
         self._active_translation = None
         self._initialized = False
+
+        # Reset singleton instance so next DatabaseManager() creates a fresh instance
+        type(self)._instance = None
 
         logger.info("DatabaseManager closed. All connections closed.")
