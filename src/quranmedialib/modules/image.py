@@ -40,28 +40,34 @@ def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Imag
 # === Pad Function ===
 
 
-def pad(image: Image.Image, padding: Padding = (20, 20, 20, 20), color: Color = (0, 0, 0, 0)) -> Image.Image:
+def pad(image: Image.Image, padding: Padding = Padding(20, 20, 20, 20), color: Color = (0, 0, 0, 0)) -> Image.Image:
     """Adds padding around the image filled with a solid color.
 
     Args:
         image: The input PIL Image.
-        padding: A 4-tuple of (top, bottom, left, right) padding in pixels.
+        padding: A Padding object or 4-tuple of (top, bottom, left, right).
         color: The RGBA color for the padded border area.
 
     Returns:
-        A new PIL Image containing the original image centered by the padding.
+        A new PIL Image containing the original image offset by the padding.
     """
+    # Ensure color is RGBA
     if len(color) == 3:
         color = (*color, 255)
-    if len(image.mode) == 3:
+
+    # Ensure image is RGBA for transparency support in padding
+    if image.mode != "RGBA":
         image = image.convert("RGBA")
 
-    up, down, left, right = padding[0], padding[1], padding[2], padding[3]
+    # If padding is a tuple, convert to Padding object for attribute access
+    if not isinstance(padding, Padding):
+        padding = Padding(*padding)
 
-    new_width = image.width + left + right
-    new_height = image.height + up + down
+    new_width = image.width + padding.horizontal
+    new_height = image.height + padding.vertical
     padded_image = Image.new("RGBA", (new_width, new_height), color=color)
-    padded_image.paste(image, (left, up))
+    padded_image.paste(image, (padding.left, padding.top))
+
     return padded_image
 
 

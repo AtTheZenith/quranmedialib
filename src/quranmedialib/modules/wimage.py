@@ -1,63 +1,53 @@
 """Module for converting Arabic text to images using a specific font.
 
 This module provides functionality to render Arabic words into images with
-customizable font size, color, and padding. It is designed to be used
-as part of a larger workflow for Quranic verse image generation.
+customizable font size, color, and padding.
 """
 
 from PIL import Image, ImageDraw, ImageFont
 
-from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.resources import get_font_path
 from quranmedialib.types import WordConfig
 
-db = DatabaseManager()
-
 
 def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
-    """Converts a word string into an image using the hafs font.
+    """Converts an Arabic word string into an image.
 
     Args:
         text: The Arabic text to render.
-        word_config: The word configuration.
+        word_config: Configuration containing font size, colors, and padding.
 
     Returns:
         A PIL Image containing the rendered text with padding.
     """
     font = ImageFont.truetype(str(get_font_path("hafs.otf")), word_config.font_size)
 
-    # Calculate text dimensions for dynamic image sizing and alignment
+    # Calculate text dimensions based on metrics and actual bounding box.
     ascent, descent = font.getmetrics()
     bbox = font.getbbox(text)
 
-    # Width is based on the actual bounding box
+    # Width is based on the actual bounding box, height on font max (ascent + descent).
     w = bbox[2] - bbox[0]
-    # Height is based on the font's maximum possible height (ascent + descent)
     h = ascent + descent
 
-    # Create image with padding
-    # padding is (top, bottom, left, right)
-    # img width: left + w + right
-    # img height: top + h + bottom
-    img = Image.new(
-        "RGBA",
-        (
-            w + word_config.word_padding[2] + word_config.word_padding[3],
-            h + word_config.word_padding[0] + word_config.word_padding[1],
-        ),
-        color=(0, 0, 0, 0),
-    )
+    padding = word_config.word_padding
+
+    # Create canvas with padding
+    img_w = int(w + padding.horizontal)
+    img_h = int(h + padding.vertical)
+
+    img = Image.new("RGBA", (img_w, img_h), color=(0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Draw text using the baseline
-    # x: padding[2] - bbox[0] ensures the leftmost part starts at the left padding
-    # y: padding[0] + ascent draws the baseline at a fixed height from the top padding
+    # Draw text using baseline alignment ('ls')
+    # x: starts at left padding, adjusted for bbox offset.
+    # y: draws baseline at top padding + ascent.
     draw.text(
-        (word_config.word_padding[2] - bbox[0], word_config.word_padding[0] + ascent),
+        (padding.left - bbox[0], padding.top + ascent),
         text,
         font=font,
         fill=word_config.word_color,
-        anchor="ls",  # 'l' for left, 's' for baseline
+        anchor="ls",
     )
 
     return img

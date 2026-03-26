@@ -1,14 +1,17 @@
-"""Verse range workflow for processing ranges of verses."""
+"""Verse range workflow for processing ranges of verses.
+
+This module provides the VerseRangeWorkflow class, which handles rendering multiple
+verses in sequence, supporting optional translation separation and batch annotation.
+"""
 
 from __future__ import annotations
 
 import dataclasses
-from typing import Iterator
-
-from PIL import Image
+import logging
+from typing import TYPE_CHECKING, Iterator
 
 from quranmedialib.database_manager import DatabaseManager
-from quranmedialib.modules.annotation import annotate_words
+from quranmedialib.modules.annotation import annotate_word
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
@@ -16,16 +19,84 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
+from PIL import Image
 
-def _get_db() -> DatabaseManager:
-    """Get a fresh DatabaseManager instance."""
-    return DatabaseManager()
+if TYPE_CHECKING:
+    pass
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 
 class VerseRangeWorkflow(BaseWorkflow):
+    """Workflow for processing a range of verses.
+
+    Handles data retrieval, image generation, and layout orchestration for multiple
+    verses. Supports 'combined' and 'separate' translation rendering modes.
     """
-    Workflow for processing a range of verses.
-    """
+
+    def _prepare_verse_images(
+        self,
+        surah: int,
+        ayah: int,
+        verse_words: list[str],
+        annotate: bool,
+        db: DatabaseManager,
+    ) -> list[Image.Image]:
+        """Generates and optionally annotates word images for a specific verse."""
+        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+
+        if not annotate:
+            return word_images
+
+        wbw_translations = db.get_wbw_from_verse(surah, ayah)
+        annotated = []
+        for i, img in enumerate(word_images):
+            translation = wbw_translations[i] if i < len(wbw_translations) else None
+            ann_img = annotate_word(
+                image=img,
+                surah=surah,
+                ayah=ayah,
+                word_index=i + 1,
+                translation=translation,
+                word_config=self.word_config,
+            )
+            annotated.append(ann_img)
+
+        return annotated
+
+    def _render_separate_translation_pages(
+        self,
+        translation_images: list[Image.Image | None],
+    ) -> list[Image.Image]:
+        """Creates dedicated full-size pages for each translation image."""
+        pages = []
+        for trans_img in translation_images:
+            if not trans_img:
+                continue
+
+            canvas = Image.new(
+                "RGBA",
+                (self.layout_config.max_width, self.layout_config.image_height),
+                (0, 0, 0, 0),
+            )
+
+            # Calculate Y position: use explicit offset or default to bottom-padding alignment
+            if self.layout_config.timage_y_offset > 0:
+                ty = self.layout_config.timage_y_offset - trans_img.height // 2
+            else:
+                padding_bottom = self.layout_config.padding.bottom
+                ty = self.layout_config.image_height - padding_bottom - trans_img.height // 2
+
+            tx = (
+                (self.layout_config.max_width - trans_img.width) // 2
+                + self.layout_config.timage_x_offset
+            )
+
+            canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
+            pages.append(canvas)
+
+        return pages
 
     def get_iterator(
         self,
@@ -35,19 +106,7 @@ class VerseRangeWorkflow(BaseWorkflow):
         end_ayah: int | None = None,
         **kwargs,
     ) -> Iterator[list[Image.Image]]:
-        """
-        Processes a range of verses and yields lists of generated images (pages).
-
-        Args:
-            surah: The surah number.
-            translations: List of verse translations, each verse being a list of page strings.
-            start_ayah: The starting verse number (inclusive).
-            end_ayah: The ending verse number (inclusive). If None, defaults to start_ayah.
-            **kwargs: Additional arguments passed to _process_range.
-
-        Yields:
-            Iterator[list[Image.Image]]: A list of images for each verse iteration.
-        """
+        """Processes a range of verses and yields lists of generated images (pages)."""
         if end_ayah is None:
             end_ayah = start_ayah
 
@@ -69,98 +128,54 @@ class VerseRangeWorkflow(BaseWorkflow):
         annotate: bool = True,
         separate_translations: bool = False,
     ) -> Iterator[list[Image.Image]]:
-        """
-        Processes a range of verses and yields lists of images.
-
-        Args:
-            surah: The surah number.
-            start_verse: The starting verse number.
-            end_verse: The ending verse number.
-            translations: List of verse translations, each verse being a list of page strings.
-            annotate: Whether to annotate the words.
-            separate_translations: Whether to separate the translations.
-
-        Yields:
-            list[Image.Image]: A list of images for each verse iteration.
-        """
-        db = _get_db()
-
+        """Internal iterator implementation for processing a verse range."""
+        db = DatabaseManager()
         arabic_verses = db.get_verses_from_surah(surah)
 
-        # Iterate through each verse
         for i, verse_text in enumerate(arabic_verses[start_verse - 1 : end_verse]):
-            current_verse_num = start_verse + i
+            current_ayah = start_verse + i
+            verse_words = verse_text.split()
 
-            # Split verse text into words
-            words = verse_text.split()
+            # 1. Image Generation
+            annotated_images = self._prepare_verse_images(
+                surah, current_ayah, verse_words, annotate, db
+            )
 
-            # 1. Generate Arabic images (words + verse number)
-            word_images = [get_wimage(word, self.word_config) for word in words]
-            if annotate:
-                wbw_images, wbw_texts = annotate_words(
-                    word_images,
-                    surah=surah,
-                    ayah=current_verse_num,
-                    start=1,
-                    db=db,
-                    word_config=self.word_config,
-                    texts=list(words),
-                )
-            else:
-                wbw_images = word_images
-                wbw_texts = list(words)
+            # Add verse number marker
+            vn_image = verse_number(current_ayah, self.word_config)
+            annotated_images.append(vn_image)
 
-            # Add verse number image after the verse's words
-            v_num_img = verse_number(current_verse_num, self.word_config)
-            wbw_images.append(v_num_img)
-            wbw_texts.append(str(current_verse_num))
+            # 2. Translation Preparation
+            verse_trans_texts = translations[i]
+            translation_images = [
+                get_timage(text, self.text_config) for text in verse_trans_texts
+            ]
 
-            # 2. Prepare translation images (drawn separately in the frame area)
-            # translations[i] is a list of strings, each string representing a page of translation
-            verse_pages_translations = translations[i]
-            translation_images = [get_timage(text, self.text_config) for text in verse_pages_translations]
+            # 3. Layout Rendering
+            all_text = list(verse_words) + [""]
+            word_items = [
+                WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)
+            ]
 
-            # 3. Frame this verse iteration's images
             if separate_translations:
-                # Arabic pages only (limit rows to 2)
-                arabic_word_config = dataclasses.replace(self.word_config, max_rows_per_page=2)
-
-                # Bundle into WordItems for layout
-                arabic_items = [WordItem(img, text) for img, text in zip(wbw_images, wbw_texts)]
-
-                arabic_pages = frame(
-                    arabic_items,
-                    translation_images=None,
-                    config=self.layout_config,
-                    word_config=arabic_word_config,
+                # Arabic-only rendering (restricted row count)
+                arabic_word_cfg = dataclasses.replace(self.word_config, max_rows_per_page=2)
+                arabic_pages = list(
+                    frame(
+                        words=word_items,
+                        translation_images=None,
+                        config=self.layout_config,
+                        word_config=arabic_word_cfg,
+                    )
                 )
 
-                # Yield Arabic pages
-                pages = list(arabic_pages)
-
-                # Each translation image should be bottom-aligned on its own full-sized canvas
-                for trans_img in translation_images:
-                    if trans_img:
-                        canvas = Image.new(
-                            "RGBA", (self.layout_config.max_width, self.layout_config.image_height), (0, 0, 0, 0)
-                        )
-                        if self.layout_config.timage_y_offset > 0:
-                            ty = self.layout_config.timage_y_offset - trans_img.height // 2
-                        else:
-                            ty = self.layout_config.image_height - self.layout_config.padding[1] - trans_img.height // 2
-
-                        tx = (self.layout_config.max_width - trans_img.width) // 2 + self.layout_config.timage_x_offset
-                        canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
-                        pages.append(canvas)
-
-                yield pages
+                # Dedicated translation pages
+                trans_pages = self._render_separate_translation_pages(translation_images)
+                yield arabic_pages + trans_pages
             else:
-                # Combined pages (default behavior)
-                # Bundle into WordItems for layout
-                word_items = [WordItem(img, text) for img, text in zip(wbw_images, wbw_texts)]
-
+                # Combined rendering (Arabic + Translation on same page)
                 combined_pages = frame(
-                    word_items,
+                    words=word_items,
                     translation_images=translation_images,
                     config=self.layout_config,
                     word_config=self.word_config,

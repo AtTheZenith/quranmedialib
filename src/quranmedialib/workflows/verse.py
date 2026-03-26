@@ -4,9 +4,10 @@ This module provides the VerseWorkflow class for generating multi-page layouts
 of individual Quranic verses with accompanying translations.
 """
 
-from typing import Iterator
+from __future__ import annotations
 
-from PIL import Image
+import logging
+from typing import TYPE_CHECKING, Iterator
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_word
@@ -17,6 +18,14 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
+from PIL import Image
+
+if TYPE_CHECKING:
+    pass
+
+# Logger setup
+logger = logging.getLogger(__name__)
+
 
 class VerseWorkflow(BaseWorkflow):
     """Workflow for rendering a single verse with Arabic text and translation.
@@ -24,25 +33,42 @@ class VerseWorkflow(BaseWorkflow):
     This workflow fetches verse data from the database, generates word images,
     optionally annotates them with word-by-word translations, and frames everything
     with user-provided translation strings.
-
-    Example:
-        from quranmedialib import VerseWorkflow, LANDSCAPE_PRESET
-
-        layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-        workflow = VerseWorkflow(layout, text, word)
-
-        # User determines translation split based on framer output
-        translations = ["Page 1 translation", "Page 2 translation"]
-
-        for page_images in workflow.get_iterator(
-            surah=1,
-            ayah=1,
-            translations=translations,
-            annotate=True,
-        ):
-            for img in page_images:
-                img.save("output.png")
     """
+
+    def _prepare_word_images(
+        self,
+        surah: int,
+        ayah: int,
+        verse_words: list[str],
+        wbw_translations: list[str | None],
+        annotate: bool,
+    ) -> list[Image.Image]:
+        """Generates and optionally annotates word images for the verse."""
+        # Generate base word images
+        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+
+        if not annotate:
+            return word_images
+
+        # Annotate words with word-by-word translations
+        annotated = []
+        for i, img in enumerate(word_images):
+            translation = wbw_translations[i] if i < len(wbw_translations) else None
+            ann_img = annotate_word(
+                image=img,
+                surah=surah,
+                ayah=ayah,
+                word_index=i + 1,
+                translation=translation,
+                word_config=self.word_config,
+            )
+            annotated.append(ann_img)
+
+        return annotated
+
+    def _prepare_translation_images(self, translations: list[str]) -> list[Image.Image | None]:
+        """Converts internal translation strings into rendered images."""
+        return [get_timage(t, self.text_config) if t else None for t in translations]
 
     def get_iterator(
         self,
@@ -57,57 +83,38 @@ class VerseWorkflow(BaseWorkflow):
             surah: Surah number (1-114).
             ayah: Ayah (verse) number within the surah.
             translations: List of translation strings, one per page.
-                The user determines the split based on how the framer divides
-                Arabic verses across pages.
             annotate: Whether to annotate words with word-by-word translations.
-                Defaults to True.
 
         Yields:
-            list[Image.Image]: A list of pages containing the verse layout.
-                Each page is a list of PIL Image objects.
+            list[Image.Image]: A list of rendered page images for the verse.
         """
         db = DatabaseManager()
 
-        # Fetch Arabic verse text and split into words
+        # 1. Data Retrieval
         verse_text = db.get_verse(surah, ayah)
         verse_words = verse_text.split()
-
-        # Fetch word-by-word translations for annotation
         wbw_translations = db.get_wbw_from_verse(surah, ayah)
 
-        # Generate word images
-        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+        # 2. Image Generation
+        annotated_images = self._prepare_word_images(
+            surah, ayah, verse_words, wbw_translations, annotate
+        )
 
-        # Annotate words if requested
-        if annotate:
-            annotated_images = [
-                annotate_word(
-                    image=img,
-                    surah=surah,
-                    ayah=ayah,
-                    word_index=i + 1,
-                    translation=wbw_translations[i] if i < len(wbw_translations) else None,
-                    word_config=self.word_config,
-                )
-                for i, img in enumerate(word_images)
-            ]
-        else:
-            annotated_images = word_images
+        # 3. Add verse number marker
+        vn_image = verse_number(ayah, self.word_config)
+        annotated_images.append(vn_image)
 
-        # Add verse number image
-        verse_number_image = verse_number(ayah, self.word_config)
-        annotated_images.append(verse_number_image)
-
-        # Create WordItems for layout
-        items_text = list(verse_words) + [""]
-        word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, items_text)]
-
-        # Convert translation strings to images
-        translation_images = [
-            get_timage(translation, self.text_config) if translation else None for translation in translations
+        # 4. Prepare WordItems for layout
+        # We append an empty string for the verse number marker's text
+        all_text = list(verse_words) + [""]
+        word_items = [
+            WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)
         ]
 
-        # Frame with translation pages
+        # 5. Prepare Translation Images
+        translation_images = self._prepare_translation_images(translations)
+
+        # 6. Render Layout
         yield frame(
             words=word_items,
             translation_images=translation_images,
