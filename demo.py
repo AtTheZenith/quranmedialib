@@ -3,8 +3,16 @@ from typing import Literal
 
 from PIL import Image
 
-from quranmedialib import DatabaseManager, LayoutConfig, TextConfig, WordConfig, WordItem
-from quranmedialib import LANDSCAPE_PRESET, SQUARE_PRESET, STORY_PRESET
+from quranmedialib import (
+    LANDSCAPE_PRESET,
+    SQUARE_PRESET,
+    STORY_PRESET,
+    DatabaseManager,
+    LayoutConfig,
+    TextConfig,
+    WordConfig,
+    WordItem,
+)
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.image import glow
@@ -26,8 +34,8 @@ def run_workflow_demo(
         text_config=text_config,
         word_config=word_config,
     )
-    iterator = workflow.get_iterator(data, annotate=annotate)
-    return [imgtuple[0] for page in iterator for imgtuple in page]
+    iterator = workflow.get_iterator(surah=data["surah"], annotate=annotate)
+    return [img for page in iterator for img in page]
 
 
 def _process_verse_words(

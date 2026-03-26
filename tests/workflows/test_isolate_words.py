@@ -20,8 +20,7 @@ def test_isolate_words():
     surah = 1
     verse = 2
 
-    # Switch to Quran database for Arabic text
-    db.set_active_translation("quran")
+    # Get Arabic verse text (always uses "quran" database)
     words_str = db.get_verse(surah, verse)
     words = words_str.split()
 
@@ -30,18 +29,21 @@ def test_isolate_words():
     # Use WBW translations as the list of strings for the bottom translation area
     translation_list = list(wbw_translations)
 
-    db.close()
-
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah}, Verse {verse} ({len(words)} words)...")
 
     workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
 
-    verse_data = {"words": words, "surah": surah, "ayah": verse, "wbw_translations": wbw_translations}
-
-    # Call get_iterator
-    isolation_generator = workflow.get_iterator(verse_data=verse_data, translation_data=translation_list, annotate=True)
+    # Call get_iterator with explicit arguments
+    isolation_generator = workflow.get_iterator(
+        surah=surah,
+        verse_words=words,
+        translations=translation_list,
+        ayah=verse,
+        wbw_translations=wbw_translations,
+        annotate=True,
+    )
 
     # Save results
     output_dir = "output/test/isolate_words"

@@ -1,5 +1,8 @@
-"""
-Framer module for laying out word images into pages with translation support.
+"""Framer module for laying out word images into pages with translation support.
+
+This module handles the complex 2D spatial arrangement of Arabic word images,
+supporting Right-to-Left (RTL) flow, multi-page splitting, Quranic stop-sign
+aware wrapping, and balanced line distribution.
 """
 
 from __future__ import annotations
@@ -8,9 +11,16 @@ import itertools
 
 from PIL import Image
 
-from quranmedialib.types import LayoutConfig, WordConfig, WordItem
+from quranmedialib.types import (
+    HorizontalAlignment,
+    LayoutConfig,
+    VerticalAlignment,
+    WordConfig,
+    WordItem,
+)
 
-# Quranic stop signs for wrapping logic
+# Quranic stop signs for wrapping logic. These signs indicate natural pausing
+# points in the text and are used to avoid awkward line breaks.
 QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۚ", "ۛ", "ۜ", "ۙ", "ۘ", "ۗ"]
 
 
@@ -20,9 +30,16 @@ def _build_row(
     config: LayoutConfig,
     word_config: WordConfig,
 ) -> tuple[list[WordItem], int, int, int]:
-    """
-    Builds a single row of items from the given start index.
-    Returns (row_items, items_consumed, row_width, max_row_height).
+    """Builds a single row of items until the max width is reached.
+
+    Args:
+        all_items: The full list of WordItems.
+        start_index: Index of the first word to place in this row.
+        config: Layout geometry.
+        word_config: Spacing rules.
+
+    Returns:
+        (row_items, items_consumed, row_width, max_row_height)
     """
     row_items = []
     current_row_width = 0
@@ -31,12 +48,13 @@ def _build_row(
 
     for i in range(start_index, len(all_items)):
         word_item = all_items[i]
-        word_width, word_height = word_item.image.size
+        word_width, word_height = word_item.width, word_item.height
 
-        # Check if the word fits in the current row
+        # Calculate space needed: word width + spacing if not the first word in row.
         spacing = word_config.word_spacing if row_items else 0
         if current_row_width + word_width + spacing > config.content_width:
-            # If the row is empty, we MUST take at least one word to avoid infinite loops
+            # Defensive check: if the row is empty, we must take at least one word
+            # to prevent infinite loops even if the word is wider than max_width.
             if not row_items:
                 row_items.append(word_item)
                 items_consumed += 1
@@ -45,8 +63,7 @@ def _build_row(
             break
 
         current_row_width += word_width + spacing
-        if word_height > max_row_height:
-            max_row_height = word_height
+        max_row_height = max(max_row_height, word_height)
         row_items.append(word_item)
         items_consumed += 1
 
@@ -55,7 +72,7 @@ def _build_row(
 
 def _fits_on_page(current_y: int, row_height: int, config: LayoutConfig) -> bool:
     """Checks if a row with the given height fits in the remaining vertical space."""
-    limit = config.available_height + config.padding[0]
+    limit = config.available_height + config.padding.top
     return current_y + row_height <= limit
 
 
@@ -64,9 +81,18 @@ def _group_items_into_rows(
     config: LayoutConfig,
     word_config: WordConfig,
 ) -> tuple[list[list[WordItem]], int]:
-    """Groups items into rows for a single page based on configuration."""
+    """Groups items into rows for a single page based on line count and height.
+
+    Args:
+        all_items: List of items remaining to be processed.
+        config: Layout geometry.
+        word_config: Page limits (max_rows_per_page).
+
+    Returns:
+        A tuple of (list of rows, total items consumed).
+    """
     page_rows = []
-    current_y = config.padding[0]
+    current_y = config.padding.top
     total_items_consumed = 0
 
     while total_items_consumed < len(all_items) and len(page_rows) < word_config.max_rows_per_page:
@@ -75,7 +101,9 @@ def _group_items_into_rows(
         if not row_items:
             break
 
+        # Check vertical fit for this row
         if not _fits_on_page(current_y, max_row_height, config):
+            # If the page is empty, we force the row to avoid stuck iterations.
             if not page_rows:
                 page_rows.append(row_items)
                 total_items_consumed += row_consumed
@@ -89,7 +117,7 @@ def _group_items_into_rows(
 
 
 def _get_global_index(row_index: int, word_index: int, prefix_sums: list[int]) -> int:
-    """Calculates the global index of a word given its row and word index."""
+    """Calculates the 1-based global index of a word given its location in rows."""
     return prefix_sums[row_index] + word_index + 1
 
 
@@ -97,10 +125,10 @@ def _apply_stop_sign_adjustment(
     current_image_rows: list[list[WordItem]],
     items_consumed: int,
 ) -> tuple[list[list[WordItem]], int]:
-    """
-    Adjusts page breaks to align with Quranic stop signs.
-    Iterates backwards from the last word to find the nearest stop sign that
-    would require keeping fewer items than originally planned.
+    """Adjusts page breaks backwards to end on a Quranic stop sign.
+
+    This ensures that lines don't break mid-phrase if a natural pause
+    point is available nearby on the same page.
     """
     row_lengths = [len(row) for row in current_image_rows]
     prefix_sums = [0] + list(itertools.accumulate(row_lengths))
@@ -109,9 +137,11 @@ def _apply_stop_sign_adjustment(
         row = current_image_rows[row_index]
         for word_index in range(len(row) - 1, -1, -1):
             item = row[word_index]
+            # Check if this word contains a stop sign marker.
             if item.text and any(sign in item.text for sign in QURANIC_STOP_SIGNS):
                 keep_count = _get_global_index(row_index, word_index, prefix_sums)
 
+                # Only adjust if it actually reduces the item count (moves break backwards).
                 if keep_count < items_consumed:
                     adjusted_rows = current_image_rows[: row_index + 1]
                     adjusted_rows[-1] = adjusted_rows[-1][: word_index + 1]
@@ -125,14 +155,16 @@ def _get_image_rows(
     word_config: WordConfig,
     target_width: int,
 ) -> list[list[WordItem]]:
-    """Internal greedy divider that respects a custom width for balancing calculations."""
+    """Internal greedy divider for a specific width constraint.
+
+    Used primarily as a core primitive for the binary-search balancing algorithm.
+    """
     rows = []
     current_row = []
     current_width = 0
 
     for item in items:
-        word_image = item.image
-        word_width = word_image.size[0]
+        word_width = item.width
         spacing = word_config.word_spacing if current_row else 0
 
         if current_width + word_width + spacing <= target_width:
@@ -143,6 +175,7 @@ def _get_image_rows(
             current_row = [item]
             current_width = word_width
         else:
+            # Word is wider than target_width, force it into its own row.
             rows.append([item])
             current_row = []
             current_width = 0
@@ -158,9 +191,11 @@ def _balance_image_rows(
     config: LayoutConfig,
     word_config: WordConfig,
 ) -> list[list[WordItem]]:
-    """
-    Finds the smallest target_width that maintains the target number of rows
-    while ensuring the layout is 'top-heavy' (Line N >= Line N+1).
+    """Binary searches for an optimal width that balances rows.
+
+    Goal: Find the minimum width that produces `target_num_rows` while ensuring
+    the layout is 'top-heavy' or 'centered' (earlier lines are wider than or equal
+    to subsequent lines), which is visually more pleasing for short verses.
     """
     if not items:
         return []
@@ -173,38 +208,49 @@ def _balance_image_rows(
         mid = (low + high) // 2
         rows = _get_image_rows(items, word_config, mid)
 
+        # Calculate actual widths for 'top-heavy' validation.
         row_widths = []
         for row in rows:
             w = sum(it.width for it in row) + (len(row) - 1) * word_config.word_spacing
             row_widths.append(w)
 
+        # A layout is 'top-heavy' if every line is at least as wide as the one after it.
         is_top_heavy = all(row_widths[i] >= row_widths[i + 1] for i in range(len(row_widths) - 1))
 
         if len(rows) <= target_num_rows and is_top_heavy:
             best_rows = rows
-            high = mid - 1
+            high = mid - 1  # Try even smaller width
         else:
-            low = mid + 1
+            low = mid + 1  # Width too small or bottom-heavy
 
     return best_rows
 
 
 def _get_verse_start_y(content_height: int, config: LayoutConfig, word_config: WordConfig) -> int:
-    """Calculates the starting Y coordinate for the verse content based on alignment."""
-    y_start = config.padding[0] + word_config.verse_v_offset
-    if config.wimage_vertical_align == "center" and content_height < config.available_height:
-        y_start = config.padding[0] + (config.available_height - content_height) // 2 + word_config.verse_v_offset
-    elif config.wimage_vertical_align == "bottom" and content_height < config.available_height:
-        y_start = config.padding[0] + config.available_height - content_height + word_config.verse_v_offset
+    """Calculates the starting Y coordinate for the entire verse block."""
+    y_start = config.padding.top + word_config.verse_v_offset
+
+    if config.wimage_vertical_align == VerticalAlignment.CENTER:
+        if content_height < config.available_height:
+            y_start += (config.available_height - content_height) // 2
+    elif config.wimage_vertical_align == VerticalAlignment.BOTTOM:
+        if content_height < config.available_height:
+            y_start += config.available_height - content_height
 
     return y_start + config.wimage_y_offset
 
 
-def _get_row_start_x(row_width: int, config: LayoutConfig, word_config: WordConfig) -> int:
-    """Calculates the starting X coordinate for a row (Right-to-Left)."""
-    x_start = config.max_width - config.padding[3]
-    if config.wimage_horizontal_align == "center" and row_width < config.content_width:
-        x_start = config.padding[2] + (config.content_width - row_width) // 2 + row_width
+def _get_row_start_x(row_width: int, config: LayoutConfig) -> int:
+    """Calculates the starting X coordinate for a row (Right-to-Left anchoring)."""
+    # RTL default: anchor to the right margin.
+    x_start = config.max_width - config.padding.right
+
+    if config.wimage_horizontal_align == HorizontalAlignment.CENTER:
+        if row_width < config.content_width:
+            x_start = config.padding.left + (config.content_width - row_width) // 2 + row_width
+    elif config.wimage_horizontal_align == HorizontalAlignment.LEFT:
+        if row_width < config.content_width:
+            x_start = config.padding.left + row_width
 
     return x_start + config.wimage_x_offset
 
@@ -226,11 +272,12 @@ def _render_page(
         max_row_height = row_heights[i]
         row_width = sum(item.width for item in row) + (len(row) - 1) * word_config.word_spacing
 
-        current_x = _get_row_start_x(row_width, config, word_config)
+        current_x = _get_row_start_x(row_width, config)
 
         for item in row:
             word_image = item.image
             word_width, word_height = word_image.size
+            # Vertical centering within the row's tallest item.
             word_y = draw_y + (max_row_height - word_height) // 2
 
             page_image.paste(
@@ -245,14 +292,36 @@ def _render_page(
     return page_image
 
 
+def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, config: LayoutConfig):
+    """Pastes a translation image onto a page based on configured alignment."""
+    # Vertical placement
+    trans_y = config.padding.top + config.timage_y_offset
+    if config.timage_vertical_align == VerticalAlignment.CENTER:
+        trans_y = config.padding.top + (config.available_height - trans_img.height) // 2 + config.timage_y_offset
+    elif config.timage_vertical_align == VerticalAlignment.BOTTOM:
+        trans_y = config.padding.top + config.available_height - trans_img.height + config.timage_y_offset
+
+    # Horizontal placement
+    trans_x = config.padding.left + config.timage_x_offset
+    if config.timage_horizontal_align == HorizontalAlignment.CENTER:
+        trans_x = config.padding.left + (config.content_width - trans_img.width) // 2 + config.timage_x_offset
+    elif config.timage_horizontal_align == HorizontalAlignment.RIGHT:
+        trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
+
+    page_image.paste(
+        trans_img,
+        (trans_x, trans_y),
+        mask=trans_img if trans_img.mode == "RGBA" else None,
+    )
+
+
 def frame(
     words: list[WordItem],
     translation_images: list[Image.Image | None] | None = None,
     config: LayoutConfig | None = None,
     word_config: WordConfig | None = None,
 ) -> list[Image.Image]:
-    """
-    Manages the 2D grid layout of word images into one or more pages.
+    """Manages the 2D grid layout of word images into one or more pages.
 
     This function handles right-to-left layout and supports automatic page-break
     adjustment based on Quranic stop signs using WordItem metadata.
@@ -269,25 +338,28 @@ def frame(
     if not words:
         return []
 
+    # Apply defaults if configs are missing.
     if config is None:
         config = LayoutConfig(max_width=1920, image_height=1080, padding=(50, 350, 50, 50), timage_y_offset=880)
     if word_config is None:
         word_config = WordConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5, font_size=80)
 
     all_items = list(words)
-
     if any(item.image is None for item in all_items):
         raise ValueError("One or more WordItems are missing their image content.")
 
-    images: list[Image.Image] = []
-
+    pages: list[Image.Image] = []
     page_index = 0
+
     while all_items:
+        # 1. Greedy grouping into rows for the current page.
         current_rows, items_consumed = _group_items_into_rows(all_items, config, word_config)
 
+        # 2. Adjust break backwards to end on a stop sign if possible.
         if any(it.text for it in all_items) and items_consumed < len(all_items):
             current_rows, items_consumed = _apply_stop_sign_adjustment(current_rows, items_consumed)
 
+        # 3. Optional balancing: redistribute words to make lines more even/top-heavy.
         if word_config.balanced_wrapping and len(current_rows) > 1:
             current_rows = _balance_image_rows(
                 list(itertools.chain.from_iterable(current_rows)),
@@ -296,32 +368,16 @@ def frame(
                 word_config,
             )
 
+        # 4. Render the page canvas.
         page_image = _render_page(current_rows, config, word_config)
 
+        # 5. Overlays: Translation images.
         if translation_images and page_index < len(translation_images):
             if trans_img := translation_images[page_index]:
-                trans_y = config.padding[0] + config.timage_y_offset
-                if config.timage_vertical_align == "center":
-                    trans_y = (
-                        config.padding[0] + (config.available_height - trans_img.height) // 2 + config.timage_y_offset
-                    )
-                elif config.timage_vertical_align == "bottom":
-                    trans_y = config.padding[0] + config.available_height - trans_img.height + config.timage_y_offset
+                _paste_translation_image(page_image, trans_img, config)
 
-                trans_x = config.padding[2] + config.timage_x_offset
-                if config.timage_horizontal_align == "center":
-                    trans_x = config.padding[2] + (config.content_width - trans_img.width) // 2 + config.timage_x_offset
-                elif config.timage_horizontal_align == "right":
-                    trans_x = config.padding[2] + config.content_width - trans_img.width + config.timage_x_offset
-
-                page_image.paste(
-                    trans_img,
-                    (trans_x, trans_y),
-                    mask=trans_img if trans_img.mode == "RGBA" else None,
-                )
-
-        images.append(page_image)
+        pages.append(page_image)
         all_items = all_items[items_consumed:]
         page_index += 1
 
-    return images
+    return pages
