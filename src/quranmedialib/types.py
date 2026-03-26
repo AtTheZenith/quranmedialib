@@ -8,28 +8,69 @@ structures used throughout the library. It includes:
 - WbwDatabaseConfig: Extended config for word-by-word databases
 - LayoutConfig, WordConfig, TextConfig: Rendering configuration
 - WordItem, StyledWord, Line: Data transmission types
+- Padding, Alignment: Type-safe layout primitives
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 from PIL import Image, ImageFont
 
 from quranmedialib.resources import get_font_path
 
-# === Basic Type Aliases ===
-type Color = tuple[int, int, int] | tuple[int, int, int, int]
-type Padding = tuple[int, int, int, int]
+# === Layout Primitives ===
 
+
+class Padding(NamedTuple):
+    """Container for 4-directional padding values (CSS/PIL order)."""
+
+    top: int = 0
+    bottom: int = 0
+    left: int = 0
+    right: int = 0
+
+    @property
+    def horizontal(self) -> int:
+        """Total horizontal padding."""
+        return self.left + self.right
+
+    @property
+    def vertical(self) -> int:
+        """Total vertical padding."""
+        return self.top + self.bottom
+
+
+class HorizontalAlignment(Enum):
+    """Options for horizontal content anchoring."""
+
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+
+
+class VerticalAlignment(Enum):
+    """Options for vertical content anchoring."""
+
+    TOP = "top"
+    CENTER = "center"
+    BOTTOM = "bottom"
+
+
+# === Type Aliases ===
+# Maintained for backward compatibility and semantic clarity.
+type Color = tuple[int, int, int] | tuple[int, int, int, int]
 type SurahNumber = Annotated[int, range(1, 115)]
 type AyahNumber = Annotated[int, range(1, 287)]
 type WordIndex = int
 
 
 # === Font Resource ===
+
+
 @dataclass(frozen=True)
 class FontResource:
     """Reference to a font file with metadata.
@@ -60,13 +101,14 @@ class FontResource:
 
 
 # === Database Configuration ===
+
+
 @dataclass(frozen=True)
 class DatabaseConfig:
     """Configuration for a verse-by-verse database table.
 
-    This config maps the logical fields (surah, ayah, text) to actual
-    database table and column names, allowing the DatabaseManager to
-    work with any compatible SQLite database.
+    This config maps logical fields (surah, ayah, text) to actual database
+    columns, allowing the DatabaseManager to work with varied schemas.
 
     Attributes:
         filepath: Path to the SQLite database file.
@@ -84,19 +126,24 @@ class DatabaseConfig:
 
     @classmethod
     def from_packaged(
-        cls, db_name: str, tablename: str, surah_col: str = "sura", ayah_col: str = "ayah", text_col: str = "text"
+        cls,
+        db_name: str,
+        tablename: str,
+        surah_col: str = "sura",
+        ayah_col: str = "ayah",
+        text_col: str = "text",
     ) -> DatabaseConfig:
         """Create a DatabaseConfig for a packaged database file.
 
         Args:
             db_name: Filename of the database in the assets directory.
             tablename: Name of the table containing verse data.
-            surah_col: Column name for surah number. Defaults to "sura".
-            ayah_col: Column name for ayah number. Defaults to "ayah".
-            text_col: Column name for text content. Defaults to "text".
+            surah_col: Column name for surah. Defaults to "sura".
+            ayah_col: Column name for ayah. Defaults to "ayah".
+            text_col: Column name for text. Defaults to "text".
 
         Returns:
-            DatabaseConfig with resolved path.
+            Config with resolved absolute path.
         """
         from quranmedialib.resources import get_db_path
 
@@ -119,18 +166,12 @@ class DatabaseConfig:
     ) -> DatabaseConfig:
         """Create a DatabaseConfig from an external database file path.
 
-        This method allows loading databases from arbitrary file paths,
-        not just packaged assets. Useful for loading external or custom databases.
-
         Args:
-            db_path: Path to the SQLite database file (relative or absolute).
-            tablename: Name of the table containing verse data.
-            surah_col: Column name for surah number. Defaults to "sura".
-            ayah_col: Column name for ayah number. Defaults to "ayah".
-            text_col: Column name for text content. Defaults to "text".
-
-        Returns:
-            DatabaseConfig with the provided path.
+            db_path: Path to the SQLite database file.
+            tablename: Name of the table.
+            surah_col: Surah column name.
+            ayah_col: Ayah column name.
+            text_col: Text column name.
         """
         return cls(
             filepath=Path(db_path),
@@ -144,8 +185,6 @@ class DatabaseConfig:
 @dataclass(frozen=True)
 class WbwDatabaseConfig(DatabaseConfig):
     """Extended configuration for word-by-word databases.
-
-    Inherits all fields from DatabaseConfig and adds word-level column mapping.
 
     Attributes:
         word_id_col: Column name for the word index/ID within the verse.
@@ -163,19 +202,7 @@ class WbwDatabaseConfig(DatabaseConfig):
         text_col: str = "translation",
         word_id_col: str = "word",
     ) -> WbwDatabaseConfig:
-        """Create a WbwDatabaseConfig for a packaged word-by-word database.
-
-        Args:
-            db_name: Filename of the database in the assets directory.
-            tablename: Name of the table containing word-by-word data.
-            surah_col: Column name for surah number. Defaults to "surah".
-            ayah_col: Column name for ayah number. Defaults to "ayah".
-            text_col: Column name for translation text. Defaults to "translation".
-            word_id_col: Column name for word index. Defaults to "word".
-
-        Returns:
-            WbwDatabaseConfig with resolved path.
-        """
+        """Create a WbwDatabaseConfig for a packaged word-by-word database."""
         from quranmedialib.resources import get_db_path
 
         return cls(
@@ -197,22 +224,7 @@ class WbwDatabaseConfig(DatabaseConfig):
         text_col: str = "translation",
         word_id_col: str = "word",
     ) -> WbwDatabaseConfig:
-        """Create a WbwDatabaseConfig from an external database file path.
-
-        This method allows loading word-by-word databases from arbitrary file paths,
-        not just packaged assets. Useful for loading external or custom databases.
-
-        Args:
-            db_path: Path to the SQLite database file (relative or absolute).
-            tablename: Name of the table containing word-by-word data.
-            surah_col: Column name for surah number. Defaults to "surah".
-            ayah_col: Column name for ayah number. Defaults to "ayah".
-            text_col: Column name for translation text. Defaults to "translation".
-            word_id_col: Column name for word index. Defaults to "word".
-
-        Returns:
-            WbwDatabaseConfig with the provided path.
-        """
+        """Create a WbwDatabaseConfig from an external database file path."""
         return cls(
             filepath=Path(db_path),
             tablename=tablename,
@@ -224,69 +236,108 @@ class WbwDatabaseConfig(DatabaseConfig):
 
 
 # === Data Transmission Types ===
+
+
 @dataclass(frozen=True)
 class WordItem:
-    """Combines a word image with its text metadata for layout processing."""
+    """Combines a word image with its text metadata for layout processing.
+
+    Used by the framer to calculate line breaks and alignments.
+    """
 
     image: Image.Image
     text: str | None = None
 
     @property
     def width(self) -> int:
+        """Width of the word image in pixels."""
         return self.image.width
 
     @property
     def height(self) -> int:
+        """Height of the word image in pixels."""
         return self.image.height
 
 
 # === Configuration Types ===
+
+
 @dataclass(frozen=True)
 class LayoutConfig:
-    """Helper class to store canvas and top-level layout configuration."""
+    """Stores canvas sizing and top-level layout offsets.
+
+    Attributes:
+        max_width: Total canvas width in pixels.
+        image_height: Total canvas height in pixels.
+        padding: Internal canvas margins (top, bottom, left, right).
+        wimage_x_offset: Additional X offset for word images.
+        wimage_y_offset: Additional Y offset for word images.
+        timage_x_offset: Additional X offset for translation images.
+        timage_y_offset: Additional Y offset for translation images.
+        timage_vertical_align: Vertical alignment for translation text.
+        timage_horizontal_align: Horizontal alignment for translation text.
+        wimage_vertical_align: Vertical alignment for Arabic word block.
+        wimage_horizontal_align: Horizontal alignment for Arabic word block.
+    """
 
     max_width: int
     image_height: int
-    padding: Padding = (0, 0, 0, 0)
+    padding: Padding = Padding(0, 0, 0, 0)
     wimage_x_offset: int = 0
     wimage_y_offset: int = 0
     timage_x_offset: int = 0
     timage_y_offset: int = 0
-    timage_vertical_align: str = "center"
-    timage_horizontal_align: str = "center"
-    wimage_vertical_align: str = "center"
-    wimage_horizontal_align: str = "center"
+    timage_vertical_align: VerticalAlignment | str = VerticalAlignment.CENTER
+    timage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
+    wimage_vertical_align: VerticalAlignment | str = VerticalAlignment.CENTER
+    wimage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
+
+    def __post_init__(self):
+        """Ensure string literals are converted to Enums where applicable."""
+        if isinstance(self.timage_vertical_align, str):
+            object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
+        if isinstance(self.timage_horizontal_align, str):
+            object.__setattr__(self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower()))
+        if isinstance(self.wimage_vertical_align, str):
+            object.__setattr__(self, "wimage_vertical_align", VerticalAlignment(self.wimage_vertical_align.lower()))
+        if isinstance(self.wimage_horizontal_align, str):
+            object.__setattr__(self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower()))
+        if not isinstance(self.padding, Padding):
+            object.__setattr__(self, "padding", Padding(*self.padding))
 
     @property
     def content_width(self) -> int:
-        """The available width for horizontal layout (max_width - left - right)."""
-        return self.max_width - self.padding[2] - self.padding[3]
+        """Available width for layout (max_width - left_padding - right_padding)."""
+        return self.max_width - self.padding.left - self.padding.right
 
     @property
     def available_height(self) -> int:
-        """The available height for vertical layout (height - top - bottom)."""
-        return self.image_height - self.padding[0] - self.padding[1]
+        """Available height for layout (image_height - top_padding - bottom_padding)."""
+        return self.image_height - self.padding.top - self.padding.bottom
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class WordConfig:
-    """Configuration for word and verse layout behavior."""
+    """Configuration for word and verse rendering behavior.
+
+    Controls font sizes, spacing, colors, and specific verse-number styles.
+    """
 
     font_size: int
     max_rows_per_page: int
     row_spacing: int
     word_spacing: int
-    word_padding: Padding = (10, 10, 10, 10)
-    verse_v_offset: int = 0
-    balanced_wrapping: bool = False
-    verse_number_size: int = 110
-    verse_number_padding: Padding = (1, 41, 1, 1)
-    verse_number_color: Color = (255, 255, 255, 255)
-    annotation_font_size: int = 28
-    word_color: Color = (255, 255, 255, 255)
-    annotation_color: Color = (255, 255, 255, 255)
-    annotation_font_path: Path | None = field(default=None, init=False)
-    background_color: Color = (0, 0, 0, 0)
+    word_padding: Padding
+    verse_v_offset: int
+    balanced_wrapping: bool
+    verse_number_size: int
+    verse_number_padding: Padding
+    verse_number_color: Color
+    annotation_font_size: int
+    word_color: Color
+    annotation_color: Color
+    annotation_font_path: Path
+    background_color: Color
 
     def __init__(
         self,
@@ -294,11 +345,11 @@ class WordConfig:
         max_rows_per_page: int,
         row_spacing: int,
         word_spacing: int,
-        word_padding: Padding = (10, 10, 10, 10),
+        word_padding: Padding | tuple[int, int, int, int] = (10, 10, 10, 10),
         verse_v_offset: int = 0,
         balanced_wrapping: bool = False,
         verse_number_size: int = 110,
-        verse_number_padding: Padding = (1, 41, 1, 1),
+        verse_number_padding: Padding | tuple[int, int, int, int] = (1, 41, 1, 1),
         verse_number_color: Color = (255, 255, 255, 255),
         annotation_font_size: int = 28,
         word_color: Color = (255, 255, 255, 255),
@@ -306,17 +357,20 @@ class WordConfig:
         annotation_font_path: Path | str | FontResource | None = None,
         background_color: Color = (0, 0, 0, 0),
     ):
-        """Initialize WordConfig with resolved annotation_font_path."""
-        # Resolve annotation_font_path before freezing
-        resolved_path: Path | None = None
+        """Initialize WordConfig with resolved paths and type-safe layout primitives."""
+        # Resolve annotation_font_path
         if annotation_font_path is None:
-            resolved_path = get_font_path("inter.ttf")
+            resolved_font_path = get_font_path("inter.ttf")
         elif isinstance(annotation_font_path, FontResource):
-            resolved_path = annotation_font_path.path
+            resolved_font_path = annotation_font_path.path
         elif isinstance(annotation_font_path, str):
-            resolved_path = Path(annotation_font_path)
+            resolved_font_path = Path(annotation_font_path)
         else:
-            resolved_path = annotation_font_path
+            resolved_font_path = annotation_font_path
+
+        # Resolve paddings
+        word_padding = word_padding if isinstance(word_padding, Padding) else Padding(*word_padding)
+        verse_number_padding = verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
 
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "max_rows_per_page", max_rows_per_page)
@@ -331,26 +385,25 @@ class WordConfig:
         object.__setattr__(self, "annotation_font_size", annotation_font_size)
         object.__setattr__(self, "word_color", word_color)
         object.__setattr__(self, "annotation_color", annotation_color)
-        object.__setattr__(self, "annotation_font_path", resolved_path)
+        object.__setattr__(self, "annotation_font_path", resolved_font_path)
         object.__setattr__(self, "background_color", background_color)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class TextConfig:
-    """Configuration for text rendering.
+    """Configuration for translation/rich text rendering.
 
-    For variable fonts (like Inter), bold and italic variants are handled
-    via font variations (weight axis) and separate italic font files.
-    Bold weight (700) is applied via font_variation when rendering.
+    Bold weight is applied via font variations (wght axis) during rendering.
     """
 
-    font_size: int = 36
-    color: Color = (255, 255, 255, 255)
-    font_path: Path | None = field(default=None, init=False)
-    italic_font_path: Path | None = field(default=None, init=False)
-    line_spacing: int = 10
-    height: int | None = None
-    max_width: int | None = None
+    font_size: int
+    color: Color
+    font_path: Path
+    italic_font_path: Path
+    line_spacing: int
+    height: int | None
+    max_width: int | None
+    alignment: HorizontalAlignment
 
     def __init__(
         self,
@@ -361,23 +414,18 @@ class TextConfig:
         line_spacing: int = 10,
         height: int | None = None,
         max_width: int | None = None,
+        alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER,
     ):
-        """Initialize TextConfig with resolved font paths.
+        """Initialize TextConfig with resolved font paths."""
 
-        Note: bold_font_path and bold_italic_font_path parameters are deprecated.
-        Bold weight is now applied via font variations (wght axis) during rendering.
-        """
-        from quranmedialib.resources import get_font_path
-
-        def _resolve_path(path: Path | str | FontResource | None, default: str) -> Path:
-            """Resolve a font path to a Path object."""
+        def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
-                return get_font_path(default)
-            elif isinstance(path, FontResource):
-                return path.path
-            elif isinstance(path, str):
-                return Path(path)
-            return path
+                return get_font_path(default_filename)
+            return path.path if isinstance(path, FontResource) else Path(path)
+
+        # Resolve alignment
+        if isinstance(alignment, str):
+            alignment = HorizontalAlignment(alignment.lower())
 
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "color", color)
@@ -386,11 +434,16 @@ class TextConfig:
         object.__setattr__(self, "line_spacing", line_spacing)
         object.__setattr__(self, "height", height)
         object.__setattr__(self, "max_width", max_width)
+        object.__setattr__(self, "alignment", alignment)
 
 
 # === Text Rendering Types ===
+
+
 @dataclass(frozen=True)
 class StyledWord:
+    """A word with specific styling applied, ready for rendering."""
+
     text: str
     font: ImageFont.ImageFont
     color: Color
@@ -400,11 +453,14 @@ class StyledWord:
 
 
 class Line:
+    """A collection of styled words representing a single line of text."""
+
     def __init__(self):
         self.words: list[StyledWord] = []
         self.width: int = 0
 
     def add_word(self, word: StyledWord, space_width: int):
+        """Adds a word to the line, accounting for word spacing."""
         if self.words:
             self.width += space_width
         self.words.append(word)
