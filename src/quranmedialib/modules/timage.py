@@ -7,6 +7,7 @@ inverted-pyramid wrapping, and configurable alignment.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from typing import NamedTuple
@@ -89,6 +90,15 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
 
     For variable fonts, uses font variations (weight axis) instead of separate
     font files where possible.
+
+    Args:
+        flags: String containing style flags (e.g., "b", "i", "bi").
+        config: Text configuration containing font paths and size.
+
+    Returns:
+        tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, bool]: A tuple containing
+        the selected font object and a boolean indicating whether bold simulation
+        is required.
     """
     wants_bold = "b" in flags
     wants_italic = "i" in flags
@@ -103,10 +113,43 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
     simulate_bold = False
     if wants_bold:
         try:
-            # Inter variable font uses 'wght' axis (700 for bold).
-            font.set_variation_by_axes([700])
-        except (ValueError, OSError):
-            # Fallback to stroke-based bold simulation if font is not variable.
+            # First attempt: Try setting bold via named instance (most reliable for complex fonts)
+            # Inter uses "Bold" or "Bold Italic" etc.
+            target_name = "Bold Italic" if wants_italic else "Bold"
+            found = False
+            with contextlib.suppress(AttributeError, OSError):
+                # Iterate through available instances to find a matching one (case-insensitive)
+                for variation_name in font.get_variation_names():
+                    # Names can be bytes or str depending on PIL/FreeType version
+                    name_str = variation_name.decode("utf-8") if isinstance(variation_name, bytes) else str(variation_name)
+                    if target_name.lower() in name_str.lower():
+                        font.set_variation_by_name(variation_name)
+                        found = True
+                        break
+            if not found:
+                # Second attempt: Search for Weight/wght axis and set it manually
+                with contextlib.suppress(AttributeError, KeyError, OSError):
+                    axes = font.get_variation_axes()
+                    for i, axis in enumerate(axes):
+                        name_val = axis.get("name", b"")
+                        if isinstance(name_val, bytes):
+                            name_val = name_val.decode("utf-8")
+                        tag_val = axis.get("tag", "")
+
+                        if "weight" in name_val.lower() or tag_val == "wght":
+                            # PIL's set_variation_by_axes typically requires all axis values
+                            vals = [a["default"] for a in axes]
+                            vals[i] = 700  # Set Weight to 700 (Bold)
+                            font.set_variation_by_axes(vals)
+                            found = True
+                            break
+            if not found:
+                # Final fallback: Use stroke-based bold simulation
+                logger.warning(f"Could not find native Bold variation for font '{base_path_str}'. Falling back to stroke-based bold simulation.")
+                simulate_bold = True
+
+        except Exception as e:
+            logger.warning(f"Failed to apply bold style to font '{base_path_str}': {e}. Falling back to simulation.")
             simulate_bold = True
 
     return font, simulate_bold
@@ -133,9 +176,11 @@ def _parse_hex_color(hex_col: str, default_color: tuple[int, int, int, int]) -> 
 def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -> list[StyledWord]:
     """Parses a string with multiple tags into StyledWord objects for layout.
 
-    Tags follow the format: #flags#hex#text#
+    Tags follow the format: #flags#hex#content#
+    Whitespaces are preserved as explicit StyledWord tokens.
     """
     styled_words = []
+    # This pattern captures tags (#flags#hex#content#)
     tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
 
     matches = list(tag_pattern.finditer(text))
@@ -148,14 +193,18 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
         font, simulate_bold = _get_font(flags, config)
         is_transparent = color[3] == 0
 
-        words = chunk.split()
-        for word_text in words:
-            width = int(draw.textlength(word_text, font=font))
+        # Tokenize by non-whitespace and whitespace to preserve all original spacing
+        tokens = re.findall(r"\S+|\s+", chunk)
+        for word_text in tokens:
+            # PIL.textlength fails on multiline text. We treat all whitespaces (including \n)
+            # as horizontal space for measurement and wrapping purposes.
+            measure_text = word_text.replace("\n", " ")
+            width = int(draw.textlength(measure_text, font=font))
             styled_words.append(StyledWord(word_text, font, color, width, is_transparent, simulate_bold))
 
     for match in matches:
-        # 1. Plain text before this tag
-        plain = text[last_end : match.start()].strip()
+        # 1. Plain text before this tag (preserving all characters including leading/trailing spaces)
+        plain = text[last_end : match.start()]
         if plain:
             add_text_chunk(plain, "", config.color)
 
@@ -163,73 +212,106 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
         hex_col = match.group(2)
         content = match.group(3)
 
-        # 2. Parse tag color
+        # 2. Parse tag color and add content
         color = _parse_hex_color(hex_col, config.color)
         add_text_chunk(content, flags, color)
         last_end = match.end()
 
     # Remaining text after the last tag
-    remaining = text[last_end:].strip()
+    remaining = text[last_end:]
     if remaining:
         add_text_chunk(remaining, "", config.color)
 
     return styled_words
 
 
-def _wrap_rich_text_greedy(styled_words: list[StyledWord], space_width: int, max_width: int) -> list[Line]:
-    """Standard greedy wrapping logic (Lines are filled until max_width)."""
+def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> list[Line]:
+    """Standard greedy wrapping logic (Lines are filled until max_width).
+
+    Since whitespaces are explicit tokens, we:
+    1. Skip leading whitespaces at the start of each line.
+    2. Trim trailing whitespaces at the end of each line for visual consistency.
+    """
     lines = []
     current_line = Line()
 
     for word in styled_words:
-        extra = space_width if current_line.words else 0
-        if current_line.width + extra + word.width > max_width:
-            if current_line.words:
-                lines.append(current_line)
-            current_line = Line()
-        current_line.add_word(word, space_width)
+        is_space = word.text.isspace()
 
+        # Rule 1: Never start a line with a whitespace token
+        if not current_line.words and is_space:
+            continue
+
+        if current_line.width + word.width > max_width:
+            if current_line.words:
+                # Rule 2: Trim trailing whitespaces from finished lines
+                if current_line.words[-1].text.isspace():
+                    last_space = current_line.words.pop()
+                    current_line.width -= last_space.width
+                lines.append(current_line)
+
+            # Start a new line
+            current_line = Line()
+            # If the word caused a wrap and it's a whitespace, skip it for the new line
+            if is_space:
+                continue
+
+        # Add the word (space_width set to 0 as tokens contain their own spaces)
+        current_line.add_word(word, 0)
+
+    # Clean up the last line
     if current_line.words:
+        if current_line.words[-1].text.isspace():
+            current_line.words.pop()
         lines.append(current_line)
     return lines
 
 
-def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, max_width: int) -> list[Line]:
+def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int) -> list[Line]:
     """Wraps text into a balanced 'Inverted Pyramid' shape using Dynamic Programming.
 
-    Rules:
-    1. Line[i].width >= Line[i+1].width (Inverted Pyramid)
-    2. Minimize the width of the longest line (Balanced)
-    3. Minimize quadratic variance to avoid 'ragged' edges.
+    This version handles explicit whitespace tokens by trimming them from line width
+    calculations to ensure a cleanly centered visual distribution.
     """
     if not styled_words:
         return []
 
     # Estimate line count using greedy as a reference
-    greedy_lines = _wrap_rich_text_greedy(styled_words, space_width, max_width)
+    greedy_lines = _wrap_rich_text_greedy(styled_words, max_width)
     if len(greedy_lines) <= 1:
         return greedy_lines
 
     n = len(styled_words)
-    # Precompute cumulative widths for O(1) row-width calculation.
     cum_widths = [0] * (n + 1)
     for i in range(n):
         cum_widths[i + 1] = cum_widths[i] + styled_words[i].width
 
-    def get_line_width(start_idx: int, end_idx: int) -> int:
+    def get_line_width_normalized(start_idx: int, end_idx: int) -> int:
+        """Calculates line width while trimming leading/trailing whitespaces."""
         if start_idx > end_idx:
             return 0
-        w_sum = cum_widths[end_idx + 1] - cum_widths[start_idx]
-        spaces = max(0, end_idx - start_idx) * space_width
-        return w_sum + spaces
 
-    # dp[i][j] = (min_cost, line_width, prev_word_index)
+        # Adjust start/end to skip whitespace tokens for accurate line width
+        actual_start = start_idx
+        while actual_start <= end_idx and styled_words[actual_start].text.isspace():
+            actual_start += 1
+
+        actual_end = end_idx
+        while actual_end >= actual_start and styled_words[actual_end].text.isspace():
+            actual_end -= 1
+
+        if actual_start > actual_end:
+            return 0
+
+        return cum_widths[actual_end + 1] - cum_widths[actual_start]
+
+    # dp[i][j] = (min_cost, line_width_normalized, prev_word_index)
     max_k = min(n, len(greedy_lines) * 2)
     dp = [[(float("inf"), 0, -1) for _ in range(n)] for _ in range(max_k + 1)]
 
     # Base case: one line
     for j in range(n):
-        w = get_line_width(0, j)
+        w = get_line_width_normalized(0, j)
         if w <= max_width:
             cost = max_width - w  # Favor longer first lines
             dp[1][j] = (float(cost), w, -1)
@@ -239,7 +321,7 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, m
         found_any = False
         for j in range(n):
             for p in range(j - 1, -1, -1):
-                curr_w = get_line_width(p + 1, j)
+                curr_w = get_line_width_normalized(p + 1, j)
                 if curr_w > max_width:
                     break
 
@@ -247,7 +329,6 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, m
                 if prev_cost == float("inf"):
                     continue
 
-                # Inverted Pyramid constraint: current line must be narrower than previous
                 if 0 < curr_w <= prev_w:
                     cost = prev_cost + (prev_w - curr_w) ** 2 + (max_width - curr_w)
                     if cost < dp[i][j][0]:
@@ -256,7 +337,6 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, m
         if not found_any:
             break
 
-    # Find the line count k that successfully reached the last word
     best_i = -1
     for i in range(1, max_k + 1):
         if dp[i][n - 1][0] != float("inf"):
@@ -272,8 +352,19 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], space_width: int, m
     for i in range(best_i, 0, -1):
         prev_j = dp[i][curr_j][2]
         line = Line()
-        for idx in range(prev_j + 1, curr_j + 1):
-            line.add_word(styled_words[idx], space_width)
+
+        # Assemble line while trimming leading/trailing whitespace tokens
+        line_start = prev_j + 1
+        while line_start <= curr_j and styled_words[line_start].text.isspace():
+            line_start += 1
+
+        line_end = curr_j
+        while line_end >= line_start and styled_words[line_end].text.isspace():
+            line_end -= 1
+
+        for idx in range(line_start, line_end + 1):
+            line.add_word(styled_words[idx], 0)
+
         lines.append(line)
         curr_j = prev_j
 
@@ -307,7 +398,6 @@ def _draw_lines(
     lines: list[Line],
     start_y: int,
     max_width: int,
-    space_width: int,
     ascent: int,
     line_height: int,
     config: TextConfig,
@@ -325,9 +415,8 @@ def _draw_lines(
         else:  # LEFT
             current_x = 0
 
-        for i, word in enumerate(line.words):
-            if i > 0:
-                current_x += space_width
+        for word in line.words:
+            # We no longer re-insert space_width; tokens contain their own whitespaces.
             _draw_styled_word(draw, word, (current_x, current_y), ascent)
             current_x += word.width
 
@@ -362,18 +451,19 @@ def get_timage(
     if not styled_words:
         return None
 
-    # Determine space width from default font
+    # Determine space width only for estimating line count if needed,
+    # but tokens now contain their own whitespace characters.
     default_font, _ = _get_font("", config)
-    space_width = int(draw.textlength(" ", font=default_font))
+    # Note: space_width is no longer used for layout as tokens now contain their own whitespace characters.
 
-    # Apply balanced wrapping
-    lines = _wrap_rich_text_balanced(styled_words, space_width, config.max_width)
+    # Apply balanced wrapping (now operates on explicit whitespace tokens)
+    lines = _wrap_rich_text_balanced(styled_words, config.max_width)
     if not lines:
         return None
 
     ascent, descent = default_font.getmetrics()
     line_height = ascent + descent
-    total_text_height = len(lines) * line_height + (len(lines) - 1) * config.line_spacing
+    total_text_height = len(lines) * line_height + (max(0, len(lines) - 1)) * config.line_spacing
 
     # Calculate final canvas dimensions
     actual_max_height = max_height if max_height is not None else config.height
@@ -383,7 +473,7 @@ def get_timage(
     timage_draw = ImageDraw.Draw(timage)
 
     # Render lines onto the new canvas
-    _draw_lines(timage_draw, lines, 0, config.max_width, space_width, ascent, line_height, config)
+    _draw_lines(timage_draw, lines, 0, config.max_width, ascent, line_height, config)
 
     return timage
 
