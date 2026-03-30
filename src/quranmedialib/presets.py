@@ -30,7 +30,7 @@ FONT_INTER_ITALIC = FontResource.from_packaged("inter_italic.ttf", "Inter Italic
 #: Default Quran text database configuration
 DATABASE_QURAN = DatabaseConfig.from_packaged(
     db_name="quran.db",
-    tablename="verses",
+    tablename="ayat",
     surah_col="sura",
     ayah_col="ayah",
     text_col="text",
