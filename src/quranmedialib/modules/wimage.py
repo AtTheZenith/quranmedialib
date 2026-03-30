@@ -6,7 +6,6 @@ customizable font size, color, and padding.
 
 from PIL import Image, ImageDraw, ImageFont
 
-from quranmedialib.resources import get_font_path
 from quranmedialib.types import WordConfig
 
 
@@ -15,12 +14,12 @@ def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
 
     Args:
         text: The Arabic text to render.
-        word_config: Configuration containing font size, colors, and padding.
+        word_config: Configuration containing font size, colors, padding, and font.
 
     Returns:
         A PIL Image containing the rendered text with padding.
     """
-    font = ImageFont.truetype(str(get_font_path("hafs.otf")), word_config.font_size)
+    font = ImageFont.truetype(str(word_config.font.path), word_config.font_size)
 
     # Calculate text dimensions based on metrics and actual bounding box.
     ascent, descent = font.getmetrics()

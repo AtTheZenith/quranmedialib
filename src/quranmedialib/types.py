@@ -338,6 +338,7 @@ class WordConfig:
     annotation_color: Color
     annotation_font_path: Path
     background_color: Color
+    font: FontResource
 
     def __init__(
         self,
@@ -356,8 +357,17 @@ class WordConfig:
         annotation_color: Color = (255, 255, 255, 255),
         annotation_font_path: Path | str | FontResource | None = None,
         background_color: Color = (0, 0, 0, 0),
+        font: FontResource | None = None,
     ):
         """Initialize WordConfig with resolved paths and type-safe layout primitives."""
+        from quranmedialib.presets import FONT_HAFS
+
+        # Resolve font - default to FONT_HAFS if not provided
+        if font is None:
+            resolved_font = FONT_HAFS
+        else:
+            resolved_font = font
+
         # Resolve annotation_font_path
         if annotation_font_path is None:
             resolved_font_path = get_font_path("inter.ttf")
@@ -387,6 +397,7 @@ class WordConfig:
         object.__setattr__(self, "annotation_color", annotation_color)
         object.__setattr__(self, "annotation_font_path", resolved_font_path)
         object.__setattr__(self, "background_color", background_color)
+        object.__setattr__(self, "font", resolved_font)
 
 
 @dataclass(frozen=True, init=False)
