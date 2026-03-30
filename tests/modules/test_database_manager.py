@@ -12,7 +12,7 @@ def test_database_manager():
 
     verse_text = db.get_verse(1, 1)
     print(f"Verse 1:1 text: {verse_text}")
-    assert "بِسْمِ" in verse_text
+    assert "بِسۡمِ" in verse_text
 
     # Test WBW methods (always use "wbw" database)
     wbw_surah = db.get_wbw_from_surah(1)

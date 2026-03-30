@@ -27,7 +27,7 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
     default_font, _ = _get_font("", config)
     space_width = int(draw.textlength(" ", font=default_font))
 
-    lines = _wrap_rich_text_balanced(styled_words, space_width, config.max_width)
+    lines = _wrap_rich_text_balanced(styled_words, config.max_width)
     widths = [line.width for line in lines]
 
     assert len(lines) > 0, "Expected at least one line."
