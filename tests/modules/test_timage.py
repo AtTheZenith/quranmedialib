@@ -32,9 +32,7 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
 
     assert len(lines) > 0, "Expected at least one line."
     for i in range(len(widths) - 1):
-        assert widths[i] >= widths[i + 1], (
-            f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
-        )
+        assert widths[i] >= widths[i + 1], f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
 
     # Save image for human review if a filename is provided
     if filename:
@@ -77,9 +75,9 @@ def test_timage_rendering():
 @pytest.mark.parametrize(
     "name, text, max_width",
     [
-        ("short_pyramid", "This is a short text that will form a pyramid.", 400),
+        ("short", "This is a short text that will form a pyramid.", 400),
         (
-            "lorem_pyramid",
+            "lorem",
             (
                 "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut "
                 "labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco "
@@ -88,13 +86,14 @@ def test_timage_rendering():
             ),
             1200,
         ),
-        ("single_word", "Short", 400),
-        ("long_words_pyramid", "A very very long single word that might break things", 300),
+        ("single", "Short", 400),
+        ("long_word", "A very very long single word that might break things", 300),
     ],
+    ids=["short", "lorem", "single", "long_word"],
 )
-def test_timage_pyramid_logic(name, text, max_width):
+def test_timage_pyramid(name, text, max_width):
     """
-    Formally tests the 'Balanced Inverted Pyramid' logic across different scales.
+    Tests the 'Balanced Inverted Pyramid' logic across different scales.
     """
     widths = _verify_pyramid(text, max_width, filename=name)
     if len(widths) > 1:
@@ -104,4 +103,4 @@ def test_timage_pyramid_logic(name, text, max_width):
 if __name__ == "__main__":
     # Allow running manually
     test_timage_rendering()
-    test_timage_pyramid_logic("This is a manual run test.", 300)
+    test_timage_pyramid("Manual test", 300)
