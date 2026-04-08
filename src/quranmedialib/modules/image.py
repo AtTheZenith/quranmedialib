@@ -1,5 +1,7 @@
 """Image processing utilities for QuranMediaLib."""
 
+from typing import Literal
+
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter
 
 from quranmedialib.types import Color, Padding
@@ -108,7 +110,12 @@ def _prepare_color_base(img_rgba: Image.Image, img_rgb: Image.Image, alpha: Imag
     return color_base
 
 
-def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.Image:
+def glow(
+    image: Image.Image,
+    strength: float = 1.0,
+    radius: int = 50,
+    quality: Literal["fast", "balanced", "quality"] = "balanced",
+) -> Image.Image:
     """Applies a soft, radiant glow effect to the image.
 
     This function mimics a photorealistic glow by creating a multi-scale blur
@@ -120,9 +127,18 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
     - For opaque images (RGB), it uses additive screen blending to ensure
     vibrancy without flattening highlights.
 
+    **Quality Modes:**
+    - ``"fast"``: 1-pass BoxBlur per scale. Fastest but may show boxy artifacts.
+    - ``"balanced"``: BoxBlur at 1.2x radius per scale. Smoother than fast with
+      similar performance. Recommended default.
+    - ``"quality"``: GaussianBlur per scale. True Gaussian distribution,
+      smoothest results but slower for large radii.
+
     **Performance Note:**
     Large images combined with large radius values (> 100) can be computationally
-    expensive due to multiple blur passes.
+    expensive due to multiple blur passes. The "fast" and "balanced" modes use
+    BoxBlur which is O(1) per pixel, while "quality" uses GaussianBlur which is
+    O(radius) per pixel.
 
     Args:
         image: The input PIL Image to process.
@@ -130,6 +146,9 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
             vibrant/opaque, while values < 1.0 fade it out. Defaults to 1.0.
         radius: The base spread of the glow in pixels. Larger values
             create a wider, softer falloff. Defaults to 50.
+        quality: The blur quality mode. "fast" uses BoxBlur at base radius,
+            "balanced" uses BoxBlur at 1.2x radius for smoother results,
+            and "quality" uses GaussianBlur. Defaults to "balanced".
 
     Returns:
         A new PIL Image with the glow effect applied, preserving the
@@ -186,14 +205,27 @@ def glow(image: Image.Image, strength: float = 1.0, radius: int = 50) -> Image.I
     # Downscale alpha channel to match color_base size
     alpha_small = None if is_opaque else alpha.resize(glow_color_size, resample=Image.Resampling.BOX)
 
+    # Determine blur strategy based on quality mode
+    # fast: 1 pass of BoxBlur at base radius
+    # balanced: 1 pass of BoxBlur at 1.2x radius (smoother without extra brightness)
+    # quality: 1 pass of GaussianBlur at base radius
+    radius_multipliers = {"fast": 1.0, "balanced": 1.2, "quality": 1.0}
+    radius_mult = radius_multipliers[quality]
+    use_gaussian = quality == "quality"
+
     for r in radii:
-        # Color component: BoxBlur is O(1) vs GaussianBlur O(radius²)
-        blur_c = color_base.filter(ImageFilter.BoxBlur(r))
+        adjusted_r = max(1, int(r * radius_mult))
+        if use_gaussian:
+            blur_c = color_base.filter(ImageFilter.GaussianBlur(adjusted_r))
+        else:
+            blur_c = color_base.filter(ImageFilter.BoxBlur(adjusted_r))
         glow_color = ImageChops.screen(glow_color, blur_c)
 
         if glow_alpha is not None:
-            # Alpha component: Use 'lighter' (MAX) blend to maximize spread
-            blur_a = alpha_small.filter(ImageFilter.BoxBlur(r))
+            if use_gaussian:
+                blur_a = alpha_small.filter(ImageFilter.GaussianBlur(adjusted_r))
+            else:
+                blur_a = alpha_small.filter(ImageFilter.BoxBlur(adjusted_r))
             glow_alpha = ImageChops.lighter(glow_alpha, blur_a)
 
     # 3. Upscale glow result to original size
