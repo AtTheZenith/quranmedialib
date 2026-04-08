@@ -43,7 +43,18 @@ class VerseRangeWorkflow(BaseWorkflow):
         annotate: bool,
         db: DatabaseManager,
     ) -> list[Image.Image]:
-        """Generates and optionally annotates word images for a specific verse."""
+        """Generates and optionally annotates word images for a specific verse.
+
+        Args:
+            surah: Surah number (1-114).
+            ayah: Ayah (verse) number (1-indexed).
+            verse_words: List of Arabic word strings in the verse.
+            annotate: Whether to annotate words with word-by-word translations.
+            db: DatabaseManager instance for fetching translations.
+
+        Returns:
+            list[Image.Image]: List of word images (annotated or plain).
+        """
         word_images = [get_wimage(word, self.word_config) for word in verse_words]
 
         if not annotate:
@@ -69,7 +80,14 @@ class VerseRangeWorkflow(BaseWorkflow):
         self,
         translation_images: list[Image.Image | None],
     ) -> list[Image.Image]:
-        """Creates dedicated full-size pages for each translation image."""
+        """Creates dedicated full-size pages for each translation image.
+
+        Args:
+            translation_images: List of translation images (or None for empty slots).
+
+        Returns:
+            list[Image.Image]: List of canvas images with translations centered.
+        """
         pages = []
         for trans_img in translation_images:
             if not trans_img:
@@ -106,7 +124,20 @@ class VerseRangeWorkflow(BaseWorkflow):
         end_ayah: int | None = None,
         **kwargs,
     ) -> Iterator[list[Image.Image]]:
-        """Processes a range of verses and yields lists of generated images (pages)."""
+        """Processes a range of verses and yields lists of generated images (pages).
+
+        Args:
+            surah: Surah number (1-114).
+            translations: Nested list of translation texts [verse_index][page_index].
+            start_ayah: Starting verse number (1-indexed).
+            end_ayah: Ending verse number (inclusive). If None, equals start_ayah.
+            **kwargs:
+                - annotate: bool (default: True) - Whether to annotate words.
+                - separate_translations: bool (default: False) - Separate translation pages.
+
+        Yields:
+            list[Image.Image]: List of page images for each verse in the range.
+        """
         if end_ayah is None:
             end_ayah = start_ayah
 
@@ -128,7 +159,19 @@ class VerseRangeWorkflow(BaseWorkflow):
         annotate: bool = True,
         separate_translations: bool = False,
     ) -> Iterator[list[Image.Image]]:
-        """Internal iterator implementation for processing a verse range."""
+        """Internal iterator implementation for processing a verse range.
+
+        Args:
+            surah: Surah number (1-114).
+            start_verse: Starting verse number (1-indexed).
+            end_verse: Ending verse number (inclusive).
+            translations: Nested list of translation texts [verse_index][page_index].
+            annotate: Whether to annotate words with word-by-word translations.
+            separate_translations: If True, render translations on separate pages.
+
+        Yields:
+            list[Image.Image]: List of page images for each verse in the range.
+        """
         db = DatabaseManager()
         arabic_verses = db.get_verses_from_surah(surah)
 

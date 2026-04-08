@@ -1,40 +1,44 @@
-"""QuranMediaLib - Media producing library for Quranic texts.
+"""QuranMediaLib - Generate beautiful Quranic verse images with ease.
 
-This package provides tools for rendering Quranic Arabic text and translations
-into images with customizable layouts and styling.
+QuranMediaLib is a media generation library for rendering Quranic Arabic text
+and translations into customizable, high-quality images with professional layouts.
+
+Quick Start:
+    >>> from quranmedialib import DatabaseManager, VerseWorkflow, LANDSCAPE_PRESET
+    >>> db = DatabaseManager()
+    >>> layout, text_cfg, word_cfg = LANDSCAPE_PRESET["default"]["1080p"]
+    >>> workflow = VerseWorkflow(layout, text_cfg, word_cfg)
+    >>> pages = list(workflow.get_iterator(surah=1, ayah=1, translations=["In the name of Allah"]))
+    >>> pages[0][0].save("output.png")  # Save first page
+    >>> db.close()
+
+Key Features:
+    - Render Arabic Quranic text with customizable fonts and colors
+    - Add word-by-word translations and annotations
+    - Multi-page layout engine with right-to-left text support
+    - Rich text formatting for translations (bold, italic, colors)
+    - Image effects: glow, colorization, padding
+    - Pre-configured presets for common formats (landscape, story, square)
 
 Package Structure:
-    - quranmedialib.types: Configuration dataclasses (LayoutConfig, WordConfig, TextConfig, etc.)
-    - quranmedialib.presets: Pre-configured font and layout presets
-    - quranmedialib.database_manager: Stateful database connection manager
-    - quranmedialib.resources: Asset path resolution via importlib.resources
-    - quranmedialib.modules: Core rendering modules
-        - wimage: Arabic word rendering
-        - timage: Translation text rendering
-        - framer: Multi-page layout engine
-        - image: Image effects (glow, color, pad)
-        - annotation: Word-by-word annotation
-        - verse_number: Verse number rendering
-    - quranmedialib.workflows: High-level workflows
-        - surah: Surah-level processing
-        - verse_range: Verse range processing
-        - isolate_words: Word isolation workflows
-        - verse: Single verse rendering with translation
+    types:         Configuration dataclasses (LayoutConfig, WordConfig, etc.)
+    presets:       Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
+    database_manager:  Stateful SQLite connection manager for Quran databases
+    resources:     Asset path resolution (fonts, databases) via importlib.resources
+    modules:       Core rendering modules
+        wimage:        Arabic word rendering
+        timage:        Translation text rendering with rich formatting
+        framer:        Multi-page layout engine (RTL support)
+        image:         Image effects (glow, color, padding)
+        annotation:    Word-by-word annotation with translations
+        verse_number:  Verse number badge rendering
+    workflows:     High-level workflow classes
+        verse:         Single verse rendering with translation
+        surah:         Process entire surahs
+        verse_range:   Process verse ranges
+        isolate_words: Isolate individual words in context
 
-Example:
-    from quranmedialib import DatabaseManager
-    from quranmedialib.modules.wimage import get_wimage
-    from quranmedialib.modules.framer import frame
-    from quranmedialib.presets import LANDSCAPE_PRESET
-
-    db = DatabaseManager()
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-
-    # Render a word
-    word_img = get_wimage("الله", word_config)
-
-    # Get verses from a surah
-    verses = db.get_verses_from_surah(1)
+For more examples, see the demo.py file and README.md.
 """
 
 __version__ = "0.1.0"

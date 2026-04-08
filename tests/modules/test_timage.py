@@ -91,7 +91,7 @@ def test_timage_rendering():
     ],
     ids=["short", "lorem", "single", "long_word"],
 )
-def test_timage_pyramid(name, text, max_width):
+def test_timage_pyramid(name: str, text: str, max_width: int) -> None:
     """
     Tests the 'Balanced Inverted Pyramid' logic across different scales.
     """
@@ -103,4 +103,4 @@ def test_timage_pyramid(name, text, max_width):
 if __name__ == "__main__":
     # Allow running manually
     test_timage_rendering()
-    test_timage_pyramid("Manual test", 300)
+    _verify_pyramid("This is a short text that will form a pyramid.", 300, filename="manual")

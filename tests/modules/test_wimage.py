@@ -1,3 +1,9 @@
+"""Tests for the wimage module (Arabic word rendering).
+
+This module contains tests for verifying Arabic word image generation
+with proper font rendering and configuration.
+"""
+
 import os
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
@@ -6,7 +12,7 @@ from quranmedialib.modules.wimage import get_wimage
 db = DatabaseManager()
 
 
-def test_wimage():
+def test_wimage() -> None:
     print("\nRunning test_wimage...")
     surah = 2
     verses = db.get_verses_from_surah(surah)
