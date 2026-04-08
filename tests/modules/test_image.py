@@ -1,3 +1,12 @@
+"""Tests for the image module (image effects and transformations).
+
+This module contains tests for verifying image processing functions including:
+- Color transformation (luminance-based colorization)
+- Padding operations (4-directional margins)
+- Glow effects (multiple quality modes, RGBA/RGB handling)
+- Brightness analysis across different glow configurations
+"""
+
 import os
 import statistics
 
@@ -8,7 +17,7 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import FontResource, Padding, WordConfig
 
 
-def _save_test_image(img: Image.Image, filename: str):
+def _save_test_image(img: Image.Image, filename: str) -> None:
     output_dir = "./output/test/image"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, filename)
@@ -28,7 +37,7 @@ def _create_default_word_config() -> WordConfig:
     )
 
 
-def _analyze_image_brightness(filepath):
+def _analyze_image_brightness(filepath: str) -> dict[str, float]:
     """Calculate comprehensive brightness statistics of an image.
 
     Returns a dict with mean, median, q1, q3, iqr, p10, p90, min, max, range, stdev.
@@ -77,12 +86,12 @@ def _analyze_image_brightness(filepath):
     }
 
 
-def _print_stats(label, stats):
+def _print_stats(label: str, stats: dict[str, float]) -> None:
     """Print brightness statistics in a formatted way."""
     print(f"  {label:10s}: mean={stats['mean']:6.2f}, median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, stdev={stats['stdev']:6.2f}")
 
 
-def test_color():
+def test_color() -> None:
     print("Testing color function...")
     test_image = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
     colored_image = color(test_image)
@@ -90,7 +99,7 @@ def test_color():
     print("test_color passed.")
 
 
-def test_pad():
+def test_pad() -> None:
     print("Testing pad function...")
     test_image = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
     padded_image = pad(test_image)
@@ -98,7 +107,7 @@ def test_pad():
     print("test_pad passed.")
 
 
-def test_glow():
+def test_glow() -> None:
     print("Testing glow function...")
     # Transparent background with a white circle
     test_image = Image.new("RGBA", (200, 200), color=(0, 0, 0, 0))
@@ -125,7 +134,7 @@ def test_glow():
     print("test_glow passed.")
 
 
-def test_glow_quality_modes():
+def test_glow_quality_modes() -> None:
     """Test all three quality modes with both RGB and RGBA images."""
     print("Testing glow quality modes...")
 
@@ -160,7 +169,7 @@ def test_glow_quality_modes():
     print("test_glow_quality_modes passed.")
 
 
-def test_glow_on_padded_wimage():
+def test_glow_on_padded_wimage() -> None:
     """Demonstrate glow effect on padded word images with all quality modes."""
     print("Testing glow on padded wimage...")
 
@@ -179,7 +188,7 @@ def test_glow_on_padded_wimage():
     print("test_glow_on_padded_wimage passed.")
 
 
-def test_glow_wimage_comparison():
+def test_glow_wimage_comparison() -> None:
     """Create a side-by-side comparison of all glow quality modes on wimage."""
     print("Testing glow wimage comparison...")
 
@@ -212,7 +221,7 @@ def test_glow_wimage_comparison():
     print("test_glow_wimage_comparison passed.")
 
 
-def test_glow_brightness_analysis():
+def test_glow_brightness_analysis() -> None:
     """Analyze and print comprehensive brightness statistics for all glow quality modes.
 
     This test generates the glow images (if not already present) and then analyzes

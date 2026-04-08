@@ -156,7 +156,15 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
 
 
 def _parse_hex_color(hex_col: str, default_color: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
-    """Parses a hex color string into an RGBA tuple."""
+    """Parses a hex color string into an RGBA tuple.
+
+    Args:
+        hex_col: Hex color string (6 or 8 characters, with or without alpha).
+        default_color: Fallback RGBA color tuple if parsing fails.
+
+    Returns:
+        tuple[int, int, int, int]: RGBA color values (0-255 for each channel).
+    """
     if not hex_col:
         return default_color
 
@@ -178,6 +186,14 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
 
     Tags follow the format: #flags#hex#content#
     Whitespaces are preserved as explicit StyledWord tokens.
+
+    Args:
+        text: Rich text string with formatting tags.
+        config: Text configuration containing font paths and colors.
+        draw: ImageDraw instance for measuring text widths.
+
+    Returns:
+        list[StyledWord]: List of styled word objects ready for rendering.
     """
     styled_words = []
     # This pattern captures tags (#flags#hex#content#)
@@ -231,6 +247,13 @@ def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> li
     Since whitespaces are explicit tokens, we:
     1. Skip leading whitespaces at the start of each line.
     2. Trim trailing whitespaces at the end of each line for visual consistency.
+
+    Args:
+        styled_words: List of styled word objects with explicit whitespace tokens.
+        max_width: Maximum line width in pixels.
+
+    Returns:
+        list[Line]: List of line objects containing wrapped words.
     """
     lines = []
     current_line = Line()
@@ -272,6 +295,13 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int) -> 
 
     This version handles explicit whitespace tokens by trimming them from line width
     calculations to ensure a cleanly centered visual distribution.
+
+    Args:
+        styled_words: List of styled word objects with explicit whitespace tokens.
+        max_width: Maximum line width in pixels.
+
+    Returns:
+        list[Line]: List of line objects forming an inverted pyramid shape.
     """
     if not styled_words:
         return []
@@ -376,8 +406,15 @@ def _draw_styled_word(
     word: StyledWord,
     pos: tuple[int, int],
     ascent: int,
-):
-    """Draws a single styled word, handling bold simulation and transparency."""
+) -> None:
+    """Draws a single styled word, handling bold simulation and transparency.
+
+    Args:
+        draw: ImageDraw instance for rendering text.
+        word: StyledWord object containing text, font, color, and styling.
+        pos: (x, y) position for the bottom-left anchor of the text.
+        ascent: Font ascent value for baseline alignment.
+    """
     if word.is_transparent:
         return
 
@@ -402,7 +439,17 @@ def _draw_lines(
     line_height: int,
     config: TextConfig,
 ) -> None:
-    """Draws multiple lines of text onto the canvas, respecting horizontal alignment."""
+    """Draws multiple lines of text onto the canvas, respecting horizontal alignment.
+
+    Args:
+        draw: ImageDraw instance for rendering text.
+        lines: List of Line objects containing styled words.
+        start_y: Starting Y coordinate for the first line.
+        max_width: Canvas width for alignment calculations.
+        ascent: Font ascent value for baseline alignment.
+        line_height: Height of each line (ascent + descent).
+        config: Text configuration containing alignment settings.
+    """
     current_y = start_y
 
     for line in lines:
@@ -479,5 +526,14 @@ def get_timage(
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
-    """Measures the advance width of a given text string."""
+    """Measures the advance width of a given text string.
+
+    Args:
+        draw: ImageDraw instance for measuring text.
+        text: Text string to measure.
+        font: Font object for rendering.
+
+    Returns:
+        int: Text width in pixels.
+    """
     return int(draw.textlength(text, font=font))

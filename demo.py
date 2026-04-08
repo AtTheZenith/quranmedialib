@@ -1,3 +1,14 @@
+"""Demo script showcasing QuranMediaLib workflows and features.
+
+This script demonstrates various usage patterns including:
+- Running SurahWorkflow with different presets (landscape, story, square)
+- Processing verses with and without annotations
+- Working with Arabic-only, translation-only, and combined modes
+- Applying glow effects and saving output images
+
+Run this script to generate sample images for all preset configurations.
+"""
+
 import os
 from typing import Literal
 

@@ -1,10 +1,17 @@
+"""Tests for the IsolateWordsWorkflow class.
+
+This module contains tests for verifying the word isolation workflow that
+renders each word of a verse in its layout context while keeping other words
+as transparent placeholders.
+"""
+
 import os
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
 
-def save_result(output_dir, file_name, results, index):
+def save_result(output_dir: str, file_name: str, results: list, index: int) -> None:
     # Explicitly save a selection of results to verify
     # This avoids loops and makes the test's intent clear
 
@@ -13,7 +20,7 @@ def save_result(output_dir, file_name, results, index):
     print(f"Saved {save_path}")
 
 
-def test_isolate_words():
+def test_isolate_words() -> None:
     print("Starting test_isolate_words...")
     db = DatabaseManager()
 

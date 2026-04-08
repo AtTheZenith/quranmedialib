@@ -1,10 +1,16 @@
+"""Tests for the VerseRangeWorkflow class.
+
+This module contains tests for verifying the verse range workflow that processes
+a range of verses sequentially with Arabic text and translations.
+"""
+
 import os
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
 
-def test_verse_range():
+def test_verse_range() -> None:
     print("Starting test_verse_range (Surah 108 - Per-Verse Iteration)...")
 
     db = DatabaseManager()

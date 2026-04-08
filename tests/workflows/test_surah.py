@@ -1,3 +1,10 @@
+"""Tests for the SurahWorkflow class.
+
+This module contains tests for verifying the surah-level workflow that processes
+entire surahs with Arabic text and translations, including stress testing with
+large surahs (e.g., Al-Baqarah with 286 verses).
+"""
+
 import os
 import time
 
@@ -5,7 +12,7 @@ from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.surah import SurahWorkflow
 
 
-def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: str):
+def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: str) -> None:
     print(f"\n--- Running Scenario: {folder_name} (Separate: {separate_translations}) ---")
     start_time = time.perf_counter()
     db = DatabaseManager()
@@ -55,7 +62,7 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     print(f"Scenario '{folder_name}' complete. Saved images for {verse_count} verses. Elapsed: {elapsed_time:.2f}s")
 
 
-def test_surah_stress():
+def test_surah_stress() -> None:
     print("Starting Stress Test for Surah Workflow...")
     surah_num = 2  # Al-Baqarah
 

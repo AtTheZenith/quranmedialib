@@ -1,13 +1,21 @@
+"""Tests for the annotation module (word-by-word annotation rendering).
+
+This module contains tests for verifying single word annotation and batch
+annotation with word-by-word translations, including batching behavior
+when consecutive words have identical translations.
+"""
+
 import os
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.modules.annotation import annotate_word, annotate_words
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.types import WordConfig
 
 db = DatabaseManager()
 
 
-def test_annotate_word():
+def test_annotate_word() -> None:
     print("\nRunning test_annotate_word...")
     surah = 1
     ayah = 1
@@ -36,7 +44,7 @@ def test_annotate_word():
     print("test_annotate_word completed successfully.")
 
 
-def _test_set(surah, ayah, word_range, word_config):
+def _test_set(surah: int, ayah: int, word_range: tuple[int, int], word_config: WordConfig) -> list:
     # Fetch all words
     verse_text = db.get_verse(surah, ayah)
     words = verse_text.split()
@@ -54,7 +62,7 @@ def _test_set(surah, ayah, word_range, word_config):
     return annotated_images
 
 
-def test_annotate_words():
+def test_annotate_words() -> None:
     print("\nRunning test_annotate_words...")
 
     output_dir = "./output/test/annotation"
