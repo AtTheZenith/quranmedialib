@@ -84,17 +84,20 @@ class IsolateWordsWorkflow(BaseWorkflow):
         parsed_trans = prepare_translation_segments(translations)
         norm_highlight = normalize_highlight_style(highlight_style)
 
+        # Pre-compute all formatted translation strings
+        formatted_translations = [format_isolation_text(parsed_trans, i, norm_highlight) for i in range(total_items)]
+
         for i in range(total_items):
-            # Create image list: all items except i-th are transparent placeholders
-            isolated_images = list(transparent_placeholders)
-            isolated_images[i] = annotated_images[i]
+            # Create image list efficiently: use list comprehension with index check
+            isolated_images = [
+                annotated_images[i] if j == i else transparent_placeholders[j] for j in range(total_items)
+            ]
 
             # Prepare translation image
             t_img = None
-            if i < len(parsed_trans):
-                full_trans_formatted = format_isolation_text(parsed_trans, i, norm_highlight)
+            if i < len(formatted_translations):
                 t_img = get_timage(
-                    full_trans_formatted,
+                    formatted_translations[i],
                     self.text_config,
                 )
 

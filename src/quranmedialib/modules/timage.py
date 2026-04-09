@@ -14,6 +14,7 @@ from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import (
     HorizontalAlignment,
     Line,
@@ -23,6 +24,18 @@ from quranmedialib.types import (
 
 # Logger setup
 logger = logging.getLogger(__name__)
+
+# Module-level regex patterns to avoid repeated compilation
+_SEGMENT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
+_RICH_TEXT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
+
+# Module-level singleton for text measurement (avoids creating dummy images per call)
+_MEASURE_IMG = Image.new("RGBA", (1, 1))
+_MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
+
+# Cache for bold variation names to avoid repeated get_variation_names() iteration
+# Maps font_path -> variation_name or None if not found
+_BOLD_VARIATION_CACHE: dict[str, str | None] = {}
 
 
 class ParsedSegment(NamedTuple):
@@ -48,11 +61,10 @@ def normalize_highlight_style(style: str) -> str:
 
 def prepare_translation_segments(translation: list[str]) -> list[ParsedSegment]:
     """Pre-parses translation segments to avoid redundant regex searches in loops."""
-    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
     parsed = []
 
     for segment in translation:
-        if match := tag_pattern.search(segment):
+        if match := _SEGMENT_TAG_PATTERN.search(segment):
             content = match[3].rstrip("#")
             parsed.append(ParsedSegment(match[1], match[2], content, True))
         else:
@@ -107,11 +119,22 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
     base_path = config.italic_font_path if wants_italic else config.font_path
     base_path_str = str(base_path)
 
-    # Load the font
-    font = ImageFont.truetype(base_path_str, config.font_size)
+    # Load the font using centralized cache
+    font = get_font(base_path_str, config.font_size)
 
     simulate_bold = False
     if wants_bold:
+        # Check cache for bold variation name
+        if base_path_str in _BOLD_VARIATION_CACHE:
+            cached_variation = _BOLD_VARIATION_CACHE[base_path_str]
+            if cached_variation is not None:
+                try:
+                    font.set_variation_by_name(cached_variation)
+                    return font, False
+                except (AttributeError, OSError):
+                    # Cache might be stale or font state changed, fall through to re-detect
+                    pass
+
         try:
             # First attempt: Try setting bold via named instance (most reliable for complex fonts)
             # Inter uses "Bold" or "Bold Italic" etc.
@@ -121,10 +144,16 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                 # Iterate through available instances to find a matching one (case-insensitive)
                 for variation_name in font.get_variation_names():
                     # Names can be bytes or str depending on PIL/FreeType version
-                    name_str = variation_name.decode("utf-8") if isinstance(variation_name, bytes) else str(variation_name)
+                    name_str = (
+                        variation_name.decode("utf-8") if isinstance(variation_name, bytes) else str(variation_name)
+                    )
                     if target_name.lower() in name_str.lower():
                         font.set_variation_by_name(variation_name)
                         found = True
+                        # Cache the successful variation name
+                        _BOLD_VARIATION_CACHE[base_path_str] = (
+                            variation_name if isinstance(variation_name, str) else variation_name.decode("utf-8")
+                        )
                         break
             if not found:
                 # Second attempt: Search for Weight/wght axis and set it manually
@@ -142,15 +171,23 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                             vals[i] = 700  # Set Weight to 700 (Bold)
                             font.set_variation_by_axes(vals)
                             found = True
+                            # Cache that we used axis-based approach (mark as special value)
+                            _BOLD_VARIATION_CACHE[base_path_str] = "__axis_bold__"
                             break
             if not found:
                 # Final fallback: Use stroke-based bold simulation
-                logger.warning(f"Could not find native Bold variation for font '{base_path_str}'. Falling back to stroke-based bold simulation.")
+                logger.warning(
+                    f"Could not find native Bold variation for font '{base_path_str}'. "
+                    "Falling back to stroke-based bold simulation."
+                )
                 simulate_bold = True
+                # Cache that this font needs simulation
+                _BOLD_VARIATION_CACHE[base_path_str] = None
 
         except Exception as e:
             logger.warning(f"Failed to apply bold style to font '{base_path_str}': {e}. Falling back to simulation.")
             simulate_bold = True
+            _BOLD_VARIATION_CACHE[base_path_str] = None
 
     return font, simulate_bold
 
@@ -196,10 +233,8 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
         list[StyledWord]: List of styled word objects ready for rendering.
     """
     styled_words = []
-    # This pattern captures tags (#flags#hex#content#)
-    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
 
-    matches = list(tag_pattern.finditer(text))
+    matches = list(_RICH_TEXT_TAG_PATTERN.finditer(text))
     last_end = 0
 
     def add_text_chunk(chunk: str, flags: str, color: tuple[int, int, int, int]):
@@ -490,9 +525,8 @@ def get_timage(
 
     config = config or TextConfig()
 
-    # Initial probe to measure text
-    dummy_img = Image.new("RGBA", (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
+    # Use module-level singleton for text measurement
+    draw = _MEASURE_DRAW
 
     styled_words = _parse_rich_text(text, config, draw)
     if not styled_words:

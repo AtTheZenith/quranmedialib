@@ -9,10 +9,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Iterator
 
+from PIL import Image
+
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
-
-from PIL import Image
 
 if TYPE_CHECKING:
     pass
