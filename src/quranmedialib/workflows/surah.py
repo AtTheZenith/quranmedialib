@@ -7,18 +7,17 @@ to process all verses of a given surah with their default translations.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Iterator
+from typing import Iterator
 
 from PIL import Image
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
-if TYPE_CHECKING:
-    pass
-
 # Logger setup
 logger = logging.getLogger(__name__)
+
+__all__ = ["SurahWorkflow"]
 
 
 class SurahWorkflow(VerseRangeWorkflow):

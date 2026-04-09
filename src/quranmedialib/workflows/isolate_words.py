@@ -17,6 +17,8 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
+__all__ = ["IsolateWordsWorkflow"]
+
 
 class IsolateWordsWorkflow(BaseWorkflow):
     """

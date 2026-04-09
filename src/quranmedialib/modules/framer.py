@@ -19,9 +19,14 @@ from quranmedialib.types import (
     WordItem,
 )
 
+__all__ = [
+    "frame",
+    "QURANIC_STOP_SIGNS",
+]
+
 # Quranic stop signs for wrapping logic. These signs indicate natural pausing
 # points in the text and are used to avoid awkward line breaks.
-QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۚ", "ۛ", "ۜ", "ۙ", "ۘ", "ۗ"]
+QURANIC_STOP_SIGNS = ["ۖ", "ۗ", "ۚ", "ۛ", "ۜ", "ۙ", "ۘ"]
 
 
 def _build_row(
@@ -312,7 +317,7 @@ def _render_page(
     return page_image
 
 
-def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, config: LayoutConfig):
+def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, config: LayoutConfig) -> None:
     """Pastes a translation image onto a page based on configured alignment."""
     # Vertical placement
     trans_y = config.padding.top + config.timage_y_offset

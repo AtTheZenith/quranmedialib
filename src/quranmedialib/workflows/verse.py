@@ -7,7 +7,7 @@ of individual Quranic verses with accompanying translations.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Iterator
+from typing import Iterator
 
 from PIL import Image
 
@@ -20,11 +20,10 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
-if TYPE_CHECKING:
-    pass
-
 # Logger setup
 logger = logging.getLogger(__name__)
+
+__all__ = ["VerseWorkflow"]
 
 
 class _LazyTranslationImages:

@@ -4,6 +4,9 @@ This module provides:
 - FONT_* constants: Predefined FontResource instances for shipped fonts
 - DATABASE_* constants: Predefined DatabaseConfig instances for shipped databases
 - LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Layout configurations by resolution
+
+Note: This file contains many hardcoded values for layout presets.
+Consider refactoring to a programmatic builder function for better maintainability.
 """
 
 from quranmedialib.types import (
@@ -14,6 +17,16 @@ from quranmedialib.types import (
     WbwDatabaseConfig,
     WordConfig,
 )
+
+# === Common Constants for Repeated Values ===
+# Colors
+TRANSPARENT_COLOR: tuple[int, int, int, int] = (0, 0, 0, 0)
+WHITE_COLOR: tuple[int, int, int, int] = (255, 255, 255, 255)
+
+# Padding values (frequently repeated across presets)
+ARABIC_WORD_PADDING: tuple[int, int, int, int] = (8, 8, 0, 0)
+VERSY_NUMBER_PADDING_720P: tuple[int, int, int, int] = (1, 27, 1, 1)
+VERSE_NUMBER_PADDING_1080P: tuple[int, int, int, int] = (1, 41, 1, 1)
 
 # === Font Presets ===
 #: Hafs font for Arabic Quranic text rendering

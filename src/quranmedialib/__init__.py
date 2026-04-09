@@ -41,7 +41,9 @@ Package Structure:
 For more examples, see the demo.py file and README.md.
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import version
+
+__version__ = version("quranmedialib")
 
 # Expose types and presets at package level for convenience
 from quranmedialib.database_manager import DatabaseManager
@@ -72,7 +74,10 @@ from quranmedialib.types import (
     WordIndex,
     WordItem,
 )
+from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
+from quranmedialib.workflows.surah import SurahWorkflow
 from quranmedialib.workflows.verse import VerseWorkflow
+from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
 __all__ = [
     # Version
@@ -107,5 +112,9 @@ __all__ = [
     "LANDSCAPE_PRESET",
     "STORY_PRESET",
     "SQUARE_PRESET",
+    # Workflows
     "VerseWorkflow",
+    "VerseRangeWorkflow",
+    "SurahWorkflow",
+    "IsolateWordsWorkflow",
 ]
