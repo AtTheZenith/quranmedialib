@@ -14,9 +14,11 @@ WBW and Translation methods use their respective active databases (configurable)
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 import threading
-from typing import Any, Optional, Self, Union
+from types import TracebackType
+from typing import Any, Optional, Self
 
 from quranmedialib.types import (
     AyahNumber,
@@ -26,9 +28,28 @@ from quranmedialib.types import (
     WordIndex,
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# SQL identifier validation (alphanumeric + underscore only)
+_SQL_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_sql_identifier(name: str, context: str = "identifier") -> str:
+    """Validate that a string is a safe SQL identifier.
+
+    Args:
+        name: The identifier to validate (table name, column name, etc.).
+        context: Description of what the identifier represents (for error messages).
+
+    Returns:
+        The validated identifier.
+
+    Raises:
+        ValueError: If the identifier contains invalid characters.
+    """
+    if not _SQL_IDENTIFIER.match(name):
+        raise ValueError(f"Invalid SQL {context}: {name!r}. Must be alphanumeric with underscores only.")
+    return name
 
 
 class DatabaseManager:
@@ -66,14 +87,24 @@ class DatabaseManager:
         - "quran": Default Quran text database
         - "wbw": Default word-by-word translation database
         - "translation": Default English translation (Sahih International)
+
+        Raises:
+            sqlite3.Error: If database initialization fails.
         """
         if getattr(self, "_initialized", False):
             return
 
+        # Warn if re-initializing without calling .close() first
+        if hasattr(self, "_connections") and self._connections:
+            logger.warning(
+                "DatabaseManager re-initialized without calling .close() first. "
+                "Orphaned connections may exist. Call .close() before creating a new instance."
+            )
+
         self._registry: dict[str, dict[str, Any]] = {}
         self._cursors: dict[str, sqlite3.Cursor] = {}
         self._connections: dict[str, sqlite3.Connection] = {}
-        self._configs: dict[str, Union[DatabaseConfig, WbwDatabaseConfig]] = {}
+        self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
         self._active_wbw: Optional[str] = None
         self._active_translation: Optional[str] = None
         self._lock = threading.Lock()
@@ -93,14 +124,20 @@ class DatabaseManager:
             self._initialized = True
 
             logger.info("DatabaseManager initialized with connections: %s", list(self._registry.keys()))
-        except sqlite3.Error as e:
-            logger.error("Failed to initialize DatabaseManager: %s", e)
+        except Exception:
+            # Cleanup any partially-opened connections before re-raising
+            self.close()
             raise
 
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
     def _validate_state(self) -> None:
@@ -108,7 +145,7 @@ class DatabaseManager:
         if not getattr(self, "_initialized", False):
             raise RuntimeError("DatabaseManager is not initialized.")
 
-    def _get_config(self, name: str) -> Union[DatabaseConfig, WbwDatabaseConfig]:
+    def _get_config(self, name: str) -> DatabaseConfig | WbwDatabaseConfig:
         """Get the config for a named database."""
         if name not in self._configs:
             raise KeyError(f"Unknown database: {name}")
@@ -120,7 +157,7 @@ class DatabaseManager:
             raise KeyError(f"Unknown database: {name}")
         return self._cursors[name]
 
-    def _register_connection(self, name: str, config: Union[DatabaseConfig, WbwDatabaseConfig]) -> None:
+    def _register_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Registers a connection and its cursor into the internal registry.
 
         Args:
@@ -140,7 +177,7 @@ class DatabaseManager:
             "cursor": cursor,
         }
 
-    def _add_connection_internal(self, name: str, config: Union[DatabaseConfig, WbwDatabaseConfig]) -> None:
+    def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Internal method to add a connection without validation (used during initialization)."""
         try:
             self._register_connection(name, config)
@@ -149,7 +186,7 @@ class DatabaseManager:
             logger.error("Failed to add internal connection '%s': %s", name, e)
             raise
 
-    def add_connection(self, name: str, config: Union[DatabaseConfig, WbwDatabaseConfig]) -> None:
+    def add_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Add a database connection to the registry.
 
         Args:
@@ -261,11 +298,17 @@ class DatabaseManager:
         """
         config = self._get_config(self.DEFAULT_QURAN_NAME)
 
+        # Validate identifiers to prevent SQL injection from untrusted configs
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+
         query = f"""
-            SELECT {config.ayah_col}, {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ?
-            ORDER BY {config.ayah_col}
+            SELECT {ayah_col}, {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ?
+            ORDER BY {ayah_col}
         """
         rows = self._fetch(self.DEFAULT_QURAN_NAME, query, (surah_number,))
         return self._aggregate_verses(rows, config)
@@ -280,10 +323,15 @@ class DatabaseManager:
         """
         config = self._get_config(self.DEFAULT_QURAN_NAME)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ? AND {ayah_col} = ?
         """
         rows = self._fetch(self.DEFAULT_QURAN_NAME, query, (surah_number, ayah_number))
         return " ".join(row[config.text_col] for row in rows)
@@ -301,11 +349,17 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ?
-            ORDER BY {config.ayah_col}, {config.word_id_col}
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ?
+            ORDER BY {ayah_col}, {word_id_col}
         """
         rows = self._fetch(name, query, (surah_number,))
         return [row[config.text_col] for row in rows]
@@ -321,11 +375,17 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
-            ORDER BY {config.word_id_col}
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ? AND {ayah_col} = ?
+            ORDER BY {word_id_col}
         """
         rows = self._fetch(name, query, (surah_number, ayah_number))
         return [row[config.text_col] for row in rows]
@@ -351,10 +411,16 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ? AND {config.ayah_col} = ? AND {config.word_id_col} = ?
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ? AND {ayah_col} = ? AND {word_id_col} = ?
         """
         rows = self._fetch(name, query, (surah_number, ayah_number, word_index))
         return rows[0][config.text_col] if rows else None
@@ -379,11 +445,17 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+
         query = f"""
-            SELECT {config.ayah_col}, {config.word_id_col}, {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ?
-            ORDER BY {config.ayah_col}, {config.word_id_col}
+            SELECT {ayah_col}, {word_id_col}, {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ?
+            ORDER BY {ayah_col}, {word_id_col}
         """
         rows = self._fetch(name, query, (surah_number,))
 
@@ -416,11 +488,16 @@ class DatabaseManager:
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ?
-            ORDER BY {config.ayah_col}
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ?
+            ORDER BY {ayah_col}
         """
         rows = self._fetch(name, query, (surah_number,))
         return [row[config.text_col] for row in rows]
@@ -445,10 +522,15 @@ class DatabaseManager:
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+
         query = f"""
-            SELECT {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ? AND {config.ayah_col} = ?
+            SELECT {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ? AND {ayah_col} = ?
         """
         rows = self._fetch(name, query, (surah_number, ayah_number))
         return rows[0][config.text_col] if rows else None
@@ -475,11 +557,16 @@ class DatabaseManager:
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
 
+        tablename = _validate_sql_identifier(config.tablename, "table name")
+        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        text_col = _validate_sql_identifier(config.text_col, "column name")
+        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+
         query = f"""
-            SELECT {config.ayah_col}, {config.text_col}
-            FROM {config.tablename}
-            WHERE {config.surah_col} = ? AND {config.ayah_col} BETWEEN ? AND ?
-            ORDER BY {config.ayah_col}
+            SELECT {ayah_col}, {text_col}
+            FROM {tablename}
+            WHERE {surah_col} = ? AND {ayah_col} BETWEEN ? AND ?
+            ORDER BY {ayah_col}
         """
         rows = self._fetch(name, query, (surah_number, start_ayah, end_ayah))
 

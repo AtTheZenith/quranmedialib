@@ -20,6 +20,7 @@ from quranmedialib import (
     STORY_PRESET,
     DatabaseManager,
     LayoutConfig,
+    SurahWorkflow,
     TextConfig,
     WordConfig,
     WordItem,
@@ -30,7 +31,6 @@ from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.workflows.surah import SurahWorkflow
 
 
 def run_workflow_demo(

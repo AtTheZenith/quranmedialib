@@ -9,9 +9,9 @@ from quranmedialib.modules.font_cache import get_font
 from quranmedialib.resources import get_font_path
 from quranmedialib.types import WordConfig
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+__all__ = ["verse_number"]
 
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")

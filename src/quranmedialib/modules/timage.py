@@ -22,6 +22,14 @@ from quranmedialib.types import (
     TextConfig,
 )
 
+__all__ = [
+    "get_timage",
+    "ParsedSegment",
+    "normalize_highlight_style",
+    "prepare_translation_segments",
+    "format_isolation_text",
+]
+
 # Logger setup
 logger = logging.getLogger(__name__)
 
@@ -184,7 +192,7 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                 # Cache that this font needs simulation
                 _BOLD_VARIATION_CACHE[base_path_str] = None
 
-        except Exception as e:
+        except (OSError, ValueError, AttributeError, KeyError) as e:
             logger.warning(f"Failed to apply bold style to font '{base_path_str}': {e}. Falling back to simulation.")
             simulate_bold = True
             _BOLD_VARIATION_CACHE[base_path_str] = None

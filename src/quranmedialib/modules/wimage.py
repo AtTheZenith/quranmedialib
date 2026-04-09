@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw
 from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import WordConfig
 
+__all__ = ["get_wimage"]
+
 
 def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
     """Converts an Arabic word string into an image.
