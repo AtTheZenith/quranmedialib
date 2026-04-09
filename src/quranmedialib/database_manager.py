@@ -359,6 +359,43 @@ class DatabaseManager:
         rows = self._fetch(name, query, (surah_number, ayah_number, word_index))
         return rows[0][config.text_col] if rows else None
 
+    def get_wbw_grouped_by_verse(
+        self,
+        surah_number: SurahNumber,
+    ) -> dict[int, list[str]]:
+        """Fetches all word-by-word translations for a surah, grouped by ayah.
+
+        Uses the active WBW database (set via set_active_wbw, default "wbw").
+        This method fetches all WBW data for a surah in a single query,
+        eliminating the N+1 query pattern when processing multiple verses.
+
+        Args:
+            surah_number: The surah number (1-114).
+
+        Returns:
+            Dictionary mapping ayah numbers to their lists of word translations.
+            Example: {1: ["word1", "word2", ...], 2: ["word1", ...], ...}
+        """
+        name = self._active_wbw or self.DEFAULT_WBW_NAME
+        config = self._get_config(name)
+
+        query = f"""
+            SELECT {config.ayah_col}, {config.word_id_col}, {config.text_col}
+            FROM {config.tablename}
+            WHERE {config.surah_col} = ?
+            ORDER BY {config.ayah_col}, {config.word_id_col}
+        """
+        rows = self._fetch(name, query, (surah_number,))
+
+        result: dict[int, list[str]] = {}
+        for row in rows:
+            ayah = row[config.ayah_col]
+            if ayah not in result:
+                result[ayah] = []
+            result[ayah].append(row[config.text_col])
+
+        return result
+
     # === Translation Database Methods (use active translation database) ===
 
     def get_translation_from_surah(
@@ -415,6 +452,44 @@ class DatabaseManager:
         """
         rows = self._fetch(name, query, (surah_number, ayah_number))
         return rows[0][config.text_col] if rows else None
+
+    def get_translations_from_verse_range(
+        self,
+        surah_number: SurahNumber,
+        start_ayah: AyahNumber,
+        end_ayah: AyahNumber,
+        translation_name: str | None = None,
+    ) -> list[str]:
+        """Fetches translations for a range of verses in a single query.
+
+        Args:
+            surah_number: The surah number.
+            start_ayah: Starting ayah number (1-indexed, inclusive).
+            end_ayah: Ending ayah number (inclusive).
+            translation_name: Optional name of the translation database to use.
+                If None, uses the active translation (set via set_active_translation).
+
+        Returns:
+            List of verse translations in order by ayah number.
+        """
+        name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
+        config = self._get_config(name)
+
+        query = f"""
+            SELECT {config.ayah_col}, {config.text_col}
+            FROM {config.tablename}
+            WHERE {config.surah_col} = ? AND {config.ayah_col} BETWEEN ? AND ?
+            ORDER BY {config.ayah_col}
+        """
+        rows = self._fetch(name, query, (surah_number, start_ayah, end_ayah))
+
+        # Group by ayah and return in order
+        verses_dict: dict[int, str] = {}
+        for row in rows:
+            ayah = row[config.ayah_col]
+            verses_dict[ayah] = row[config.text_col]
+
+        return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1) if ayah in verses_dict]
 
     def list_connections(self) -> list[str]:
         """List all registered connection names."""

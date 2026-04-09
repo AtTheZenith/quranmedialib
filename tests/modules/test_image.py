@@ -88,7 +88,9 @@ def _analyze_image_brightness(filepath: str) -> dict[str, float]:
 
 def _print_stats(label: str, stats: dict[str, float]) -> None:
     """Print brightness statistics in a formatted way."""
-    print(f"  {label:10s}: mean={stats['mean']:6.2f}, median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, stdev={stats['stdev']:6.2f}")
+    print(
+        f"  {label:10s}: mean={stats['mean']:6.2f}, median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, stdev={stats['stdev']:6.2f}"
+    )
 
 
 def test_color() -> None:

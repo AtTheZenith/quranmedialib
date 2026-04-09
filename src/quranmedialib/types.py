@@ -297,11 +297,15 @@ class LayoutConfig:
         if isinstance(self.timage_vertical_align, str):
             object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
         if isinstance(self.timage_horizontal_align, str):
-            object.__setattr__(self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower()))
+            object.__setattr__(
+                self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower())
+            )
         if isinstance(self.wimage_vertical_align, str):
             object.__setattr__(self, "wimage_vertical_align", VerticalAlignment(self.wimage_vertical_align.lower()))
         if isinstance(self.wimage_horizontal_align, str):
-            object.__setattr__(self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower()))
+            object.__setattr__(
+                self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower())
+            )
         if not isinstance(self.padding, Padding):
             object.__setattr__(self, "padding", Padding(*self.padding))
 
@@ -380,7 +384,9 @@ class WordConfig:
 
         # Resolve paddings
         word_padding = word_padding if isinstance(word_padding, Padding) else Padding(*word_padding)
-        verse_number_padding = verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
+        verse_number_padding = (
+            verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
+        )
 
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "max_rows_per_page", max_rows_per_page)

@@ -12,6 +12,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import WordConfig
 
 
@@ -31,14 +32,12 @@ def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | Im
     if isinstance(font_path, Path):
         font_path = str(font_path)
 
-    try:
-        return ImageFont.truetype(font_path, word_config.annotation_font_size)
-    except (OSError, IOError) as e:
-        # Re-raise with a bit more context if needed, but keeping it simple for now as requested.
-        raise e
+    return get_font(font_path, word_config.annotation_font_size)
 
 
-def _combine_images_rtl(images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]) -> Image.Image:
+def _combine_images_rtl(
+    images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]
+) -> Image.Image:
     """Combines multiple word images into a single canvas in RTL order.
 
     Args:
@@ -221,7 +220,9 @@ def annotate_words(
         else:
             # Single word
             annotated_images.append(
-                _annotate_image(images[i], current_wbw, font, word_config.annotation_color, word_config.background_color)
+                _annotate_image(
+                    images[i], current_wbw, font, word_config.annotation_color, word_config.background_color
+                )
             )
             if texts is not None:
                 annotated_texts.append(texts[i])

@@ -4,8 +4,9 @@ This module provides functionality to render Arabic words into images with
 customizable font size, color, and padding.
 """
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import WordConfig
 
 
@@ -19,7 +20,7 @@ def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
     Returns:
         A PIL Image containing the rendered text with padding.
     """
-    font = ImageFont.truetype(str(word_config.font.path), word_config.font_size)
+    font = get_font(str(word_config.font.path), word_config.font_size)
 
     # Calculate text dimensions based on metrics and actual bounding box.
     ascent, descent = font.getmetrics()

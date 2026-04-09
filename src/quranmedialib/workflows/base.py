@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Iterator
 from PIL import Image
 
 if TYPE_CHECKING:
-
     from quranmedialib.types import LayoutConfig, TextConfig, WordConfig
 
 # Logger setup
@@ -38,7 +37,9 @@ class BaseWorkflow(ABC):
         self.word_config = word_config
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(layout={self.layout_config}, text={self.text_config}, word={self.word_config})"
+        return (
+            f"{self.__class__.__name__}(layout={self.layout_config}, text={self.text_config}, word={self.word_config})"
+        )
 
     @abstractmethod
     def get_iterator(
