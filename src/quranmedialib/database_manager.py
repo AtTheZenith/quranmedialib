@@ -94,12 +94,13 @@ class DatabaseManager:
         if getattr(self, "_initialized", False):
             return
 
-        # Warn if re-initializing without calling .close() first
+        # Auto-close orphaned connections before re-initialization
         if hasattr(self, "_connections") and self._connections:
             logger.warning(
                 "DatabaseManager re-initialized without calling .close() first. "
-                "Orphaned connections may exist. Call .close() before creating a new instance."
+                "Automatically closing orphaned connections."
             )
+            self.close()
 
         self._registry: dict[str, dict[str, Any]] = {}
         self._cursors: dict[str, sqlite3.Cursor] = {}
@@ -553,6 +554,9 @@ class DatabaseManager:
 
         Returns:
             List of verse translations in order by ayah number.
+
+        Raises:
+            ValueError: If any ayah in the requested range is missing from the database.
         """
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
@@ -576,7 +580,15 @@ class DatabaseManager:
             ayah = row[config.ayah_col]
             verses_dict[ayah] = row[config.text_col]
 
-        return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1) if ayah in verses_dict]
+        # Check for missing ayahs and raise error if any are missing
+        missing_ayah = [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]
+        if missing_ayah:
+            raise ValueError(
+                f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. "
+                f"Database may be corrupted or incomplete."
+            )
+
+        return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1)]
 
     def list_connections(self) -> list[str]:
         """List all registered connection names."""
