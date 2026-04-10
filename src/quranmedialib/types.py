@@ -297,11 +297,15 @@ class LayoutConfig:
         if isinstance(self.timage_vertical_align, str):
             object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
         if isinstance(self.timage_horizontal_align, str):
-            object.__setattr__(self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower()))
+            object.__setattr__(
+                self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower())
+            )
         if isinstance(self.wimage_vertical_align, str):
             object.__setattr__(self, "wimage_vertical_align", VerticalAlignment(self.wimage_vertical_align.lower()))
         if isinstance(self.wimage_horizontal_align, str):
-            object.__setattr__(self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower()))
+            object.__setattr__(
+                self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower())
+            )
         if not isinstance(self.padding, Padding):
             object.__setattr__(self, "padding", Padding(*self.padding))
 
@@ -338,6 +342,7 @@ class WordConfig:
     annotation_color: Color
     annotation_font_path: Path
     background_color: Color
+    font: FontResource
 
     def __init__(
         self,
@@ -356,8 +361,17 @@ class WordConfig:
         annotation_color: Color = (255, 255, 255, 255),
         annotation_font_path: Path | str | FontResource | None = None,
         background_color: Color = (0, 0, 0, 0),
+        font: FontResource | None = None,
     ):
         """Initialize WordConfig with resolved paths and type-safe layout primitives."""
+        from quranmedialib.presets import FONT_HAFS
+
+        # Resolve font - default to FONT_HAFS if not provided
+        if font is None:
+            resolved_font = FONT_HAFS
+        else:
+            resolved_font = font
+
         # Resolve annotation_font_path
         if annotation_font_path is None:
             resolved_font_path = get_font_path("inter.ttf")
@@ -370,7 +384,9 @@ class WordConfig:
 
         # Resolve paddings
         word_padding = word_padding if isinstance(word_padding, Padding) else Padding(*word_padding)
-        verse_number_padding = verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
+        verse_number_padding = (
+            verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
+        )
 
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "max_rows_per_page", max_rows_per_page)
@@ -387,6 +403,7 @@ class WordConfig:
         object.__setattr__(self, "annotation_color", annotation_color)
         object.__setattr__(self, "annotation_font_path", resolved_font_path)
         object.__setattr__(self, "background_color", background_color)
+        object.__setattr__(self, "font", resolved_font)
 
 
 @dataclass(frozen=True, init=False)

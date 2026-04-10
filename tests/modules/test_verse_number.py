@@ -1,10 +1,16 @@
+"""Tests for the verse_number module.
+
+This module contains tests for verifying verse number rendering with the
+Unicode ayah symbol and various padding configurations.
+"""
+
 import os
 
 from quranmedialib import LANDSCAPE_PRESET
 from quranmedialib.modules.verse_number import logger, verse_number
 
 
-def test_verse_number():
+def test_verse_number() -> None:
     print("\nRunning test_verse_number...")
     test_number = 286
     logger.info(f"Generating ayah number {test_number} using Unicode symbol...")

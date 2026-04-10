@@ -7,24 +7,23 @@ of individual Quranic verses with accompanying translations.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Iterator
+from typing import Iterator
+
+from PIL import Image
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_word
 from quranmedialib.modules.framer import frame
-from quranmedialib.modules.timage import get_timage
+from quranmedialib.modules.lazy_image import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
-from PIL import Image
-
-if TYPE_CHECKING:
-    pass
-
 # Logger setup
 logger = logging.getLogger(__name__)
+
+__all__ = ["VerseWorkflow"]
 
 
 class VerseWorkflow(BaseWorkflow):
@@ -66,9 +65,9 @@ class VerseWorkflow(BaseWorkflow):
 
         return annotated
 
-    def _prepare_translation_images(self, translations: list[str]) -> list[Image.Image | None]:
-        """Converts internal translation strings into rendered images."""
-        return [get_timage(t, self.text_config) if t else None for t in translations]
+    def _prepare_translation_images(self, translations: list[str]) -> LazyTranslationImages:
+        """Creates a lazy wrapper that defers get_timage() calls until accessed."""
+        return LazyTranslationImages(translations, self.text_config)
 
     def get_iterator(
         self,
@@ -93,12 +92,10 @@ class VerseWorkflow(BaseWorkflow):
         # 1. Data Retrieval
         verse_text = db.get_verse(surah, ayah)
         verse_words = verse_text.split()
-        wbw_translations = db.get_wbw_from_verse(surah, ayah)
+        wbw_translations = db.get_wbw_from_verse(surah, ayah) if annotate else []
 
         # 2. Image Generation
-        annotated_images = self._prepare_word_images(
-            surah, ayah, verse_words, wbw_translations, annotate
-        )
+        annotated_images = self._prepare_word_images(surah, ayah, verse_words, wbw_translations, annotate)
 
         # 3. Add verse number marker
         vn_image = verse_number(ayah, self.word_config)
@@ -107,11 +104,9 @@ class VerseWorkflow(BaseWorkflow):
         # 4. Prepare WordItems for layout
         # We append an empty string for the verse number marker's text
         all_text = list(verse_words) + [""]
-        word_items = [
-            WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)
-        ]
+        word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)]
 
-        # 5. Prepare Translation Images
+        # 5. Prepare Translation Images (lazy - renders on demand)
         translation_images = self._prepare_translation_images(translations)
 
         # 6. Render Layout
