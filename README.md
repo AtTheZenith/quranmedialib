@@ -1,6 +1,6 @@
 # QuranMediaLib
 
-Media producing library for Quranic texts. Generates beautifully formatted images of Quranic verses with Arabic text and translations.
+Media producing library for Quranic texts. Generates properly formatted images of Quranic verses along with translations.
 
 ## Installation
 
@@ -86,7 +86,7 @@ db.close()
 
 ## Package Structure
 
-```
+```markdown
 quranmedialib/
 ├── types.py           # Configuration dataclasses (LayoutConfig, WordConfig, etc.)
 ├── presets.py         # Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
@@ -116,6 +116,7 @@ The library includes pre-configured presets for common formats:
 Each preset supports multiple resolutions: `720p`, `1080p`, `1440p`, `2160p`
 
 And three modes per format:
+
 - `default`: Arabic text with annotations + translation
 - `arabic`: Arabic text only (no translation)
 - `translation`: Translation only (no Arabic)
@@ -127,6 +128,14 @@ from quranmedialib.presets import LANDSCAPE_PRESET
 config = LANDSCAPE_PRESET["default"]["1080p"]
 layout_config, text_config, word_config = config
 ```
+
+## Included Data
+
+The library includes default databases for immediate use:
+
+- **Arabic Text**: `quran.db` using sequential tanween.
+- **English WBW**: Word-by-word translation for word-level annotation.
+- **Sahih International**: English translation of the meanings.
 
 ## Custom Database Configuration
 
