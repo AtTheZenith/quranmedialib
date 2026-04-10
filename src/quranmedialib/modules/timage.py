@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import threading
 from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
@@ -41,9 +42,11 @@ _RICH_TEXT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
 _MEASURE_IMG = Image.new("RGBA", (1, 1))
 _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
-# Cache for bold variation names to avoid repeated get_variation_names() iteration
-# Maps font_path -> variation_name or None if not found
-_BOLD_VARIATION_CACHE: dict[str, str | None] = {}
+# Thread-safe cache for bold variation names to avoid repeated get_variation_names() iteration
+# Maps font_path -> variation_name, None (needs simulation), or _AXIS_BOLD_SENTINEL (axis-based)
+_BOLD_VARIATION_CACHE_LOCK = threading.Lock()
+_BOLD_VARIATION_CACHE: dict[str, str | None | object] = {}
+_AXIS_BOLD_SENTINEL = object()  # Sentinel to mark axis-based bold detection
 
 
 class ParsedSegment(NamedTuple):
@@ -133,15 +136,24 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
     simulate_bold = False
     if wants_bold:
         # Check cache for bold variation name
-        if base_path_str in _BOLD_VARIATION_CACHE:
-            cached_variation = _BOLD_VARIATION_CACHE[base_path_str]
-            if cached_variation is not None:
-                try:
-                    font.set_variation_by_name(cached_variation)
-                    return font, False
-                except (AttributeError, OSError):
-                    # Cache might be stale or font state changed, fall through to re-detect
+        with _BOLD_VARIATION_CACHE_LOCK:
+            if base_path_str in _BOLD_VARIATION_CACHE:
+                cached_variation = _BOLD_VARIATION_CACHE[base_path_str]
+                if cached_variation is _AXIS_BOLD_SENTINEL:
+                    # Axis-based bold was detected, need to re-apply axes
+                    # Fall through to re-detect since we don't store the axes values
                     pass
+                elif cached_variation is not None:
+                    try:
+                        font.set_variation_by_name(cached_variation)
+                        return font, False
+                    except (AttributeError, OSError):
+                        # Cache might be stale or font state changed, fall through to re-detect
+                        pass
+                else:
+                    # cached_variation is None, meaning this font needs bold simulation
+                    simulate_bold = True
+                    return font, True
 
         try:
             # First attempt: Try setting bold via named instance (most reliable for complex fonts)
@@ -159,9 +171,10 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                         font.set_variation_by_name(variation_name)
                         found = True
                         # Cache the successful variation name
-                        _BOLD_VARIATION_CACHE[base_path_str] = (
-                            variation_name if isinstance(variation_name, str) else variation_name.decode("utf-8")
-                        )
+                        with _BOLD_VARIATION_CACHE_LOCK:
+                            _BOLD_VARIATION_CACHE[base_path_str] = (
+                                variation_name if isinstance(variation_name, str) else variation_name.decode("utf-8")
+                            )
                         break
             if not found:
                 # Second attempt: Search for Weight/wght axis and set it manually
@@ -180,7 +193,8 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                             font.set_variation_by_axes(vals)
                             found = True
                             # Cache that we used axis-based approach (mark as special value)
-                            _BOLD_VARIATION_CACHE[base_path_str] = "__axis_bold__"
+                            with _BOLD_VARIATION_CACHE_LOCK:
+                                _BOLD_VARIATION_CACHE[base_path_str] = _AXIS_BOLD_SENTINEL
                             break
             if not found:
                 # Final fallback: Use stroke-based bold simulation
@@ -190,12 +204,14 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                 )
                 simulate_bold = True
                 # Cache that this font needs simulation
-                _BOLD_VARIATION_CACHE[base_path_str] = None
+                with _BOLD_VARIATION_CACHE_LOCK:
+                    _BOLD_VARIATION_CACHE[base_path_str] = None
 
         except (OSError, ValueError, AttributeError, KeyError) as e:
             logger.warning(f"Failed to apply bold style to font '{base_path_str}': {e}. Falling back to simulation.")
             simulate_bold = True
-            _BOLD_VARIATION_CACHE[base_path_str] = None
+            with _BOLD_VARIATION_CACHE_LOCK:
+                _BOLD_VARIATION_CACHE[base_path_str] = None
 
     return font, simulate_bold
 

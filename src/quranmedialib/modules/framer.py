@@ -8,6 +8,7 @@ aware wrapping, and balanced line distribution.
 from __future__ import annotations
 
 import itertools
+from typing import Sequence
 
 from PIL import Image
 
@@ -342,7 +343,7 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
 
 def frame(
     words: list[WordItem],
-    translation_images: list[Image.Image | None] | None = None,
+    translation_images: Sequence[Image.Image | None] | None = None,
     config: LayoutConfig | None = None,
     word_config: WordConfig | None = None,
 ) -> list[Image.Image]:

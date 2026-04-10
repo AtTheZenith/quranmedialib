@@ -8,6 +8,7 @@ translation into a single annotated block, maintaining Right-to-Left (RTL) order
 from __future__ import annotations
 
 from pathlib import Path
+from typing import overload
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -155,6 +156,32 @@ def annotate_word(
 
     font = _get_annotation_font(word_config)
     return _annotate_image(image, translation, font, word_config.annotation_color, word_config.background_color)
+
+
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: None = ...,
+    wbw_translations: list[str] | None = ...,
+) -> list[Image.Image]: ...
+
+
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: list[str] = ...,
+    wbw_translations: list[str] | None = ...,
+) -> tuple[list[Image.Image], list[str]]: ...
 
 
 def annotate_words(

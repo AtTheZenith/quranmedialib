@@ -226,7 +226,7 @@ def glow(
         else:
             blur_c = color_base.filter(ImageFilter.BoxBlur(adjusted_r))
         glow_color = ImageChops.screen(glow_color, blur_c)
-        del blur_c  # Help GC reclaim memory immediately
+        del blur_c  # Release reference for immediate GC cleanup (CPython-specific)
 
         if glow_alpha is not None:
             if use_gaussian:
@@ -234,7 +234,7 @@ def glow(
             else:
                 blur_a = alpha_small.filter(ImageFilter.BoxBlur(adjusted_r))
             glow_alpha = ImageChops.lighter(glow_alpha, blur_a)
-            del blur_a  # Help GC reclaim memory immediately
+            del blur_a  # Release reference for immediate GC cleanup (CPython-specific)
 
     # 3. Upscale glow result to original size
     glow_color = glow_color.resize(img_rgba.size, resample=Image.Resampling.BILINEAR)

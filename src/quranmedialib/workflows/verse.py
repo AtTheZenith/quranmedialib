@@ -14,7 +14,7 @@ from PIL import Image
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_word
 from quranmedialib.modules.framer import frame
-from quranmedialib.modules.timage import TextConfig, get_timage
+from quranmedialib.modules.lazy_image import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
@@ -24,29 +24,6 @@ from quranmedialib.workflows.base import BaseWorkflow
 logger = logging.getLogger(__name__)
 
 __all__ = ["VerseWorkflow"]
-
-
-class _LazyTranslationImages:
-    """Lazy list that defers get_timage() calls until items are accessed.
-
-    This avoids rendering translation images that are never used (e.g., when
-    a verse fits on fewer pages than translations prepared).
-    """
-
-    __slots__ = ("_texts", "_config", "_cache")
-
-    def __init__(self, texts: list[str], config: TextConfig) -> None:
-        self._texts = texts
-        self._config = config
-        self._cache: list[Image.Image | None] = [None] * len(texts)
-
-    def __len__(self) -> int:
-        return len(self._texts)
-
-    def __getitem__(self, index: int) -> Image.Image | None:
-        if self._cache[index] is None and self._texts[index]:
-            self._cache[index] = get_timage(self._texts[index], self._config)
-        return self._cache[index]
 
 
 class VerseWorkflow(BaseWorkflow):
@@ -88,9 +65,9 @@ class VerseWorkflow(BaseWorkflow):
 
         return annotated
 
-    def _prepare_translation_images(self, translations: list[str]) -> _LazyTranslationImages:
+    def _prepare_translation_images(self, translations: list[str]) -> LazyTranslationImages:
         """Creates a lazy wrapper that defers get_timage() calls until accessed."""
-        return _LazyTranslationImages(translations, self.text_config)
+        return LazyTranslationImages(translations, self.text_config)
 
     def get_iterator(
         self,
