@@ -51,16 +51,16 @@ DATABASE_QURAN = DatabaseConfig.from_packaged(
 
 #: Default English translation database configuration (Sahih International)
 DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
-    db_name="en_sahih.db",
-    tablename="verses",
+    db_name="english_sahih.db",
+    tablename="english_sahih",
     surah_col="sura",
-    ayah_col="ayah",
+    ayah_col="aya",
     text_col="text",
 )
 
 #: Default word-by-word translation database configuration
 DATABASE_WBW_EN = WbwDatabaseConfig.from_packaged(
-    db_name="wbw_en.db",
+    db_name="english_wbw.db",
     tablename="wbw",
     surah_col="surah",
     ayah_col="ayah",
