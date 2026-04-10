@@ -1,3 +1,11 @@
+"""Tests for the framer module and layout functionality.
+
+This module contains tests for verifying the multi-page layout engine including:
+- Basic framing with Arabic text and translations
+- Alignment configurations (top/center/bottom, left/center/right)
+- Offset handling for word images and translation images
+"""
+
 import os
 from dataclasses import replace
 
@@ -11,7 +19,7 @@ from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 
 
-def test_framer():
+def test_framer() -> None:
     print("\nRunning test_framer...")
     database_manager = DatabaseManager()
 
@@ -64,7 +72,7 @@ def test_framer():
     print("test_framer completed successfully.")
 
 
-def test_framer_alignment():
+def test_framer_alignment() -> None:
     print("\nRunning test_framer_alignment...")
     database_manager = DatabaseManager()
 
@@ -124,7 +132,7 @@ def test_framer_alignment():
     print("test_framer_alignment completed successfully.")
 
 
-def test_framer_offsets():
+def test_framer_offsets() -> None:
     print("\nRunning test_framer_offsets...")
     # Create dummy words
     words = [Image.new("RGBA", (50, 50), (255, 0, 0, 255)) for _ in range(3)]
@@ -201,7 +209,7 @@ def test_framer_offsets():
     print("test_framer_offsets completed successfully.")
 
 
-def frame_words(words, config, word_config):
+def frame_words(words: list, config: object, word_config: object) -> tuple[int, int, int, int] | None:
     pages_0 = frame(words, config=config, word_config=word_config)
     img_0 = pages_0[0]
     return img_0.getbbox()

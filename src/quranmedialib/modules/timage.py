@@ -10,10 +10,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import threading
 from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import (
     HorizontalAlignment,
     Line,
@@ -21,8 +23,30 @@ from quranmedialib.types import (
     TextConfig,
 )
 
+__all__ = [
+    "get_timage",
+    "ParsedSegment",
+    "normalize_highlight_style",
+    "prepare_translation_segments",
+    "format_isolation_text",
+]
+
 # Logger setup
 logger = logging.getLogger(__name__)
+
+# Module-level regex patterns to avoid repeated compilation
+_SEGMENT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
+_RICH_TEXT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
+
+# Module-level singleton for text measurement (avoids creating dummy images per call)
+_MEASURE_IMG = Image.new("RGBA", (1, 1))
+_MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
+
+# Thread-safe cache for bold variation names to avoid repeated get_variation_names() iteration
+# Maps font_path -> variation_name, None (needs simulation), or _AXIS_BOLD_SENTINEL (axis-based)
+_BOLD_VARIATION_CACHE_LOCK = threading.Lock()
+_BOLD_VARIATION_CACHE: dict[str, str | None | object] = {}
+_AXIS_BOLD_SENTINEL = object()  # Sentinel to mark axis-based bold detection
 
 
 class ParsedSegment(NamedTuple):
@@ -48,11 +72,10 @@ def normalize_highlight_style(style: str) -> str:
 
 def prepare_translation_segments(translation: list[str]) -> list[ParsedSegment]:
     """Pre-parses translation segments to avoid redundant regex searches in loops."""
-    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
     parsed = []
 
     for segment in translation:
-        if match := tag_pattern.search(segment):
+        if match := _SEGMENT_TAG_PATTERN.search(segment):
             content = match[3].rstrip("#")
             parsed.append(ParsedSegment(match[1], match[2], content, True))
         else:
@@ -107,11 +130,31 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
     base_path = config.italic_font_path if wants_italic else config.font_path
     base_path_str = str(base_path)
 
-    # Load the font
-    font = ImageFont.truetype(base_path_str, config.font_size)
+    # Load the font using centralized cache
+    font = get_font(base_path_str, config.font_size)
 
     simulate_bold = False
     if wants_bold:
+        # Check cache for bold variation name
+        with _BOLD_VARIATION_CACHE_LOCK:
+            if base_path_str in _BOLD_VARIATION_CACHE:
+                cached_variation = _BOLD_VARIATION_CACHE[base_path_str]
+                if cached_variation is _AXIS_BOLD_SENTINEL:
+                    # Axis-based bold was detected, need to re-apply axes
+                    # Fall through to re-detect since we don't store the axes values
+                    pass
+                elif cached_variation is not None:
+                    try:
+                        font.set_variation_by_name(cached_variation)
+                        return font, False
+                    except (AttributeError, OSError):
+                        # Cache might be stale or font state changed, fall through to re-detect
+                        pass
+                else:
+                    # cached_variation is None, meaning this font needs bold simulation
+                    simulate_bold = True
+                    return font, True
+
         try:
             # First attempt: Try setting bold via named instance (most reliable for complex fonts)
             # Inter uses "Bold" or "Bold Italic" etc.
@@ -121,10 +164,17 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                 # Iterate through available instances to find a matching one (case-insensitive)
                 for variation_name in font.get_variation_names():
                     # Names can be bytes or str depending on PIL/FreeType version
-                    name_str = variation_name.decode("utf-8") if isinstance(variation_name, bytes) else str(variation_name)
+                    name_str = (
+                        variation_name.decode("utf-8") if isinstance(variation_name, bytes) else str(variation_name)
+                    )
                     if target_name.lower() in name_str.lower():
                         font.set_variation_by_name(variation_name)
                         found = True
+                        # Cache the successful variation name
+                        with _BOLD_VARIATION_CACHE_LOCK:
+                            _BOLD_VARIATION_CACHE[base_path_str] = (
+                                variation_name if isinstance(variation_name, str) else variation_name.decode("utf-8")
+                            )
                         break
             if not found:
                 # Second attempt: Search for Weight/wght axis and set it manually
@@ -142,21 +192,40 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                             vals[i] = 700  # Set Weight to 700 (Bold)
                             font.set_variation_by_axes(vals)
                             found = True
+                            # Cache that we used axis-based approach (mark as special value)
+                            with _BOLD_VARIATION_CACHE_LOCK:
+                                _BOLD_VARIATION_CACHE[base_path_str] = _AXIS_BOLD_SENTINEL
                             break
             if not found:
                 # Final fallback: Use stroke-based bold simulation
-                logger.warning(f"Could not find native Bold variation for font '{base_path_str}'. Falling back to stroke-based bold simulation.")
+                logger.warning(
+                    f"Could not find native Bold variation for font '{base_path_str}'. "
+                    "Falling back to stroke-based bold simulation."
+                )
                 simulate_bold = True
+                # Cache that this font needs simulation
+                with _BOLD_VARIATION_CACHE_LOCK:
+                    _BOLD_VARIATION_CACHE[base_path_str] = None
 
-        except Exception as e:
+        except (OSError, ValueError, AttributeError, KeyError) as e:
             logger.warning(f"Failed to apply bold style to font '{base_path_str}': {e}. Falling back to simulation.")
             simulate_bold = True
+            with _BOLD_VARIATION_CACHE_LOCK:
+                _BOLD_VARIATION_CACHE[base_path_str] = None
 
     return font, simulate_bold
 
 
 def _parse_hex_color(hex_col: str, default_color: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
-    """Parses a hex color string into an RGBA tuple."""
+    """Parses a hex color string into an RGBA tuple.
+
+    Args:
+        hex_col: Hex color string (6 or 8 characters, with or without alpha).
+        default_color: Fallback RGBA color tuple if parsing fails.
+
+    Returns:
+        tuple[int, int, int, int]: RGBA color values (0-255 for each channel).
+    """
     if not hex_col:
         return default_color
 
@@ -178,12 +247,18 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
 
     Tags follow the format: #flags#hex#content#
     Whitespaces are preserved as explicit StyledWord tokens.
+
+    Args:
+        text: Rich text string with formatting tags.
+        config: Text configuration containing font paths and colors.
+        draw: ImageDraw instance for measuring text widths.
+
+    Returns:
+        list[StyledWord]: List of styled word objects ready for rendering.
     """
     styled_words = []
-    # This pattern captures tags (#flags#hex#content#)
-    tag_pattern = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
 
-    matches = list(tag_pattern.finditer(text))
+    matches = list(_RICH_TEXT_TAG_PATTERN.finditer(text))
     last_end = 0
 
     def add_text_chunk(chunk: str, flags: str, color: tuple[int, int, int, int]):
@@ -231,6 +306,13 @@ def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> li
     Since whitespaces are explicit tokens, we:
     1. Skip leading whitespaces at the start of each line.
     2. Trim trailing whitespaces at the end of each line for visual consistency.
+
+    Args:
+        styled_words: List of styled word objects with explicit whitespace tokens.
+        max_width: Maximum line width in pixels.
+
+    Returns:
+        list[Line]: List of line objects containing wrapped words.
     """
     lines = []
     current_line = Line()
@@ -272,6 +354,13 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int) -> 
 
     This version handles explicit whitespace tokens by trimming them from line width
     calculations to ensure a cleanly centered visual distribution.
+
+    Args:
+        styled_words: List of styled word objects with explicit whitespace tokens.
+        max_width: Maximum line width in pixels.
+
+    Returns:
+        list[Line]: List of line objects forming an inverted pyramid shape.
     """
     if not styled_words:
         return []
@@ -376,8 +465,15 @@ def _draw_styled_word(
     word: StyledWord,
     pos: tuple[int, int],
     ascent: int,
-):
-    """Draws a single styled word, handling bold simulation and transparency."""
+) -> None:
+    """Draws a single styled word, handling bold simulation and transparency.
+
+    Args:
+        draw: ImageDraw instance for rendering text.
+        word: StyledWord object containing text, font, color, and styling.
+        pos: (x, y) position for the bottom-left anchor of the text.
+        ascent: Font ascent value for baseline alignment.
+    """
     if word.is_transparent:
         return
 
@@ -402,7 +498,17 @@ def _draw_lines(
     line_height: int,
     config: TextConfig,
 ) -> None:
-    """Draws multiple lines of text onto the canvas, respecting horizontal alignment."""
+    """Draws multiple lines of text onto the canvas, respecting horizontal alignment.
+
+    Args:
+        draw: ImageDraw instance for rendering text.
+        lines: List of Line objects containing styled words.
+        start_y: Starting Y coordinate for the first line.
+        max_width: Canvas width for alignment calculations.
+        ascent: Font ascent value for baseline alignment.
+        line_height: Height of each line (ascent + descent).
+        config: Text configuration containing alignment settings.
+    """
     current_y = start_y
 
     for line in lines:
@@ -443,9 +549,8 @@ def get_timage(
 
     config = config or TextConfig()
 
-    # Initial probe to measure text
-    dummy_img = Image.new("RGBA", (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
+    # Use module-level singleton for text measurement
+    draw = _MEASURE_DRAW
 
     styled_words = _parse_rich_text(text, config, draw)
     if not styled_words:
@@ -479,5 +584,14 @@ def get_timage(
 
 
 def _measure_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
-    """Measures the advance width of a given text string."""
+    """Measures the advance width of a given text string.
+
+    Args:
+        draw: ImageDraw instance for measuring text.
+        text: Text string to measure.
+        font: Font object for rendering.
+
+    Returns:
+        int: Text width in pixels.
+    """
     return int(draw.textlength(text, font=font))

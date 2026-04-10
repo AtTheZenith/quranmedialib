@@ -5,15 +5,19 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.resources import get_font_path
 from quranmedialib.types import WordConfig
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+__all__ = ["verse_number"]
 
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
+
+# Module-level singleton for text measurement
+_MEASURE_DRAW = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
 
 
 def verse_number(
@@ -40,14 +44,10 @@ def verse_number(
     # Resolve font path
     if font_path is None:
         font_path = get_font_path("hafs.otf")
-    font_path = Path(font_path)
+    font_path_str = str(Path(font_path))
 
     try:
-        if not font_path.exists():
-            logger.warning("Font path %s does not exist. Using default.", font_path)
-            symbol_font = ImageFont.load_default()
-        else:
-            symbol_font = ImageFont.truetype(str(font_path), word_config.verse_number_size)
+        symbol_font = get_font(font_path_str, word_config.verse_number_size)
     except (OSError, IOError) as e:
         logger.warning("Could not load font from %s: %s. Using default.", font_path, e)
         symbol_font = ImageFont.load_default()
@@ -55,9 +55,8 @@ def verse_number(
     # Convert number to Arabic-Indic numerals
     number_str = str(number).translate(ARABIC_INDIC_TRANS)
 
-    # Measure text bounding box using 'mm' (middle-middle) anchor for precise centering
-    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    bbox = dummy_draw.textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
+    # Measure text bounding box using module-level singleton
+    bbox = _MEASURE_DRAW.textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
 
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]

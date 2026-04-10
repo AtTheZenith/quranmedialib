@@ -4,6 +4,9 @@ This module provides:
 - FONT_* constants: Predefined FontResource instances for shipped fonts
 - DATABASE_* constants: Predefined DatabaseConfig instances for shipped databases
 - LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Layout configurations by resolution
+
+Note: This file contains many hardcoded values for layout presets.
+Consider refactoring to a programmatic builder function for better maintainability.
 """
 
 from quranmedialib.types import (
@@ -14,6 +17,16 @@ from quranmedialib.types import (
     WbwDatabaseConfig,
     WordConfig,
 )
+
+# === Common Constants for Repeated Values ===
+# Colors
+TRANSPARENT_COLOR: tuple[int, int, int, int] = (0, 0, 0, 0)
+WHITE_COLOR: tuple[int, int, int, int] = (255, 255, 255, 255)
+
+# Padding values (frequently repeated across presets)
+ARABIC_WORD_PADDING: tuple[int, int, int, int] = (8, 8, 0, 0)
+VERSY_NUMBER_PADDING_720P: tuple[int, int, int, int] = (1, 27, 1, 1)
+VERSE_NUMBER_PADDING_1080P: tuple[int, int, int, int] = (1, 41, 1, 1)
 
 # === Font Presets ===
 #: Hafs font for Arabic Quranic text rendering
@@ -30,7 +43,7 @@ FONT_INTER_ITALIC = FontResource.from_packaged("inter_italic.ttf", "Inter Italic
 #: Default Quran text database configuration
 DATABASE_QURAN = DatabaseConfig.from_packaged(
     db_name="quran.db",
-    tablename="verses",
+    tablename="ayat",
     surah_col="sura",
     ayah_col="ayah",
     text_col="text",
@@ -38,16 +51,16 @@ DATABASE_QURAN = DatabaseConfig.from_packaged(
 
 #: Default English translation database configuration (Sahih International)
 DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
-    db_name="en_sahih.db",
-    tablename="verses",
+    db_name="english_sahih.db",
+    tablename="english_sahih",
     surah_col="sura",
-    ayah_col="ayah",
+    ayah_col="aya",
     text_col="text",
 )
 
 #: Default word-by-word translation database configuration
 DATABASE_WBW_EN = WbwDatabaseConfig.from_packaged(
-    db_name="wbw_en.db",
+    db_name="english_wbw.db",
     tablename="wbw",
     surah_col="surah",
     ayah_col="ayah",

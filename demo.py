@@ -1,3 +1,14 @@
+"""Demo script showcasing QuranMediaLib workflows and features.
+
+This script demonstrates various usage patterns including:
+- Running SurahWorkflow with different presets (landscape, story, square)
+- Processing verses with and without annotations
+- Working with Arabic-only, translation-only, and combined modes
+- Applying glow effects and saving output images
+
+Run this script to generate sample images for all preset configurations.
+"""
+
 import os
 from typing import Literal
 
@@ -9,6 +20,7 @@ from quranmedialib import (
     STORY_PRESET,
     DatabaseManager,
     LayoutConfig,
+    SurahWorkflow,
     TextConfig,
     WordConfig,
     WordItem,
@@ -19,7 +31,6 @@ from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.workflows.surah import SurahWorkflow
 
 
 def run_workflow_demo(
@@ -90,7 +101,9 @@ def create_square_demo(
     if mode in ["default", "arabic"]:
         verses = db.get_verses_from_surah(surah_id)
         for i, verse_text in enumerate(verses):
-            annotated_imgs, annotated_txts = _process_verse_words(verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default"))
+            annotated_imgs, annotated_txts = _process_verse_words(
+                verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default")
+            )
             all_word_images.extend(annotated_imgs)
             all_words_text.extend(annotated_txts)
 
@@ -173,7 +186,9 @@ def main() -> None:
         all_results.extend(run_workflow_demo(STORY_PRESET["translation"][resolution], data))
 
         # Square
-        all_results.extend(create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation"))
+        all_results.extend(
+            create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation")
+        )
 
         # Save all results
         save_images(all_results, "output/demo")

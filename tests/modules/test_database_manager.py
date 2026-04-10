@@ -1,7 +1,13 @@
+"""Tests for the DatabaseManager class.
+
+This module contains tests for verifying database connectivity and data retrieval
+methods including verse fetching, word-by-word translations, and full translations.
+"""
+
 from quranmedialib import DatabaseManager
 
 
-def test_database_manager():
+def test_database_manager() -> None:
     print("\nRunning test_database_manager...")
     db = DatabaseManager()
 
@@ -12,7 +18,7 @@ def test_database_manager():
 
     verse_text = db.get_verse(1, 1)
     print(f"Verse 1:1 text: {verse_text}")
-    assert "بِسْمِ" in verse_text
+    assert "بِسۡمِ" in verse_text
 
     # Test WBW methods (always use "wbw" database)
     wbw_surah = db.get_wbw_from_surah(1)

@@ -1,7 +1,7 @@
 [project]
 name = "quranmedialib"
-version = "1.1.1"
-description = "A media-editing library for Quranic texts."
+version = "1.2.0"
+description = "A media generation library for Quranic Arabic text and translations with customizable layouts."
 readme = "README.md"
 requires-python = ">=3.13, <3.14"
 license = "Apache-2.0"

@@ -8,11 +8,19 @@ translation into a single annotated block, maintaining Right-to-Left (RTL) order
 from __future__ import annotations
 
 from pathlib import Path
+from typing import overload
 
 from PIL import Image, ImageDraw, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import WordConfig
+
+__all__ = [
+    "annotate_word",
+    "annotate_words",
+    "annotate_words_with_texts",
+]
 
 
 def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -31,14 +39,12 @@ def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | Im
     if isinstance(font_path, Path):
         font_path = str(font_path)
 
-    try:
-        return ImageFont.truetype(font_path, word_config.annotation_font_size)
-    except (OSError, IOError) as e:
-        # Re-raise with a bit more context if needed, but keeping it simple for now as requested.
-        raise e
+    return get_font(font_path, word_config.annotation_font_size)
 
 
-def _combine_images_rtl(images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]) -> Image.Image:
+def _combine_images_rtl(
+    images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]
+) -> Image.Image:
     """Combines multiple word images into a single canvas in RTL order.
 
     Args:
@@ -152,6 +158,32 @@ def annotate_word(
     return _annotate_image(image, translation, font, word_config.annotation_color, word_config.background_color)
 
 
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: None = ...,
+    wbw_translations: list[str] | None = ...,
+) -> list[Image.Image]: ...
+
+
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: list[str] = ...,
+    wbw_translations: list[str] | None = ...,
+) -> tuple[list[Image.Image], list[str]]: ...
+
+
 def annotate_words(
     images: list[Image.Image],
     surah: int,
@@ -160,6 +192,7 @@ def annotate_words(
     db: DatabaseManager | None = None,
     word_config: WordConfig | None = None,
     texts: list[str] | None = None,
+    wbw_translations: list[str] | None = None,
 ) -> list[Image.Image] | tuple[list[Image.Image], list[str]]:
     """Annotates a list of word images, batching those with identical translations.
 
@@ -174,6 +207,8 @@ def annotate_words(
         db: Optional DatabaseManager instance.
         word_config: Rendering configuration.
         texts: Optional list of word strings to return alongside annotated images.
+        wbw_translations: Optional pre-fetched WBW translations for the verse.
+            If provided, avoids redundant database queries.
 
     Returns:
         List of annotated images (may be fewer than input images due to batching).
@@ -182,12 +217,89 @@ def annotate_words(
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
+    result, annotated_texts = _annotate_words_internal(
+        images, surah, ayah, start, db, word_config, wbw_translations, texts
+    )
+
+    if texts is not None:
+        return result, annotated_texts
+    return result
+
+
+def annotate_words_with_texts(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    texts: list[str],
+    db: DatabaseManager | None = None,
+    word_config: WordConfig | None = None,
+    wbw_translations: list[str] | None = None,
+) -> tuple[list[Image.Image], list[str]]:
+    """Annotates word images and returns images with texts.
+
+    This is a type-safe wrapper around annotate_words that always returns a tuple.
+
+    Args:
+        images: List of word images.
+        surah: Surah number.
+        ayah: Ayah number.
+        start: 1-indexed database start index for the first word in images.
+        texts: List of word strings to return alongside annotated images.
+        db: Optional DatabaseManager instance.
+        word_config: Rendering configuration.
+        wbw_translations: Optional pre-fetched WBW translations for the verse.
+
+    Returns:
+        Tuple of (annotated_images, annotated_texts).
+
+    Raises:
+        ValueError: If range is out of bounds or config is missing.
+    """
+    result, annotated_texts = _annotate_words_internal(
+        images, surah, ayah, start, db, word_config, wbw_translations, texts
+    )
+    return result, annotated_texts  # type: ignore[return-value]  # texts is always provided here
+
+
+def _annotate_words_internal(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None,
+    word_config: WordConfig | None,
+    wbw_translations: list[str] | None = None,
+    texts: list[str] | None = None,
+) -> tuple[list[Image.Image], list[str] | None]:
+    """Internal implementation for annotating words.
+
+    Args:
+        images: List of word images.
+        surah: Surah number.
+        ayah: Ayah number.
+        start: 1-indexed database start index for the first word in images.
+        db: Optional DatabaseManager instance.
+        word_config: Rendering configuration.
+        wbw_translations: Optional pre-fetched WBW translations.
+        texts: Optional list of word texts to extract.
+
+    Returns:
+        Tuple of (annotated_images, annotated_texts or None).
+
+    Raises:
+        ValueError: If range is out of bounds or config is missing.
+    """
     database = db if db is not None else DatabaseManager()
     if not word_config:
         raise ValueError("word_config is required for annotation.")
 
-    # Fetch all WBW translations for the verse to optimize lookups
-    verse_wbws = database.get_wbw_from_verse(surah, ayah)
+    # Use pre-fetched translations if provided, otherwise fetch from DB
+    if wbw_translations is not None:
+        verse_wbws = wbw_translations
+    else:
+        verse_wbws = database.get_wbw_from_verse(surah, ayah)
+
     range_len = len(images)
 
     if start < 1 or (start + range_len - 1) > len(verse_wbws):
@@ -199,7 +311,7 @@ def annotate_words(
 
     i = 0
     annotated_images = []
-    annotated_texts = []
+    annotated_texts: list[str] = [] if texts is not None else []
 
     while i < range_len:
         current_wbw = target_wbws[i]
@@ -221,13 +333,13 @@ def annotate_words(
         else:
             # Single word
             annotated_images.append(
-                _annotate_image(images[i], current_wbw, font, word_config.annotation_color, word_config.background_color)
+                _annotate_image(
+                    images[i], current_wbw, font, word_config.annotation_color, word_config.background_color
+                )
             )
             if texts is not None:
                 annotated_texts.append(texts[i])
 
         i += batch_count
 
-    if texts is not None:
-        return annotated_images, annotated_texts
-    return annotated_images
+    return annotated_images, annotated_texts if texts is not None else None
