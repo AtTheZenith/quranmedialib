@@ -13,6 +13,7 @@ structures used throughout the library. It includes:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -21,6 +22,29 @@ from typing import Annotated, NamedTuple
 from PIL import Image, ImageFont
 
 from quranmedialib.resources import get_font_path
+
+# Package working directory (project root where src/ is located)
+_WORKING_DIR = Path(os.getcwd()).resolve()
+
+
+def _ensure_within_working_dir(path: Path) -> None:
+    """Validate that a path is within the working directory tree.
+
+    This prevents users from accidentally accessing files outside
+    the project directory (e.g., ../../etc/passwd).
+
+    Args:
+        path: The path to validate.
+
+    Raises:
+        ValueError: If the path is outside the working directory.
+    """
+    resolved = path.resolve()
+    if not str(resolved).startswith(str(_WORKING_DIR)):
+        raise ValueError(
+            f"Path {path!r} is outside the working directory {_WORKING_DIR}. "
+            f"Use unsafe_paths=True to bypass this check."
+        )
 
 # === Layout Primitives ===
 
@@ -99,6 +123,38 @@ class FontResource:
             display_name = Path(font_name).stem
         return cls(name=display_name, path=get_font_path(font_name))
 
+    @classmethod
+    def from_path(
+        cls,
+        font_path: str | Path,
+        display_name: str | None = None,
+        unsafe_paths: bool = False,
+    ) -> FontResource:
+        """Create a FontResource from a custom font file path.
+
+        Args:
+            font_path: Path to the font file.
+            display_name: Optional display name. Defaults to filename stem.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+
+        Returns:
+            FontResource with the specified path.
+
+        Raises:
+            ValueError: If font_path is outside the working directory and
+                unsafe_paths is False.
+        """
+        font_path_obj = Path(font_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(font_path_obj)
+
+        if display_name is None:
+            display_name = font_path_obj.stem
+
+        return cls(name=display_name, path=font_path_obj)
+
 
 # === Database Configuration ===
 
@@ -163,6 +219,7 @@ class DatabaseConfig:
         surah_col: str = "sura",
         ayah_col: str = "ayah",
         text_col: str = "text",
+        unsafe_paths: bool = False,
     ) -> DatabaseConfig:
         """Create a DatabaseConfig from an external database file path.
 
@@ -172,9 +229,20 @@ class DatabaseConfig:
             surah_col: Surah column name.
             ayah_col: Ayah column name.
             text_col: Text column name.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+
+        Raises:
+            ValueError: If db_path is outside the working directory and
+                unsafe_paths is False.
         """
+        db_path_obj = Path(db_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(db_path_obj)
+
         return cls(
-            filepath=Path(db_path),
+            filepath=db_path_obj,
             tablename=tablename,
             surah_col=surah_col,
             ayah_col=ayah_col,
@@ -223,10 +291,31 @@ class WbwDatabaseConfig(DatabaseConfig):
         ayah_col: str = "ayah",
         text_col: str = "translation",
         word_id_col: str = "word",
+        unsafe_paths: bool = False,
     ) -> WbwDatabaseConfig:
-        """Create a WbwDatabaseConfig from an external database file path."""
+        """Create a WbwDatabaseConfig from an external database file path.
+
+        Args:
+            db_path: Path to the SQLite database file.
+            tablename: Name of the table.
+            surah_col: Surah column name.
+            ayah_col: Ayah column name.
+            text_col: Text column name.
+            word_id_col: Word ID column name.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+
+        Raises:
+            ValueError: If db_path is outside the working directory and
+                unsafe_paths is False.
+        """
+        db_path_obj = Path(db_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(db_path_obj)
+
         return cls(
-            filepath=Path(db_path),
+            filepath=db_path_obj,
             tablename=tablename,
             surah_col=surah_col,
             ayah_col=ayah_col,
@@ -347,9 +436,9 @@ class WordConfig:
     def __init__(
         self,
         font_size: int,
-        max_rows_per_page: int,
-        row_spacing: int,
-        word_spacing: int,
+        max_rows_per_page: int = 5,
+        row_spacing: int = 20,
+        word_spacing: int = 10,
         word_padding: Padding | tuple[int, int, int, int] = (10, 10, 10, 10),
         verse_v_offset: int = 0,
         balanced_wrapping: bool = False,
@@ -363,8 +452,18 @@ class WordConfig:
         background_color: Color = (0, 0, 0, 0),
         font: FontResource | None = None,
     ):
-        """Initialize WordConfig with resolved paths and type-safe layout primitives."""
+        """Initialize WordConfig with resolved paths and type-safe layout primitives.
+
+        Raises:
+            ValueError: If font_size <= 0 or max_rows_per_page <= 0.
+        """
         from quranmedialib.presets import FONT_HAFS
+
+        # Validate critical parameters
+        if font_size <= 0:
+            raise ValueError(f"font_size must be positive, got {font_size}")
+        if max_rows_per_page <= 0:
+            raise ValueError(f"max_rows_per_page must be positive, got {max_rows_per_page}")
 
         # Resolve font - default to FONT_HAFS if not provided
         if font is None:
@@ -433,7 +532,11 @@ class TextConfig:
         max_width: int | None = None,
         alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER,
     ):
-        """Initialize TextConfig with resolved font paths."""
+        """Initialize TextConfig with resolved font paths.
+
+        Raises:
+            ValueError: If max_width is provided and <= 0.
+        """
 
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
@@ -443,6 +546,10 @@ class TextConfig:
         # Resolve alignment
         if isinstance(alignment, str):
             alignment = HorizontalAlignment(alignment.lower())
+
+        # Validate max_width if provided
+        if max_width is not None and max_width <= 0:
+            raise ValueError(f"max_width must be positive when provided, got {max_width}")
 
         object.__setattr__(self, "font_size", font_size)
         object.__setattr__(self, "color", color)

@@ -117,18 +117,13 @@ def test_verse_range_invalid_ayah_range() -> None:
 
 
 def test_verse_range_reversed_range() -> None:
-    """Test that VerseRangeWorkflow handles reversed ayah range."""
+    """Test that VerseRangeWorkflow raises ValueError for reversed ayah range."""
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
     workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
 
-    # end_ayah < start_ayah should handle gracefully
-    # Either raise error or return empty
-    try:
-        results = list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=5, end_ayah=1))
-        # If it doesn't raise error, should return empty or handle gracefully
-        assert isinstance(results, list)
-    except Exception:
-        pass  # Also acceptable
+    # end_ayah < start_ayah should raise ValueError
+    with pytest.raises(ValueError, match="start_ayah.*cannot be greater than end_ayah"):
+        list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=5, end_ayah=1))
 
 
 def test_verse_range_empty_translations() -> None:

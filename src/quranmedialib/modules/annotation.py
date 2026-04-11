@@ -294,6 +294,12 @@ def _annotate_words_internal(
     if not word_config:
         raise ValueError("word_config is required for annotation.")
 
+    if start < 1:
+        raise ValueError(
+            f"start index must be 1-based (>= 1), got {start}. "
+            "The start parameter represents the 1-indexed word position in the verse."
+        )
+
     # Use pre-fetched translations if provided, otherwise fetch from DB
     if wbw_translations is not None:
         verse_wbws = wbw_translations

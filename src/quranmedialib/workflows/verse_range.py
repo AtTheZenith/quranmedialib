@@ -132,9 +132,17 @@ class VerseRangeWorkflow(BaseWorkflow):
 
         Yields:
             list[Image.Image]: List of page images for each verse in the range.
+
+        Raises:
+            ValueError: If start_ayah > end_ayah (reversed range).
         """
         if end_ayah is None:
             end_ayah = start_ayah
+
+        if start_ayah > end_ayah:
+            raise ValueError(
+                f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
+            )
 
         return self._process_range(
             surah=surah,

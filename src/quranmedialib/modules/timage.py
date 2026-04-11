@@ -88,7 +88,26 @@ def format_isolation_text(
     target_index: int,
     highlight_style: str,
 ) -> str:
-    """Constructs a formatted rich text string where one segment is highlighted and others are transparent."""
+    """Constructs a formatted rich text string where one segment is highlighted and others are transparent.
+
+    Args:
+        parsed_segments: List of pre-parsed translation segments.
+        target_index: Index of the segment to highlight (0-based).
+        highlight_style: Rich text formatting string for the highlighted segment.
+
+    Returns:
+        Formatted rich text string with one highlighted segment.
+
+    Raises:
+        ValueError: If target_index is out of bounds (negative or >= len(parsed_segments)).
+    """
+    if target_index < 0:
+        raise ValueError(f"target_index must be non-negative, got {target_index}")
+    if target_index >= len(parsed_segments):
+        raise ValueError(
+            f"target_index {target_index} out of bounds for {len(parsed_segments)} segments"
+        )
+
     formatted = []
     for j, seg in enumerate(parsed_segments):
         if j == target_index:
@@ -300,7 +319,7 @@ def _parse_rich_text(text: str, config: TextConfig, draw: ImageDraw.ImageDraw) -
     return styled_words
 
 
-def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> list[Line]:
+def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
     """Standard greedy wrapping logic (Lines are filled until max_width).
 
     Since whitespaces are explicit tokens, we:
@@ -309,11 +328,23 @@ def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> li
 
     Args:
         styled_words: List of styled word objects with explicit whitespace tokens.
-        max_width: Maximum line width in pixels.
+        max_width: Maximum line width in pixels. If None, no wrapping is applied (single line).
 
     Returns:
         list[Line]: List of line objects containing wrapped words.
     """
+    # If max_width is None, treat as unlimited width (single line)
+    if max_width is None:
+        line = Line()
+        for word in styled_words:
+            if not line.words and word.text.isspace():
+                continue
+            line.add_word(word, 0)
+        if line.words:
+            if line.words[-1].text.isspace():
+                line.words.pop()
+        return [line] if line.words else []
+
     lines = []
     current_line = Line()
 
@@ -349,15 +380,18 @@ def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int) -> li
     return lines
 
 
-def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int) -> list[Line]:
+def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
     """Wraps text into a balanced 'Inverted Pyramid' shape using Dynamic Programming.
 
     This version handles explicit whitespace tokens by trimming them from line width
     calculations to ensure a cleanly centered visual distribution.
 
+    For very large word counts (> 500), falls back to greedy wrapping to avoid
+    excessive computation time (DP is O(k × n²)).
+
     Args:
         styled_words: List of styled word objects with explicit whitespace tokens.
-        max_width: Maximum line width in pixels.
+        max_width: Maximum line width in pixels. If None, no wrapping is applied.
 
     Returns:
         list[Line]: List of line objects forming an inverted pyramid shape.
@@ -365,9 +399,21 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int) -> 
     if not styled_words:
         return []
 
+    # If max_width is None, fall back to greedy (which handles None)
+    if max_width is None:
+        return _wrap_rich_text_greedy(styled_words, None)
+
     # Estimate line count using greedy as a reference
     greedy_lines = _wrap_rich_text_greedy(styled_words, max_width)
     if len(greedy_lines) <= 1:
+        return greedy_lines
+
+    # Performance guard: DP is O(k × n²), fallback to greedy for large inputs
+    if len(styled_words) > 500:
+        logger.debug(
+            "Falling back to greedy wrapping for %d words (DP would be too slow)",
+            len(styled_words),
+        )
         return greedy_lines
 
     n = len(styled_words)
@@ -574,11 +620,14 @@ def get_timage(
     actual_max_height = max_height if max_height is not None else config.height
     canvas_height = actual_max_height if actual_max_height is not None else total_text_height
 
-    timage = Image.new("RGBA", (config.max_width, canvas_height), (0, 0, 0, 0))
+    # When max_width is None, compute actual width from widest line
+    effective_max_width = config.max_width if config.max_width is not None else max(line.width for line in lines)
+
+    timage = Image.new("RGBA", (effective_max_width, canvas_height), (0, 0, 0, 0))
     timage_draw = ImageDraw.Draw(timage)
 
     # Render lines onto the new canvas
-    _draw_lines(timage_draw, lines, 0, config.max_width, ascent, line_height, config)
+    _draw_lines(timage_draw, lines, 0, effective_max_width, ascent, line_height, config)
 
     return timage
 

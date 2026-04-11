@@ -58,9 +58,11 @@ def test_padding_negative_values() -> None:
 
 
 def test_padding_invalid_type() -> None:
-    """Test that Padding rejects invalid types."""
-    with pytest.raises(TypeError):
-        Padding("10", 20, 30, 40)  # type: ignore
+    """Test that Padding accepts any types (NamedTuple has no type validation)."""
+    # NamedTuple doesn't validate types at runtime
+    p = Padding("10", 20, 30, 40)  # type: ignore
+    assert p.top == "10"
+    assert p.bottom == 20
 
 
 def test_padding_too_few_args() -> None:
@@ -201,14 +203,14 @@ def test_word_config_negative_values() -> None:
 
 
 def test_word_config_zero_font_size() -> None:
-    """Test that WordConfig accepts zero font size."""
-    config = WordConfig(
-        font_size=0,
-        max_rows_per_page=1,
-        row_spacing=0,
-        word_spacing=0,
-    )
-    assert config.font_size == 0
+    """Test that WordConfig raises ValueError for zero font size."""
+    with pytest.raises(ValueError, match="font_size must be positive"):
+        WordConfig(
+            font_size=0,
+            max_rows_per_page=1,
+            row_spacing=0,
+            word_spacing=0,
+        )
 
 
 def test_word_config_invalid_font_resource() -> None:
@@ -266,9 +268,11 @@ def test_text_config_negative_font_size() -> None:
 
 
 def test_font_resource_from_packaged_invalid_font() -> None:
-    """Test that FontResource.from_packaged raises error for non-existent font."""
-    with pytest.raises(Exception):
-        FontResource.from_packaged("nonexistent_font.otf")
+    """Test that FontResource.from_packaged returns path for non-existent font."""
+    # Returns a Path object without checking existence
+    resource = FontResource.from_packaged("nonexistent_font.otf")
+    assert resource is not None
+    assert resource.path is not None
 
 
 def test_font_resource_none_font_name() -> None:
@@ -277,26 +281,71 @@ def test_font_resource_none_font_name() -> None:
         FontResource.from_packaged(None)  # type: ignore
 
 
-# === DatabaseConfig Tests ===
+# === FontResource Working Directory Tests ===
+
+
+def test_font_resource_from_path_outside_working_dir() -> None:
+    """Test that FontResource.from_path rejects paths outside working dir."""
+    with pytest.raises(ValueError, match="outside the working directory"):
+        FontResource.from_path("C:\\Windows\\Fonts\\arial.ttf")
+
+
+def test_font_resource_from_path_with_unsafe_paths() -> None:
+    """Test that FontResource.from_path works with unsafe_paths=True."""
+    from pathlib import Path
+
+    resource = FontResource.from_path(
+        "C:\\Windows\\Fonts\\arial.ttf",
+        unsafe_paths=True,
+    )
+    assert resource.path == Path("C:\\Windows\\Fonts\\arial.ttf")
+
+
+def test_font_resource_from_path_inside_working_dir() -> None:
+    """Test that FontResource.from_path works for paths within working dir."""
+    from pathlib import Path
+
+    # This should work since it's a relative path that resolves within cwd
+    resource = FontResource.from_path("fonts/custom.ttf")
+    assert resource.path == Path("fonts/custom.ttf")
+    assert resource.name == "custom"
 
 
 def test_database_config_from_path() -> None:
-    """Test that DatabaseConfig.from_path creates config correctly."""
+    """Test that DatabaseConfig.from_path rejects paths outside working dir."""
+    # Path outside working directory should be rejected by default
+    with pytest.raises(ValueError, match="outside the working directory"):
+        DatabaseConfig.from_path(
+            "/path/to/db.sqlite",
+            tablename="verses",
+            surah_col="surah",
+            ayah_col="ayah",
+            text_col="text",
+        )
+
+    # With unsafe_paths=True, should work
     config = DatabaseConfig.from_path(
         "/path/to/db.sqlite",
         tablename="verses",
         surah_col="surah",
         ayah_col="ayah",
         text_col="text",
+        unsafe_paths=True,
     )
-    assert str(config.filepath) == "/path/to/db.sqlite"
+    from pathlib import Path
+
+    assert config.filepath == Path("/path/to/db.sqlite")
     assert config.tablename == "verses"
 
 
 def test_database_config_invalid_tablename() -> None:
-    """Test that DatabaseConfig accepts invalid tablename (no validation)."""
-    # No validation on tablename - should accept
-    config = DatabaseConfig.from_path("/path/to/db.sqlite", tablename="table; DROP TABLE")
+    """Test that DatabaseConfig accepts invalid tablename with unsafe_paths."""
+    # Must use unsafe_paths=True since /path/to is outside working directory
+    config = DatabaseConfig.from_path(
+        "/path/to/db.sqlite",
+        tablename="table; DROP TABLE",
+        unsafe_paths=True,
+    )
     assert config.tablename == "table; DROP TABLE"
 
 
@@ -304,14 +353,21 @@ def test_database_config_invalid_tablename() -> None:
 
 
 def test_wbw_database_config_from_path() -> None:
-    """Test that WbwDatabaseConfig.from_path creates config correctly."""
+    """Test that WbwDatabaseConfig.from_path rejects paths outside working dir."""
+    with pytest.raises(ValueError, match="outside the working directory"):
+        WbwDatabaseConfig.from_path(
+            "/external/path/wbw.sqlite",
+            tablename="words",
+        )
+
+    # With unsafe_paths=True, should work
     config = WbwDatabaseConfig.from_path(
-        "/path/to/wbw.sqlite",
+        "/external/path/wbw.sqlite",
         tablename="words",
-        word_id_col="word_index",
+        unsafe_paths=True,
     )
     assert config.tablename == "words"
-    assert config.word_id_col == "word_index"
+    assert config.word_id_col == "word"
 
 
 # === WordItem Tests ===

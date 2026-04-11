@@ -254,14 +254,22 @@ class DatabaseManager:
             params: Parameters to bind to the query.
 
         Returns:
-            List of result rows. Returns empty list on sqlite3 errors after logging.
+            List of result rows. Returns empty list on sqlite3 errors after logging
+            at WARNING level with caller context for debugging.
         """
         cursor = self._get_cursor(name)
         try:
             cursor.execute(query, params)
             return cursor.fetchall()
         except sqlite3.Error as e:
-            logger.error("Query failed on DB '%s': %s | Query: %s", name, e, query)
+            logger.warning(
+                "Database query failed on '%s': %s | Query: %s | Params: %s",
+                name,
+                e,
+                query,
+                params,
+                exc_info=True,
+            )
             return []
 
     def _aggregate_verses(

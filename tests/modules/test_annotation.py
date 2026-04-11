@@ -199,3 +199,28 @@ def test_annotate_word_none_image() -> None:
 
     with pytest.raises((TypeError, AttributeError)):
         annotate_word(None, 1, 1, 1, db=db, translation="test", word_config=word_config)
+
+
+# === Annotation Start Index Validation Tests ===
+
+
+def test_annotate_words_zero_start_index() -> None:
+    """Test that annotate_words raises ValueError for start=0."""
+    from quranmedialib.modules.annotation import annotate_words
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+
+    with pytest.raises(ValueError, match="start index must be 1-based"):
+        annotate_words([dummy_img], 1, 1, start=0, word_config=word_config)
+
+
+def test_annotate_words_negative_start_index() -> None:
+    """Test that annotate_words raises ValueError for negative start."""
+    from quranmedialib.modules.annotation import annotate_words
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+
+    with pytest.raises(ValueError, match="start index must be 1-based"):
+        annotate_words([dummy_img], 1, 1, start=-1, word_config=word_config)

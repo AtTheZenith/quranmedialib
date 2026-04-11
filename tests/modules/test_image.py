@@ -320,16 +320,29 @@ def test_color_none_image() -> None:
 
 
 def test_color_invalid_color_tuple() -> None:
-    """Test that color handles invalid color tuples gracefully."""
+    """Test that color raises ValueError for invalid color tuples."""
     test_image = Image.new("RGBA", (10, 10))
 
-    # Too short color tuple
-    with pytest.raises(Exception):
+    # Too short color tuple (2 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
         color(test_image, color=(255, 0))  # type: ignore
 
-    # Too long color tuple
-    with pytest.raises(Exception):
+    # Too long color tuple (5 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
         color(test_image, color=(255, 0, 0, 255, 0))  # type: ignore
+
+
+def test_pad_invalid_color_tuple() -> None:
+    """Test that pad raises ValueError for invalid color tuples."""
+    test_image = Image.new("RGBA", (10, 10))
+
+    # Too short color tuple (1 element)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        pad(test_image, color=(255,))  # type: ignore
+
+    # Too long color tuple (5 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        pad(test_image, color=(255, 0, 0, 255, 0))  # type: ignore
 
 
 def test_pad_none_image() -> None:
@@ -339,13 +352,13 @@ def test_pad_none_image() -> None:
 
 
 def test_pad_negative_padding() -> None:
-    """Test that pad handles negative padding gracefully."""
+    """Test that pad handles negative padding by producing smaller image."""
     test_image = Image.new("RGBA", (100, 100))
     negative_padding = Padding(-10, -10, -10, -10)
 
-    # Negative padding should either raise error or produce smaller image
-    with pytest.raises(Exception):
-        pad(test_image, padding=negative_padding)
+    # Negative padding creates a smaller image (80x80 instead of 100x100)
+    result = pad(test_image, padding=negative_padding)
+    assert result.size == (80, 80)  # 100 - 2*10 = 80
 
 
 def test_glow_none_image() -> None:

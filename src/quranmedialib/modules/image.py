@@ -36,7 +36,13 @@ def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Imag
 
     Returns:
         The colorized PIL Image as a new object.
+
+    Raises:
+        ValueError: If color tuple length is not 3 or 4.
     """
+    if len(color) not in (3, 4):
+        raise ValueError(f"Color must be RGB or RGBA tuple (3 or 4 values), got {len(color)} values: {color}")
+
     # Ensure color is RGBA
     if len(color) == 3:
         color = (*color, 255)
@@ -58,10 +64,12 @@ def pad(image: Image.Image, padding: Padding = Padding(20, 20, 20, 20), color: C
 
     Returns:
         A new PIL Image containing the original image offset by the padding.
+
+    Raises:
+        ValueError: If color tuple length is not 3 or 4.
     """
-    # Ensure color is RGBA
-    if len(color) == 3:
-        color = (*color, 255)
+    if len(color) not in (3, 4):
+        raise ValueError(f"Color must be RGB or RGBA tuple (3 or 4 values), got {len(color)} values: {color}")
 
     # Ensure image is RGBA for transparency support in padding
     if image.mode != "RGBA":

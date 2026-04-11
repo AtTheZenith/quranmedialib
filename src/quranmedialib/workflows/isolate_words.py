@@ -87,7 +87,15 @@ class IsolateWordsWorkflow(BaseWorkflow):
         norm_highlight = normalize_highlight_style(highlight_style)
 
         # Pre-compute all formatted translation strings
-        formatted_translations = [format_isolation_text(parsed_trans, i, norm_highlight) for i in range(total_items)]
+        # Handle case where there are more words than translation segments
+        num_segments = len(parsed_trans)
+        formatted_translations = []
+        for i in range(total_items):
+            if i < num_segments:
+                formatted_translations.append(format_isolation_text(parsed_trans, i, norm_highlight))
+            else:
+                # No matching segment - create transparent placeholder text
+                formatted_translations.append("##00000000#(no translation)#")
 
         for i in range(total_items):
             # Create image list efficiently: use list comprehension with index check
