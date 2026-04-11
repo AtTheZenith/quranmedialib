@@ -9,6 +9,7 @@ This module contains tests for verifying the multi-page layout engine including:
 import os
 from dataclasses import replace
 
+import pytest
 from PIL import Image
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, LayoutConfig, WordConfig, WordItem
@@ -219,3 +220,57 @@ if __name__ == "__main__":
     test_framer()
     test_framer_alignment()
     test_framer_offsets()
+
+
+# === Validation Tests ===
+
+
+def test_frame_empty_words() -> None:
+    """Test that frame returns empty list for empty words."""
+    result = frame([], translation_images=None, config=None, word_config=None)
+    assert result == []
+
+
+def test_frame_none_word_item_image() -> None:
+    """Test that frame raises ValueError when WordItem has None image."""
+    word_config = WordConfig(font_size=10)
+    # Create WordItem with None image
+    bad_item = WordItem(None)  # type: ignore
+
+    with pytest.raises(ValueError, match="One or more WordItems are missing their image content"):
+        frame([bad_item], word_config=word_config)
+
+
+def test_frame_none_config_creates_defaults() -> None:
+    """Test that frame works with None config (should create defaults)."""
+    word_config = WordConfig(font_size=10)
+    dummy_img = Image.new("RGBA", (50, 50))
+    items = [WordItem(dummy_img)]
+
+    # Should not raise, creates default config
+    result = frame(items, word_config=word_config)
+    assert len(result) > 0
+
+
+def test_frame_invalid_alignment_value() -> None:
+    """Test that frame handles invalid alignment values gracefully."""
+    # Invalid alignment should either raise error or be handled by LayoutConfig
+    with pytest.raises(Exception):
+        LayoutConfig(
+            max_width=500,
+            image_height=500,
+            padding=(0, 0, 0, 0),
+            wimage_vertical_align="invalid_value",
+        )
+
+
+@pytest.mark.parametrize("negative_strength", [-1.0, -0.5, 0.0])
+def test_frame_negative_word_spacing(negative_strength: float) -> None:
+    """Test that frame handles negative word spacing."""
+    word_config = WordConfig(font_size=10, word_spacing=-10)
+    dummy_img = Image.new("RGBA", (50, 50))
+    items = [WordItem(dummy_img), WordItem(dummy_img)]
+
+    # Should handle gracefully (may produce overlapping images)
+    result = frame(items, word_config=word_config)
+    assert len(result) > 0

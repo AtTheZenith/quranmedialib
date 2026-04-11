@@ -7,6 +7,8 @@ as transparent placeholders.
 
 import os
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
@@ -74,3 +76,64 @@ def test_isolate_words() -> None:
 
 if __name__ == "__main__":
     test_isolate_words()
+
+
+def test_isolate_words_invalid_surah() -> None:
+    """Test that IsolateWordsWorkflow raises error for invalid surah."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    # Using surah 0 which is invalid
+    with pytest.raises(Exception):
+        list(
+            workflow.get_iterator(
+                surah=0,
+                verse_words=["test"],
+                translations=["test translation"],
+                ayah=1,
+            )
+        )
+
+
+def test_isolate_words_empty_verse_words() -> None:
+    """Test that IsolateWordsWorkflow handles empty verse_words list."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    results = list(
+        workflow.get_iterator(
+            surah=1,
+            verse_words=[],
+            translations=["test translation"],
+            ayah=1,
+        )
+    )
+
+    # With empty verse_words and ayah=1, we should only get the verse number item
+    assert len(results) == 1, f"Expected 1 result (verse number only), got {len(results)}"
+
+
+def test_isolate_words_none_ayah() -> None:
+    """Test that IsolateWordsWorkflow works when ayah is None."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    verse_words = ["word1", "word2", "word3"]
+
+    results = list(
+        workflow.get_iterator(
+            surah=1,
+            verse_words=verse_words,
+            translations=["translation"],
+            ayah=None,
+        )
+    )
+
+    # With 3 words and no ayah, we should get 3 results (one per word)
+    assert len(results) == len(verse_words), f"Expected {len(verse_words)} results, got {len(results)}"
+
+    # Verify each result is a non-empty list of images
+    for i, pages in enumerate(results):
+        assert isinstance(pages, list), f"Word {i+1}: Expected list, got {type(pages)}"
+        assert len(pages) > 0, f"Word {i+1}: Expected at least one page"
+

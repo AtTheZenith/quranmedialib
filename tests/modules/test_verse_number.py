@@ -6,6 +6,8 @@ Unicode ayah symbol and various padding configurations.
 
 import os
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET
 from quranmedialib.modules.verse_number import logger, verse_number
 
@@ -30,3 +32,44 @@ def test_verse_number() -> None:
 
 if __name__ == "__main__":
     test_verse_number()
+
+
+# === Validation Tests ===
+
+
+def test_verse_number_negative() -> None:
+    """Test that verse_number raises ValueError for negative numbers."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    with pytest.raises(ValueError, match="Verse number must be non-negative"):
+        verse_number(-1, word_config)
+
+    with pytest.raises(ValueError, match="Verse number must be non-negative"):
+        verse_number(-100, word_config)
+
+
+def test_verse_number_zero() -> None:
+    """Test that verse_number handles zero correctly."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    # Zero should be valid (non-negative)
+    img = verse_number(0, word_config)
+    assert img is not None
+    assert img.size[0] > 0
+    assert img.size[1] > 0
+
+
+def test_verse_number_large_value() -> None:
+    """Test that verse_number handles large values correctly."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    # Large ayah number should work
+    img = verse_number(9999, word_config)
+    assert img is not None
+    assert img.size[0] > 0
+
+
+def test_verse_number_none_config() -> None:
+    """Test that verse_number raises error when config is None."""
+    with pytest.raises(AttributeError):
+        verse_number(1, None)  # type: ignore

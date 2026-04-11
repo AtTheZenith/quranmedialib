@@ -10,6 +10,7 @@ This module contains tests for verifying image processing functions including:
 import os
 import statistics
 
+import pytest
 from PIL import Image, ImageDraw
 
 from quranmedialib.modules.image import color, glow, pad
@@ -307,3 +308,82 @@ if __name__ == "__main__":
     test_glow_wimage_comparison()
     test_glow_brightness_analysis()
     print("All image tests completed successfully.")
+
+
+# === Validation Tests ===
+
+
+def test_color_none_image() -> None:
+    """Test that color raises error for None image."""
+    with pytest.raises(AttributeError):
+        color(None, color=(255, 0, 0, 255))  # type: ignore
+
+
+def test_color_invalid_color_tuple() -> None:
+    """Test that color handles invalid color tuples gracefully."""
+    test_image = Image.new("RGBA", (10, 10))
+
+    # Too short color tuple
+    with pytest.raises(Exception):
+        color(test_image, color=(255, 0))  # type: ignore
+
+    # Too long color tuple
+    with pytest.raises(Exception):
+        color(test_image, color=(255, 0, 0, 255, 0))  # type: ignore
+
+
+def test_pad_none_image() -> None:
+    """Test that pad raises error for None image."""
+    with pytest.raises(AttributeError):
+        pad(None, padding=Padding(10, 10, 10, 10))  # type: ignore
+
+
+def test_pad_negative_padding() -> None:
+    """Test that pad handles negative padding gracefully."""
+    test_image = Image.new("RGBA", (100, 100))
+    negative_padding = Padding(-10, -10, -10, -10)
+
+    # Negative padding should either raise error or produce smaller image
+    with pytest.raises(Exception):
+        pad(test_image, padding=negative_padding)
+
+
+def test_glow_none_image() -> None:
+    """Test that glow raises error for None image."""
+    with pytest.raises(AttributeError):
+        glow(None, strength=1.0, radius=50)  # type: ignore
+
+
+def test_glow_negative_strength() -> None:
+    """Test that glow returns copy for negative strength."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=-1.0, radius=50)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_negative_radius() -> None:
+    """Test that glow returns copy for negative radius."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=1.0, radius=-10)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_zero_radius() -> None:
+    """Test that glow returns copy for zero radius."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=1.0, radius=0)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_invalid_quality_mode() -> None:
+    """Test that glow raises error for invalid quality mode."""
+    test_image = Image.new("RGBA", (100, 100))
+
+    with pytest.raises(Exception):
+        glow(test_image, strength=1.0, radius=50, quality="invalid_mode")  # type: ignore

@@ -7,6 +7,8 @@ when consecutive words have identical translations.
 
 import os
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.modules.annotation import annotate_word, annotate_words
 from quranmedialib.modules.wimage import get_wimage
@@ -94,3 +96,106 @@ def test_annotate_words() -> None:
 if __name__ == "__main__":
     test_annotate_word()
     test_annotate_words()
+
+
+# === Validation Tests ===
+
+
+def test_annotate_word_missing_config() -> None:
+    """Test that annotate_word raises ValueError when word_config is None."""
+    surah = 1
+    ayah = 1
+    word_idx = 1
+
+    arabic_words = db.get_verse(surah, ayah).split()
+    arabic_text = arabic_words[word_idx - 1]
+    arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"][2])
+
+    with pytest.raises(ValueError, match="word_config is required for annotation"):
+        annotate_word(arabic_img, surah, ayah, word_idx, db=db, word_config=None)
+
+
+def test_annotate_word_invalid_surah() -> None:
+    """Test that annotate_word handles invalid surah numbers (empty translation)."""
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    # Surah 0 doesn't exist - DB returns None/empty, annotation should handle gracefully
+    # Should either skip annotation or return original image
+    result = annotate_word(arabic_img, 0, 1, 1, db=db, word_config=word_config)
+    assert result is not None  # Should return something (original or annotated)
+
+    # Surah 115 doesn't exist
+    result = annotate_word(arabic_img, 115, 1, 1, db=db, word_config=word_config)
+    assert result is not None
+
+
+def test_annotate_word_invalid_ayah() -> None:
+    """Test that annotate_word handles invalid ayah numbers."""
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    # Ayah 0 doesn't exist - should handle gracefully
+    result = annotate_word(arabic_img, 1, 0, 1, db=db, word_config=word_config)
+    assert result is not None
+
+
+def test_annotate_word_invalid_word_index() -> None:
+    """Test that annotate_word handles invalid word indices."""
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    # Word index 0 doesn't exist - should handle gracefully
+    result = annotate_word(arabic_img, 1, 1, 0, db=db, word_config=word_config)
+    assert result is not None
+
+
+def test_annotate_words_empty_list() -> None:
+    """Test that annotate_words handles empty image list."""
+    result = annotate_words([], 1, 1, 1, word_config=LANDSCAPE_PRESET["default"]["1080p"][2])
+    assert result == []
+
+
+def test_annotate_words_missing_config() -> None:
+    """Test that annotate_words raises ValueError when word_config is None."""
+    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+
+    with pytest.raises(ValueError, match="word_config is required for annotation"):
+        annotate_words([dummy_img], 1, 1, 1, word_config=None)
+
+
+def test_annotate_words_out_of_bounds_range() -> None:
+    """Test that annotate_words raises ValueError for out-of-bounds word range."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+
+    # Surah 1:1 has only 4 words, but we request 10 starting from index 1
+    with pytest.raises(ValueError, match="out of bounds"):
+        annotate_words([dummy_img] * 10, 1, 1, 1, word_config=word_config)
+
+
+def test_annotate_words_invalid_surah() -> None:
+    """Test that annotate_words handles invalid surah numbers."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+
+    with pytest.raises(Exception):
+        annotate_words([dummy_img], 0, 1, 1, word_config=word_config)
+
+
+def test_annotate_words_with_texts_missing_config() -> None:
+    """Test that annotate_words_with_texts raises ValueError when word_config is None."""
+    from quranmedialib.modules.annotation import annotate_words_with_texts
+
+    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+
+    with pytest.raises(ValueError, match="word_config is required for annotation"):
+        annotate_words_with_texts([dummy_img], 1, 1, 1, texts=["test"], word_config=None)
+
+
+def test_annotate_word_none_image() -> None:
+    """Test that annotate_word handles None image gracefully."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+
+    with pytest.raises((TypeError, AttributeError)):
+        annotate_word(None, 1, 1, 1, db=db, translation="test", word_config=word_config)

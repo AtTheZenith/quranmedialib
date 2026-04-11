@@ -106,3 +106,57 @@ if __name__ == "__main__":
     # Allow running manually
     test_timage_rendering()
     _verify_pyramid("This is a short text that will form a pyramid.", 300, filename="manual")
+
+
+# === Validation Tests ===
+
+
+def test_timage_empty_text() -> None:
+    """Test that get_timage returns None for empty text."""
+    result = get_timage("", TextConfig())
+    assert result is None
+
+
+def test_timage_none_text() -> None:
+    """Test that get_timage returns None for None text."""
+    result = get_timage(None, TextConfig())  # type: ignore
+    assert result is None
+
+
+def test_timage_none_config() -> None:
+    """Test that get_timage raises error when config is None."""
+    with pytest.raises((AttributeError, TypeError)):
+        get_timage("test", None)  # type: ignore
+
+
+def test_timage_negative_max_height() -> None:
+    """Test that get_timage handles negative max_height."""
+    config = TextConfig()
+    # Negative max_height should either raise error or be handled gracefully
+    result = get_timage("test", config, max_height=-100)
+    # Either None (due to negative height) or valid image
+    assert result is None or (result is not None and result.size[1] > 0)
+
+
+def test_timage_invalid_rich_text_format() -> None:
+    """Test that get_timage handles malformed rich text."""
+    config = TextConfig()
+
+    # Malformed tags (missing closing tag)
+    result = get_timage("#b#unclosed bold text", config)
+    assert result is not None  # Should handle gracefully
+
+    # Invalid hex color
+    result = get_timage("#invalidhex#text", config)
+    assert result is not None  # Should handle gracefully
+
+
+def test_timage_very_long_text() -> None:
+    """Test that get_timage handles very long text without crashing."""
+    config = TextConfig(max_width=1200)
+    very_long_text = "word " * 10000
+
+    result = get_timage(very_long_text, config)
+    assert result is not None
+    assert result.size[0] > 0
+    assert result.size[1] > 0

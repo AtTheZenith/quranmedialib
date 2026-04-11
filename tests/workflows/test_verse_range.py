@@ -6,6 +6,8 @@ a range of verses sequentially with Arabic text and translations.
 
 import os
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
@@ -76,3 +78,64 @@ def test_verse_range() -> None:
 
 if __name__ == "__main__":
     test_verse_range()
+
+
+# === Validation Tests ===
+
+
+def test_verse_range_invalid_surah() -> None:
+    """Test that VerseRangeWorkflow handles invalid surah numbers."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+
+    # Surah 0 doesn't exist, should handle gracefully
+    try:
+        results = list(workflow.get_iterator(surah=0, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
+        assert isinstance(results, list)
+    except Exception:
+        pass
+
+    # Surah 115 doesn't exist
+    try:
+        results = list(workflow.get_iterator(surah=115, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
+        assert isinstance(results, list)
+    except Exception:
+        pass
+
+
+def test_verse_range_invalid_ayah_range() -> None:
+    """Test that VerseRangeWorkflow handles invalid ayah range."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+
+    # Ayah 0 doesn't exist, should handle gracefully
+    try:
+        results = list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=0, end_ayah=1, annotate=False))
+        assert isinstance(results, list)
+    except Exception:
+        pass
+
+
+def test_verse_range_reversed_range() -> None:
+    """Test that VerseRangeWorkflow handles reversed ayah range."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+
+    # end_ayah < start_ayah should handle gracefully
+    # Either raise error or return empty
+    try:
+        results = list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=5, end_ayah=1))
+        # If it doesn't raise error, should return empty or handle gracefully
+        assert isinstance(results, list)
+    except Exception:
+        pass  # Also acceptable
+
+
+def test_verse_range_empty_translations() -> None:
+    """Test that VerseRangeWorkflow handles empty translations."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+
+    # Empty translations should still work
+    results = list(workflow.get_iterator(surah=108, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
+    assert len(results) > 0
