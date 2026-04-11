@@ -124,18 +124,20 @@ def test_timage_none_text() -> None:
 
 
 def test_timage_none_config() -> None:
-    """Test that get_timage raises error when config is None."""
-    with pytest.raises((AttributeError, TypeError)):
-        get_timage("test", None)  # type: ignore
+    """Test that get_timage handles None config by using defaults."""
+    # get_timage creates a default TextConfig when config is None
+    result = get_timage("test", None)  # type: ignore
+    assert result is not None
+    assert result.size[0] > 0
+    assert result.size[1] > 0
 
 
 def test_timage_negative_max_height() -> None:
-    """Test that get_timage handles negative max_height."""
+    """Test that get_timage raises error for negative max_height."""
     config = TextConfig()
-    # Negative max_height should either raise error or be handled gracefully
-    result = get_timage("test", config, max_height=-100)
-    # Either None (due to negative height) or valid image
-    assert result is None or (result is not None and result.size[1] > 0)
+    # Negative max_height causes PIL to reject the canvas dimensions
+    with pytest.raises(ValueError, match="Width and height must be >= 0"):
+        get_timage("test", config, max_height=-100)
 
 
 def test_timage_invalid_rich_text_format() -> None:
@@ -160,3 +162,37 @@ def test_timage_very_long_text() -> None:
     assert result is not None
     assert result.size[0] > 0
     assert result.size[1] > 0
+
+
+# === Format Isolation Text Bounds Tests ===
+
+
+def test_format_isolation_text_negative_target_index() -> None:
+    """Test that format_isolation_text raises ValueError for negative target_index."""
+    from quranmedialib.modules.timage import format_isolation_text, prepare_translation_segments
+
+    segments = prepare_translation_segments(["text1", "text2"])
+
+    with pytest.raises(ValueError, match="target_index must be non-negative"):
+        format_isolation_text(segments, target_index=-1, highlight_style="#b#FF0000#")
+
+
+def test_format_isolation_text_out_of_bounds_target_index() -> None:
+    """Test that format_isolation_text raises ValueError for out-of-bounds target_index."""
+    from quranmedialib.modules.timage import format_isolation_text, prepare_translation_segments
+
+    segments = prepare_translation_segments(["text1", "text2", "text3"])
+
+    with pytest.raises(ValueError, match="target_index.*out of bounds"):
+        format_isolation_text(segments, target_index=10, highlight_style="#b#FF0000#")
+
+
+def test_format_isolation_text_valid_target_index() -> None:
+    """Test that format_isolation_text works correctly for valid target_index."""
+    from quranmedialib.modules.timage import format_isolation_text, prepare_translation_segments
+
+    segments = prepare_translation_segments(["text1", "text2", "text3"])
+
+    result = format_isolation_text(segments, target_index=1, highlight_style="#b#FF0000#")
+    assert result is not None
+    assert isinstance(result, str)

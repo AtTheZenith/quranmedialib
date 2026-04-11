@@ -30,8 +30,19 @@ def get_asset_path(relative_path: str) -> Path:
         Absolute Path to the asset file.
 
     Raises:
+        ValueError: If the path contains traversal components ("..") or is absolute.
         FileNotFoundError: If the asset does not exist in the package.
     """
+    # Security: prevent path traversal attacks
+    if ".." in relative_path.split("/") or ".." in relative_path.split("\\"):
+        raise ValueError(
+            f"Invalid asset path: {relative_path!r}. Path traversal components ('..') are not allowed."
+        )
+    if Path(relative_path).is_absolute():
+        raise ValueError(
+            f"Invalid asset path: {relative_path!r}. Absolute paths are not allowed."
+        )
+
     asset_path = files(_PACKAGE) / _ASSETS / relative_path
     # Convert to filesystem path (works for both installed and editable installs)
     return Path(str(asset_path))

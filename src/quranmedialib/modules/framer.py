@@ -360,6 +360,9 @@ def frame(
 
     Returns:
         A list of rendered PIL Images (one per page).
+
+    Raises:
+        ValueError: If content_width is zero (would cause infinite loop).
     """
     if not words:
         return []
@@ -369,6 +372,13 @@ def frame(
         config = LayoutConfig(max_width=1920, image_height=1080, padding=(50, 350, 50, 50), timage_y_offset=880)
     if word_config is None:
         word_config = WordConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5, font_size=80)
+
+    # Prevent infinite loop in _build_row when no horizontal space is available
+    if config.content_width <= 0:
+        raise ValueError(
+            f"LayoutConfig content_width must be positive, got {config.content_width}. "
+            f"(max_width={config.max_width}, padding.left={config.padding.left}, padding.right={config.padding.right})"
+        )
 
     all_items = list(words)
     if any(item.image is None for item in all_items):

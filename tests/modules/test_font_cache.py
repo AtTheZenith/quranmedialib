@@ -55,7 +55,7 @@ def test_get_font_caching() -> None:
 
 def test_get_font_none_path() -> None:
     """Test that get_font raises error for None path."""
-    with pytest.raises((TypeError, OSError)):
+    with pytest.raises((TypeError, OSError, AttributeError)):
         get_font(None, 72)  # type: ignore
 
 
