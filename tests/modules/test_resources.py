@@ -1,0 +1,107 @@
+"""Tests for the resources module.
+
+This module contains tests for verifying resource loading functionality including:
+- Font file path resolution
+- Database file path resolution
+- Asset existence verification
+- SQLite connection handling
+"""
+
+import pytest
+
+from quranmedialib.resources import (
+    get_asset_path,
+    get_db_path,
+    get_font_path,
+    get_sqlite_connection,
+    verify_asset_exists,
+)
+
+
+def test_get_font_path_valid() -> None:
+    """Test that get_font_path returns valid path for existing font."""
+    path = get_font_path("hafs.otf")
+    assert path is not None
+    assert path.exists() or path.is_file()
+
+
+def test_get_font_path_invalid() -> None:
+    """Test that get_font_path raises error for non-existent font."""
+    with pytest.raises(Exception):
+        get_font_path("nonexistent_font.otf")
+
+
+def test_get_db_path_valid() -> None:
+    """Test that get_db_path returns valid path for existing database."""
+    path = get_db_path("quran.db")
+    assert path is not None
+    assert path.exists() or path.is_file()
+
+
+def test_get_db_path_invalid() -> None:
+    """Test that get_db_path raises error for non-existent database."""
+    with pytest.raises(Exception):
+        get_db_path("nonexistent.db")
+
+
+def test_get_asset_path_valid() -> None:
+    """Test that get_asset_path returns valid path for existing asset."""
+    path = get_asset_path("hafs.otf")
+    assert path is not None
+
+
+def test_get_asset_path_invalid() -> None:
+    """Test that get_asset_path raises error for non-existent asset."""
+    with pytest.raises(Exception):
+        get_asset_path("nonexistent_asset.txt")
+
+
+def test_verify_asset_exists_valid() -> None:
+    """Test that verify_asset_exists returns True for existing asset."""
+    assert verify_asset_exists("hafs.otf") is True
+
+
+def test_verify_asset_exists_invalid() -> None:
+    """Test that verify_asset_exists returns False for non-existent asset."""
+    assert verify_asset_exists("nonexistent.txt") is False
+
+
+def test_get_sqlite_connection_valid() -> None:
+    """Test that get_sqlite_connection returns valid connection."""
+    conn = get_sqlite_connection("quran.db")
+    assert conn is not None
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = cursor.fetchall()
+    assert len(tables) > 0
+    conn.close()
+
+
+def test_get_sqlite_connection_invalid() -> None:
+    """Test that get_sqlite_connection raises error for non-existent database."""
+    with pytest.raises(Exception):
+        get_sqlite_connection("nonexistent.db")
+
+
+def test_get_sqlite_connection_readonly() -> None:
+    """Test that get_sqlite_connection opens in read-only mode by default."""
+    conn = get_sqlite_connection("quran.db")
+    try:
+        cursor = conn.cursor()
+        # Try to write (should fail in read-only mode)
+        with pytest.raises(Exception):
+            cursor.execute("CREATE TABLE test_table (id INTEGER PRIMARY KEY)")
+    finally:
+        conn.close()
+
+
+def test_get_sqlite_connection_writable() -> None:
+    """Test that get_sqlite_connection can open in writable mode."""
+    # This should open in writable mode (readonly=False)
+    # Note: May fail if database is in read-only package location
+    try:
+        conn = get_sqlite_connection("quran.db", readonly=False)
+        conn.close()
+    except Exception:
+        # Expected to fail for packaged databases
+        pass

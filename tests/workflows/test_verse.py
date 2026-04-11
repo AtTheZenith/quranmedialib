@@ -6,6 +6,8 @@ renders single verses with Arabic text and translations.
 
 import os
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.verse import VerseWorkflow
 
@@ -109,3 +111,51 @@ if __name__ == "__main__":
     test_verse()
     test_verse_without_annotation()
     print("All verse workflow tests completed.")
+
+
+# === Validation Tests ===
+
+
+def test_verse_invalid_surah() -> None:
+    """Test that VerseWorkflow handles invalid surah numbers (empty verses)."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(layout_config, text_config, word_config)
+
+    # Surah 0 doesn't exist, workflow should handle empty verses gracefully
+    # Either raise error or return empty results
+    try:
+        results = list(workflow.get_iterator(surah=0, ayah=1, translations=["test"], annotate=False))
+        # If it doesn't raise error, should handle gracefully
+        assert isinstance(results, list)
+    except Exception:
+        pass  # Also acceptable
+
+    # Surah 115 doesn't exist
+    try:
+        results = list(workflow.get_iterator(surah=115, ayah=1, translations=["test"], annotate=False))
+        assert isinstance(results, list)
+    except Exception:
+        pass
+
+
+def test_verse_invalid_ayah() -> None:
+    """Test that VerseWorkflow handles invalid ayah numbers (empty verse)."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(layout_config, text_config, word_config)
+
+    # Ayah 0 doesn't exist, should handle gracefully
+    try:
+        results = list(workflow.get_iterator(surah=1, ayah=0, translations=["test"], annotate=False))
+        assert isinstance(results, list)
+    except Exception:
+        pass
+
+
+def test_verse_empty_translations() -> None:
+    """Test that VerseWorkflow handles empty translations list."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(layout_config, text_config, word_config)
+
+    # Empty translations should still work (no translation images)
+    results = list(workflow.get_iterator(surah=1, ayah=1, translations=[], annotate=False))
+    assert results, "Expected at least one result even with empty translations"

@@ -8,6 +8,8 @@ large surahs (e.g., Al-Baqarah with 286 verses).
 import os
 import time
 
+import pytest
+
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.surah import SurahWorkflow
 
@@ -75,3 +77,42 @@ def test_surah_stress() -> None:
 
 if __name__ == "__main__":
     test_surah_stress()
+
+
+def test_surah_invalid_surah_number() -> None:
+    """Test that SurahWorkflow raises error for invalid surah numbers (0 and 115)."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
+
+    for invalid_surah in [0, 115]:
+        with pytest.raises(ValueError, match=f"No verses found for Surah {invalid_surah}"):
+            list(workflow.get_iterator(surah=invalid_surah))
+
+
+def test_surah_no_verses_found() -> None:
+    """Test that SurahWorkflow handles surah with no verses (surah 0)."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
+
+    with pytest.raises(ValueError, match="No verses found for Surah 0"):
+        list(workflow.get_iterator(surah=0))
+
+
+def test_surah_empty_translations() -> None:
+    """Test that SurahWorkflow works with empty translations for a short surah (surah 108)."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
+
+    # Surah 108 (Al-Kawthar) has 3 verses
+    db = DatabaseManager()
+    arabic_verses = db.get_verses_from_surah(108)
+    assert len(arabic_verses) == 3, f"Expected 3 verses for Surah 108, got {len(arabic_verses)}"
+
+    results = list(workflow.get_iterator(surah=108))
+    assert len(results) == 3, f"Expected 3 results, got {len(results)}"
+
+    # Verify each result is a non-empty list of images
+    for i, pages in enumerate(results):
+        assert isinstance(pages, list), f"Verse {i+1}: Expected list, got {type(pages)}"
+        assert len(pages) > 0, f"Verse {i+1}: Expected at least one page"
+
