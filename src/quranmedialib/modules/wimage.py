@@ -29,14 +29,14 @@ def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
     bbox = font.getbbox(text)
 
     # Width is based on the actual bounding box, height on font max (ascent + descent).
-    w = bbox[2] - bbox[0]
-    h = ascent + descent
+    w = max(1, bbox[2] - bbox[0])
+    h = max(1, ascent + descent)
 
     padding = word_config.word_padding
 
-    # Create canvas with padding
-    img_w = int(w + padding.horizontal)
-    img_h = int(h + padding.vertical)
+    # Create canvas with padding (clamp to minimum 1x1)
+    img_w = max(1, int(w + padding.horizontal))
+    img_h = max(1, int(h + padding.vertical))
 
     img = Image.new("RGBA", (img_w, img_h), color=(0, 0, 0, 0))
     draw = ImageDraw.Draw(img)

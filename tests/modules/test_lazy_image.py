@@ -8,7 +8,6 @@ This module contains tests for verifying lazy image rendering functionality incl
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET
 from quranmedialib.modules.lazy_image import LazyTranslationImages
 from quranmedialib.types import TextConfig
 
@@ -59,14 +58,14 @@ def test_lazy_image_none_text() -> None:
 
 
 def test_lazy_image_negative_index() -> None:
-    """Test that LazyTranslationImages handles negative indices."""
+    """Test that LazyTranslationImages rejects negative indices."""
     texts = ["text1", "text2", "text3"]
     config = TextConfig()
     lazy = LazyTranslationImages(texts, config)
 
-    # Python negative indexing should work
-    img = lazy[-1]
-    assert img is not None
+    # Negative indexing is no longer supported to prevent silent data corruption
+    with pytest.raises(IndexError, match="negative index"):
+        _ = lazy[-1]
 
 
 def test_lazy_image_out_of_bounds() -> None:
@@ -118,3 +117,55 @@ def test_lazy_image_invalid_config() -> None:
     lazy = LazyTranslationImages(texts, None)  # type: ignore
     assert len(lazy) == 1
     # Accessing items will fail later when get_timage is called
+
+
+def test_lazy_image_negative_index_minus_two() -> None:
+    """Test that negative index -2 is also rejected."""
+    texts = ["text1", "text2", "text3"]
+    config = TextConfig()
+    lazy = LazyTranslationImages(texts, config)
+    with pytest.raises(IndexError):
+        _ = lazy[-2]
+
+
+def test_lazy_image_iteration() -> None:
+    """Test that iterating over LazyTranslationImages yields images."""
+    texts = ["text0", "text1", "text2"]
+    config = TextConfig()
+    lazy = LazyTranslationImages(texts, config)
+    count = 0
+    for img in lazy:
+        count += 1
+        assert img is not None
+    assert count == 3
+
+
+def test_lazy_image_slice_access() -> None:
+    """Test that slice access works correctly."""
+    texts = ["text0", "text1", "text2", "text3", "text4"]
+    config = TextConfig()
+    lazy = LazyTranslationImages(texts, config)
+    # Slicing should return a list (Sequence.__getitem__ for slice)
+    slice_result = lazy[1:3]
+    assert len(slice_result) == 2
+    assert all(img is not None for img in slice_result)
+
+
+def test_lazy_image_len() -> None:
+    """Test that len() returns the correct count."""
+    texts = ["text0", "text1", "text2", "text3", "text4"]
+    config = TextConfig()
+    lazy = LazyTranslationImages(texts, config)
+    assert len(lazy) == 5
+
+    lazy_empty = LazyTranslationImages([], TextConfig())
+    assert len(lazy_empty) == 0
+
+
+def test_lazy_image_cache_none_for_empty_text() -> None:
+    """Test that None text in list results in None cached value."""
+    texts = ["valid text", None, "also valid"]
+    config = TextConfig()
+    lazy = LazyTranslationImages(texts, config)  # type: ignore
+    result = lazy[1]
+    assert result is None

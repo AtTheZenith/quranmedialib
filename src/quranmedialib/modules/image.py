@@ -79,8 +79,8 @@ def pad(image: Image.Image, padding: Padding = Padding(20, 20, 20, 20), color: C
     if not isinstance(padding, Padding):
         padding = Padding(*padding)
 
-    new_width = image.width + padding.horizontal
-    new_height = image.height + padding.vertical
+    new_width = max(1, image.width + padding.horizontal)
+    new_height = max(1, image.height + padding.vertical)
     padded_image = Image.new("RGBA", (new_width, new_height), color=color)
     padded_image.paste(image, (padding.left, padding.top))
 

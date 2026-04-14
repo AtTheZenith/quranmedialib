@@ -1,5 +1,7 @@
 """Workflow for isolating individual words within a verse."""
 
+import logging
+import warnings
 from typing import Iterator
 
 from PIL import Image
@@ -16,6 +18,8 @@ from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["IsolateWordsWorkflow"]
 
@@ -49,9 +53,24 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
         Yields:
             list[Image.Image]: A list of pages for each isolated state.
+
+        Raises:
+            ValueError: If verse_words is empty.
         """
+        if not verse_words:
+            raise ValueError("verse_words must be a non-empty list")
+
         annotate = kwargs.get("annotate", True)
         highlight_style = kwargs.get("highlight_style", "#b#")
+
+        # Warn about wbw_translations length mismatch
+        if wbw_translations and len(wbw_translations) != len(verse_words):
+            warnings.warn(
+                f"wbw_translations length ({len(wbw_translations)}) does not match "
+                f"verse_words length ({len(verse_words)}). Mismatched indices will be skipped.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # 1. Prepare base images and transparent placeholders
         word_images = [get_wimage(word, self.word_config) for word in verse_words]
@@ -63,7 +82,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                     surah,
                     ayah or 1,
                     i + 1,
-                    translation=wbw_translations[i] if wbw_translations else None,
+                    translation=wbw_translations[i] if wbw_translations and i < len(wbw_translations) else None,
                     word_config=self.word_config,
                 )
                 for i, img in enumerate(word_images)

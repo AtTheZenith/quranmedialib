@@ -26,6 +26,9 @@ from quranmedialib.resources import get_font_path
 # Package working directory (project root where src/ is located)
 _WORKING_DIR = Path(os.getcwd()).resolve()
 
+# Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
+MAX_FONT_SIZE = 2000
+
 
 def _ensure_within_working_dir(path: Path) -> None:
     """Validate that a path is within the working directory tree.
@@ -45,6 +48,7 @@ def _ensure_within_working_dir(path: Path) -> None:
             f"Path {path!r} is outside the working directory {_WORKING_DIR}. "
             f"Use unsafe_paths=True to bypass this check."
         )
+
 
 # === Layout Primitives ===
 
@@ -455,15 +459,28 @@ class WordConfig:
         """Initialize WordConfig with resolved paths and type-safe layout primitives.
 
         Raises:
-            ValueError: If font_size <= 0 or max_rows_per_page <= 0.
+            ValueError: If font_size, annotation_font_size, or verse_number_size is not in range (1, MAX_FONT_SIZE),
+                or if max_rows_per_page <= 0.
         """
         from quranmedialib.presets import FONT_HAFS
 
         # Validate critical parameters
         if font_size <= 0:
             raise ValueError(f"font_size must be positive, got {font_size}")
+        if font_size > MAX_FONT_SIZE:
+            raise ValueError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {font_size}")
         if max_rows_per_page <= 0:
             raise ValueError(f"max_rows_per_page must be positive, got {max_rows_per_page}")
+        if annotation_font_size <= 0:
+            raise ValueError(f"annotation_font_size must be positive, got {annotation_font_size}")
+        if annotation_font_size > MAX_FONT_SIZE:
+            raise ValueError(
+                f"annotation_font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {annotation_font_size}"
+            )
+        if verse_number_size <= 0:
+            raise ValueError(f"verse_number_size must be positive, got {verse_number_size}")
+        if verse_number_size > MAX_FONT_SIZE:
+            raise ValueError(f"verse_number_size exceeds maximum limit of {MAX_FONT_SIZE}, got {verse_number_size}")
 
         # Resolve font - default to FONT_HAFS if not provided
         if font is None:
@@ -535,7 +552,7 @@ class TextConfig:
         """Initialize TextConfig with resolved font paths.
 
         Raises:
-            ValueError: If max_width is provided and <= 0.
+            ValueError: If font_size is not in range (1, MAX_FONT_SIZE) or max_width is provided and <= 0.
         """
 
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
@@ -546,6 +563,12 @@ class TextConfig:
         # Resolve alignment
         if isinstance(alignment, str):
             alignment = HorizontalAlignment(alignment.lower())
+
+        # Validate font_size
+        if font_size <= 0:
+            raise ValueError(f"font_size must be positive, got {font_size}")
+        if font_size > MAX_FONT_SIZE:
+            raise ValueError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {font_size}")
 
         # Validate max_width if provided
         if max_width is not None and max_width <= 0:

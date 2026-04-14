@@ -4,7 +4,6 @@ This module provides common fixtures used across validation test files to reduce
 duplication and ensure consistent test setup.
 """
 
-from pathlib import Path
 
 import pytest
 from PIL import Image

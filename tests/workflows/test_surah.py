@@ -7,6 +7,7 @@ large surahs (e.g., Al-Baqarah with 286 verses).
 
 import os
 import time
+import warnings
 
 import pytest
 
@@ -85,16 +86,17 @@ def test_surah_invalid_surah_number() -> None:
     workflow = SurahWorkflow(layout_config, text_config, word_config)
 
     for invalid_surah in [0, 115]:
-        with pytest.raises(ValueError, match=f"No verses found for Surah {invalid_surah}"):
+        with pytest.raises(ValueError, match=f"Surah must be between 1 and 114, got {invalid_surah}"):
             list(workflow.get_iterator(surah=invalid_surah))
 
 
 def test_surah_no_verses_found() -> None:
-    """Test that SurahWorkflow handles surah with no verses (surah 0)."""
+    """Test that SurahWorkflow raises ValueError for surah outside valid range."""
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
     workflow = SurahWorkflow(layout_config, text_config, word_config)
 
-    with pytest.raises(ValueError, match="No verses found for Surah 0"):
+    # Surah 0 is out of valid range — caught by surah validation before DB lookup
+    with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
         list(workflow.get_iterator(surah=0))
 
 
@@ -115,4 +117,31 @@ def test_surah_empty_translations() -> None:
     for i, pages in enumerate(results):
         assert isinstance(pages, list), f"Verse {i+1}: Expected list, got {type(pages)}"
         assert len(pages) > 0, f"Verse {i+1}: Expected at least one page"
+
+
+def test_surah_invalid_surah_range() -> None:
+    """Test that SurahWorkflow raises ValueError for surah outside 1-114."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
+
+    with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
+        list(workflow.get_iterator(surah=0))
+
+    with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
+        list(workflow.get_iterator(surah=115))
+
+
+def test_surah_unrecognized_kwargs_warns() -> None:
+    """Test that SurahWorkflow warns on unrecognized kwargs."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout_config, text_config, word_config)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # Pass an unrecognized kwarg (typo)
+        results = list(workflow.get_iterator(surah=108, annota=True))  # type: ignore — intentional typo
+
+        # Should have warned about unrecognized kwarg
+        assert any("Unknown kwargs" in str(warning.message) for warning in w)
+        assert len(results) == 3  # Surah 108 has 3 verses
 

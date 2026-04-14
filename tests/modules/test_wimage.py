@@ -71,6 +71,7 @@ def test_wimage_none_config() -> None:
 def test_wimage_invalid_font_path() -> None:
     """Test that get_wimage raises OSError for invalid font path."""
     from dataclasses import replace
+
     from quranmedialib.types import FontResource
 
     word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
@@ -78,3 +79,53 @@ def test_wimage_invalid_font_path() -> None:
 
     with pytest.raises(OSError):
         get_wimage("test", invalid_config)
+
+
+def test_wimage_negative_padding_dimensions() -> None:
+    """Test that get_wimage with extreme negative padding produces a valid image."""
+    from quranmedialib.types import Padding, WordConfig
+
+    base_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    # Override padding with values that would produce negative dimensions
+    neg_config = WordConfig(
+        font=base_config.font,
+        font_size=base_config.font_size,
+        max_rows_per_page=base_config.max_rows_per_page,
+        row_spacing=base_config.row_spacing,
+        word_spacing=base_config.word_spacing,
+        word_padding=Padding(-1000, -1000, -1000, -1000),
+    )
+
+    # Should not crash — should produce at least a minimal image
+    img = get_wimage("test", neg_config)
+    assert img is not None
+    assert img.size[0] >= 1
+    assert img.size[1] >= 1
+
+
+def test_wimage_very_long_word() -> None:
+    """Test that get_wimage handles very long text without crashing."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    long_text = "a" * 10000
+    img = get_wimage(long_text, word_config)
+    assert img is not None
+    assert img.size[0] > 0
+    assert img.size[1] > 0
+
+
+def test_wimage_padding_variations() -> None:
+    """Test various padding combinations."""
+    from quranmedialib.types import Padding, WordConfig
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    for padding_vals in [(0, 0, 0, 0), (10, 10, 10, 10), (50, 50, 50, 50)]:
+        config = WordConfig(
+            font=word_config.font,
+            font_size=word_config.font_size,
+            max_rows_per_page=word_config.max_rows_per_page,
+            row_spacing=word_config.row_spacing,
+            word_spacing=word_config.word_spacing,
+            word_padding=Padding(*padding_vals),
+        )
+        img = get_wimage("test", config)
+        assert img is not None

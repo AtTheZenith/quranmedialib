@@ -134,3 +134,15 @@ def test_verse_range_empty_translations() -> None:
     # Empty translations should still work
     results = list(workflow.get_iterator(surah=108, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
     assert len(results) > 0
+
+
+def test_verse_range_invalid_ayah() -> None:
+    """Test that VerseRangeWorkflow raises ValueError for ayah outside 1-286."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+
+    with pytest.raises(ValueError, match="Ayah must be between 1 and 286"):
+        list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=0, end_ayah=1, annotate=False))
+
+    with pytest.raises(ValueError, match="Ayah must be between 1 and 286"):
+        list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=1, end_ayah=1000, annotate=False))

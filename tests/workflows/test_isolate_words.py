@@ -6,6 +6,7 @@ as transparent placeholders.
 """
 
 import os
+import warnings
 
 import pytest
 
@@ -97,21 +98,20 @@ def test_isolate_words_invalid_surah() -> None:
 
 
 def test_isolate_words_empty_verse_words() -> None:
-    """Test that IsolateWordsWorkflow handles empty verse_words list."""
+    """Test that IsolateWordsWorkflow raises ValueError for empty verse_words list."""
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
     workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
 
-    results = list(
-        workflow.get_iterator(
-            surah=1,
-            verse_words=[],
-            translations=["test translation"],
-            ayah=1,
+    # Empty verse_words should now raise ValueError (security fix)
+    with pytest.raises(ValueError, match="verse_words must be a non-empty list"):
+        list(
+            workflow.get_iterator(
+                surah=1,
+                verse_words=[],
+                translations=["test translation"],
+                ayah=1,
+            )
         )
-    )
-
-    # With empty verse_words and ayah=1, we should only get the verse number item
-    assert len(results) == 1, f"Expected 1 result (verse number only), got {len(results)}"
 
 
 def test_isolate_words_none_ayah() -> None:
@@ -137,4 +137,26 @@ def test_isolate_words_none_ayah() -> None:
     for i, pages in enumerate(results):
         assert isinstance(pages, list), f"Word {i+1}: Expected list, got {type(pages)}"
         assert len(pages) > 0, f"Word {i+1}: Expected at least one page"
+
+
+def test_isolate_mismatched_wbw_length() -> None:
+    """Test that IsolateWordsWorkflow warns when wbw_translations length mismatches."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    # 3 words but only 1 wbw_translation -- should work with warning
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        results = list(
+            workflow.get_iterator(
+                surah=1,
+                verse_words=["word1", "word2", "word3"],
+                translations=["translation"],
+                ayah=1,
+                wbw_translations=["only_one"],
+                annotate=True,
+            )
+        )
+        # Should produce results (warning is informational)
+        assert len(results) >= 1
 

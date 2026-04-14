@@ -134,10 +134,17 @@ class VerseRangeWorkflow(BaseWorkflow):
             list[Image.Image]: List of page images for each verse in the range.
 
         Raises:
-            ValueError: If start_ayah > end_ayah (reversed range).
+            ValueError: If start_ayah > end_ayah (reversed range) or surah/ayah out of range.
         """
+        if not (1 <= surah <= 114):
+            raise ValueError(f"Surah must be between 1 and 114, got {surah}")
         if end_ayah is None:
             end_ayah = start_ayah
+
+        if not (1 <= start_ayah <= 286):
+            raise ValueError(f"Ayah must be between 1 and 286, got start_ayah={start_ayah}")
+        if not (1 <= end_ayah <= 286):
+            raise ValueError(f"Ayah must be between 1 and 286, got end_ayah={end_ayah}")
 
         if start_ayah > end_ayah:
             raise ValueError(

@@ -31,7 +31,16 @@ class BaseWorkflow(ABC):
         text_config: TextConfig,
         word_config: WordConfig,
     ):
-        """Initializes the workflow with shared configurations."""
+        """Initializes the workflow with shared configurations.
+
+        Raises:
+            ValueError: If any config object is None.
+        """
+        if layout_config is None or text_config is None or word_config is None:
+            raise ValueError(
+                f"Configuration objects must not be None. "
+                f"Got layout_config={layout_config}, text_config={text_config}, word_config={word_config}"
+            )
         self.layout_config = layout_config
         self.text_config = text_config
         self.word_config = word_config

@@ -73,3 +73,33 @@ def test_verse_number_none_config() -> None:
     """Test that verse_number raises error when config is None."""
     with pytest.raises(AttributeError):
         verse_number(1, None)  # type: ignore
+
+
+def test_verse_number_negative_padding_dimensions() -> None:
+    """Test that verse_number with extreme negative padding produces a valid image."""
+    from quranmedialib.types import Padding, WordConfig
+
+    base_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    # Create config with negative padding
+    neg_config = WordConfig(
+        font=base_config.font,
+        font_size=base_config.font_size,
+        max_rows_per_page=base_config.max_rows_per_page,
+        row_spacing=base_config.row_spacing,
+        word_spacing=base_config.word_spacing,
+        word_padding=Padding(-1000, -1000, -1000, -1000),
+    )
+
+    # Should not crash — should produce at least a minimal image
+    img = verse_number(1, neg_config)
+    assert img is not None
+    assert img.size[0] >= 1
+    assert img.size[1] >= 1
+
+
+def test_verse_number_empty_text() -> None:
+    """Test that verse_number with 0 produces a valid marker."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    img = verse_number(0, word_config)
+    assert img is not None
+    assert img.size[0] > 0
