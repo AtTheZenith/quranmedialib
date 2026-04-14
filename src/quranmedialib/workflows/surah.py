@@ -7,6 +7,7 @@ to process all verses of a given surah with their default translations.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Iterator
 
 from PIL import Image
@@ -48,6 +49,19 @@ class SurahWorkflow(VerseRangeWorkflow):
         Raises:
             ValueError: If no verses are found for the given surah.
         """
+        if not (1 <= surah <= 114):
+            raise ValueError(f"Surah must be between 1 and 114, got {surah}")
+
+        # Warn about unrecognized kwargs to catch typos early
+        known_kwargs = {"annotate", "separate_translations"}
+        unrecognized = set(kwargs.keys()) - known_kwargs
+        if unrecognized:
+            warnings.warn(
+                f"Unknown kwargs ignored by SurahWorkflow.get_iterator: {unrecognized}",
+                UserWarning,
+                stacklevel=2,
+            )
+
         db = DatabaseManager()
 
         # Retrieve Arabic verses and translations

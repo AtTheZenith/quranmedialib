@@ -335,7 +335,8 @@ def _annotate_words_internal(
                 _annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color)
             )
             if texts is not None:
-                annotated_texts.append(" ".join(texts[i : i + batch_count]))
+                batch_text = " ".join(texts[i : i + batch_count]) if i < len(texts) else ""
+                annotated_texts.append(batch_text)
         else:
             # Single word
             annotated_images.append(
@@ -343,8 +344,10 @@ def _annotate_words_internal(
                     images[i], current_wbw, font, word_config.annotation_color, word_config.background_color
                 )
             )
-            if texts is not None:
+            if texts is not None and i < len(texts):
                 annotated_texts.append(texts[i])
+            elif texts is not None:
+                annotated_texts.append("")  # Missing text placeholder
 
         i += batch_count
 

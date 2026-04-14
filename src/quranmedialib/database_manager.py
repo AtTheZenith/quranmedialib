@@ -91,44 +91,46 @@ class DatabaseManager:
         Raises:
             sqlite3.Error: If database initialization fails.
         """
-        if getattr(self, "_initialized", False):
-            return
+        # Thread-safe check-and-init using class-level lock
+        with type(self)._lock:
+            if getattr(self, "_initialized", False):
+                return
 
-        # Auto-close orphaned connections before re-initialization
-        if hasattr(self, "_connections") and self._connections:
-            logger.warning(
-                "DatabaseManager re-initialized without calling .close() first. "
-                "Automatically closing orphaned connections."
-            )
-            self.close()
+            # Auto-close orphaned connections before re-initialization
+            if hasattr(self, "_connections") and self._connections:
+                logger.warning(
+                    "DatabaseManager re-initialized without calling .close() first. "
+                    "Automatically closing orphaned connections."
+                )
+                self.close()
 
-        self._registry: dict[str, dict[str, Any]] = {}
-        self._cursors: dict[str, sqlite3.Cursor] = {}
-        self._connections: dict[str, sqlite3.Connection] = {}
-        self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
-        self._active_wbw: Optional[str] = None
-        self._active_translation: Optional[str] = None
-        self._lock = threading.Lock()
+            self._registry: dict[str, dict[str, Any]] = {}
+            self._cursors: dict[str, sqlite3.Cursor] = {}
+            self._connections: dict[str, sqlite3.Connection] = {}
+            self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
+            self._active_wbw: Optional[str] = None
+            self._active_translation: Optional[str] = None
+            self._lock = threading.Lock()
 
-        try:
-            # Import presets lazily to avoid circular import issues
-            from quranmedialib.presets import DATABASE_EN_SAHIH, DATABASE_QURAN, DATABASE_WBW_EN
+            try:
+                # Import presets lazily to avoid circular import issues
+                from quranmedialib.presets import DATABASE_EN_SAHIH, DATABASE_QURAN, DATABASE_WBW_EN
 
-            # Register packaged databases with default names
-            self._add_connection_internal(self.DEFAULT_QURAN_NAME, DATABASE_QURAN)
-            self._add_connection_internal(self.DEFAULT_WBW_NAME, DATABASE_WBW_EN)
-            self._add_connection_internal(self.DEFAULT_TRANSLATION_NAME, DATABASE_EN_SAHIH)
+                # Register packaged databases with default names
+                self._add_connection_internal(self.DEFAULT_QURAN_NAME, DATABASE_QURAN)
+                self._add_connection_internal(self.DEFAULT_WBW_NAME, DATABASE_WBW_EN)
+                self._add_connection_internal(self.DEFAULT_TRANSLATION_NAME, DATABASE_EN_SAHIH)
 
-            # Set default active databases
-            self._active_wbw = self.DEFAULT_WBW_NAME
-            self._active_translation = self.DEFAULT_TRANSLATION_NAME
-            self._initialized = True
+                # Set default active databases
+                self._active_wbw = self.DEFAULT_WBW_NAME
+                self._active_translation = self.DEFAULT_TRANSLATION_NAME
+                self._initialized = True
 
-            logger.info("DatabaseManager initialized with connections: %s", list(self._registry.keys()))
-        except Exception:
-            # Cleanup any partially-opened connections before re-raising
-            self.close()
-            raise
+                logger.info("DatabaseManager initialized with connections: %s", list(self._registry.keys()))
+            except Exception:
+                # Cleanup any partially-opened connections before re-raising
+                self.close()
+                raise
 
     def __enter__(self) -> Self:
         return self

@@ -63,9 +63,9 @@ def verse_number(
 
     padding = word_config.verse_number_padding
 
-    # Create image fitting text plus padding
-    img_w = int(text_w + padding.horizontal)
-    img_h = int(text_h + padding.vertical)
+    # Create image fitting text plus padding (clamp to minimum 1x1)
+    img_w = max(1, int(text_w + padding.horizontal))
+    img_h = max(1, int(text_h + padding.vertical))
 
     img = Image.new("RGBA", (img_w, img_h), color=word_config.background_color)
     draw = ImageDraw.Draw(img)

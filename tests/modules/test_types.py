@@ -24,7 +24,6 @@ from quranmedialib.types import (
     WordItem,
 )
 
-
 # === Padding Tests ===
 
 
@@ -259,9 +258,9 @@ def test_text_config_default_values() -> None:
 
 
 def test_text_config_negative_font_size() -> None:
-    """Test that TextConfig accepts negative font size (no validation)."""
-    config = TextConfig(font_size=-10)
-    assert config.font_size == -10
+    """Test that TextConfig raises ValueError for negative font size."""
+    with pytest.raises(ValueError, match="font_size must be positive"):
+        TextConfig(font_size=-10)
 
 
 # === FontResource Tests ===
@@ -410,3 +409,103 @@ def test_valid_ayah_boundaries(ayah: int) -> None:
     """Test valid ayah boundary values (1-286)."""
     # These should be valid (type hints enforce range 1-287, i.e., 1-286)
     assert 1 <= ayah <= 286
+
+
+# === Round 2: types.py Edge Cases ===
+
+
+def test_layout_config_padding_too_few_elements() -> None:
+    """Test that LayoutConfig with < 4 padding elements uses defaults for missing."""
+    config = LayoutConfig(max_width=1920, image_height=1080, padding=(10, 20))
+    # Padding(10, 20, 0, 0) — missing elements default to 0
+    assert config.padding.top == 10
+    assert config.padding.bottom == 20
+    assert config.padding.left == 0
+    assert config.padding.right == 0
+
+
+def test_word_config_max_rows_per_page_boundary() -> None:
+    """Test that WordConfig with max_rows_per_page=1 works."""
+    config = WordConfig(font_size=10, max_rows_per_page=1)
+    assert config.max_rows_per_page == 1
+
+
+def test_word_config_font_size_boundary() -> None:
+    """Test that WordConfig with font_size=1 works (minimum positive)."""
+    config = WordConfig(font_size=1)
+    assert config.font_size == 1
+
+
+def test_text_config_max_width_boundary() -> None:
+    """Test that TextConfig with max_width=1 works."""
+    config = TextConfig(max_width=1)
+    assert config.max_width == 1
+
+
+def test_text_config_negative_max_width_rejected() -> None:
+    """Test that TextConfig with max_width <= 0 raises ValueError."""
+    with pytest.raises(ValueError, match="max_width must be positive"):
+        TextConfig(max_width=0)
+
+    with pytest.raises(ValueError, match="max_width must be positive"):
+        TextConfig(max_width=-100)
+
+
+# === MAX_FONT_SIZE Boundary Tests ===
+
+
+def test_max_font_size_constant_exists() -> None:
+    """Test that MAX_FONT_SIZE constant is defined."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    assert MAX_FONT_SIZE == 2000
+
+
+def test_text_config_max_font_size_boundary() -> None:
+    """Test that TextConfig accepts font_size at MAX_FONT_SIZE boundary."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    # Should accept font_size at the boundary
+    config = TextConfig(font_size=MAX_FONT_SIZE)
+    assert config.font_size == MAX_FONT_SIZE
+
+
+def test_text_config_exceeds_max_font_size() -> None:
+    """Test that TextConfig rejects font_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    with pytest.raises(ValueError, match="font_size exceeds maximum limit"):
+        TextConfig(font_size=MAX_FONT_SIZE + 1)
+
+
+def test_word_config_max_font_size_boundary() -> None:
+    """Test that WordConfig accepts font_size at MAX_FONT_SIZE boundary."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    # Should accept font_size at the boundary
+    config = WordConfig(font_size=MAX_FONT_SIZE)
+    assert config.font_size == MAX_FONT_SIZE
+
+
+def test_word_config_exceeds_max_font_size() -> None:
+    """Test that WordConfig rejects font_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    with pytest.raises(ValueError, match="font_size exceeds maximum limit"):
+        WordConfig(font_size=MAX_FONT_SIZE + 1)
+
+
+def test_word_config_annotation_font_size_exceeds_max() -> None:
+    """Test that WordConfig rejects annotation_font_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    with pytest.raises(ValueError, match="annotation_font_size exceeds maximum limit"):
+        WordConfig(font_size=72, annotation_font_size=MAX_FONT_SIZE + 1)
+
+
+def test_word_config_verse_number_size_exceeds_max() -> None:
+    """Test that WordConfig rejects verse_number_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    with pytest.raises(ValueError, match="verse_number_size exceeds maximum limit"):
+        WordConfig(font_size=72, verse_number_size=MAX_FONT_SIZE + 1)

@@ -64,3 +64,20 @@ def test_get_font_none_size() -> None:
     font_path = str(get_font_path("hafs.otf"))
     with pytest.raises((TypeError, Exception)):
         get_font(font_path, None)  # type: ignore
+
+
+def test_get_font_size_one_works() -> None:
+    """Test that font_size=1 is accepted (boundary value)."""
+    font_path = str(get_font_path("hafs.otf"))
+    font = get_font(font_path, 1)
+    assert font is not None
+    assert font.size == 1
+
+
+def test_get_font_exceeds_max_size() -> None:
+    """Test that get_font raises error for font_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    font_path = str(get_font_path("hafs.otf"))
+    with pytest.raises(ValueError, match="font_size exceeds maximum limit"):
+        get_font(font_path, MAX_FONT_SIZE + 1)

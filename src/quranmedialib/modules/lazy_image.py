@@ -44,6 +44,12 @@ class LazyTranslationImages(Sequence):
         return len(self._texts)
 
     def __getitem__(self, index: int) -> Image.Image | None:
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self._texts)))]
+        if index < 0:
+            raise IndexError(f"negative index {index} not supported; use non-negative indices")
+        if index >= len(self._texts):
+            raise IndexError(f"index {index} out of range for {len(self._texts)} texts")
         if self._cache[index] is None and self._texts[index]:
             self._cache[index] = get_timage(self._texts[index], self._config)
         return self._cache[index]

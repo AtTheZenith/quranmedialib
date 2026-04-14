@@ -9,10 +9,12 @@ from PIL import Image, ImageDraw, ImageOps
 
 from quranmedialib import LANDSCAPE_PRESET
 from quranmedialib.modules.timage import (
-    _get_font,
     _parse_rich_text,
     _wrap_rich_text_balanced,
+    format_isolation_text,
     get_timage,
+    normalize_highlight_style,
+    prepare_translation_segments,
 )
 from quranmedialib.types import TextConfig
 
@@ -24,8 +26,6 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
     draw = ImageDraw.Draw(dummy_img)
 
     styled_words = _parse_rich_text(text, config, draw)
-    default_font, _ = _get_font("", config)
-    space_width = int(draw.textlength(" ", font=default_font))
 
     lines = _wrap_rich_text_balanced(styled_words, config.max_width)
     widths = [line.width for line in lines]
@@ -196,3 +196,80 @@ def test_format_isolation_text_valid_target_index() -> None:
     result = format_isolation_text(segments, target_index=1, highlight_style="#b#FF0000#")
     assert result is not None
     assert isinstance(result, str)
+
+
+# === timage Config Edge Cases (Round 2) ===
+
+
+def test_timage_negative_line_spacing() -> None:
+    """Test that get_timage handles negative line_spacing."""
+    config = TextConfig(line_spacing=-10, max_width=500)
+    result = get_timage("test text with negative spacing", config)
+    # Should produce a valid image (negative spacing may overlap lines)
+    assert result is not None
+    assert result.size[0] > 0
+    assert result.size[1] > 0
+
+
+def test_normalize_highlight_style_none_input() -> None:
+    """Test normalize_highlight_style with None input."""
+
+    result = normalize_highlight_style(None)  # type: ignore
+    # Should return a default style string
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_prepare_translation_segments_none_input() -> None:
+    """Test prepare_translation_segments with None input."""
+    result = prepare_translation_segments(None)  # type: ignore
+    # Should return empty list or handle gracefully
+    assert isinstance(result, list)
+
+
+def test_timage_empty_styled_words() -> None:
+    """Test that get_timage returns None for text that produces no styled words."""
+    config = TextConfig(max_width=500)
+    # Text with only whitespace should produce no styled words
+    result = get_timage("   \t\n   ", config)
+    assert result is None
+
+
+def test_timage_very_large_font_size() -> None:
+    """Test that TextConfig raises ValueError for font_size exceeding MAX_FONT_SIZE."""
+    from quranmedialib.types import MAX_FONT_SIZE
+
+    # Font size exceeding MAX_FONT_SIZE should raise ValueError during config creation
+    with pytest.raises(ValueError, match="font_size exceeds maximum limit"):
+        TextConfig(font_size=MAX_FONT_SIZE + 1, max_width=500)
+
+
+def test_format_isolation_text_target_index_bounds() -> None:
+    """Test format_isolation_text with index exactly 0 and len-1."""
+    segments = prepare_translation_segments(["first", "second", "third"])
+
+    # Index 0
+    result_0 = format_isolation_text(segments, target_index=0, highlight_style="#b#FF0000#")
+    assert result_0 is not None
+    assert "#b#" in result_0  # Should contain highlight
+
+    # Index len-1
+    result_last = format_isolation_text(segments, target_index=2, highlight_style="#b#FF0000#")
+    assert result_last is not None
+    assert "#b#" in result_last
+
+
+def test_timage_single_word_no_wrapping() -> None:
+    """Test that get_timage with a single word produces one line."""
+    config = TextConfig(max_width=500)
+    result = get_timage("singleword", config)
+    assert result is not None
+    assert result.size[1] > 0
+
+
+def test_timage_none_max_width() -> None:
+    """Test that get_timage works when config.max_width is None."""
+    config = TextConfig()  # default max_width is None
+    result = get_timage("test text with no max width", config)
+    assert result is not None
+    assert result.size[0] > 0

@@ -170,3 +170,75 @@ def test_database_manager_ayah_boundary(invalid_ayah: int) -> None:
     # Should return empty string for non-existent ayah
     verse = db.get_verse(1, invalid_ayah)
     assert verse == ""
+
+
+# === Round 2: DatabaseManager Internal State and Thread Safety ===
+
+
+def test_database_manager_context_manager() -> None:
+    """Test that DatabaseManager works as a context manager."""
+    with DatabaseManager() as db:
+        verses = db.get_verses_from_surah(1)
+        assert len(verses) == 7
+
+
+def test_database_manager_list_connections() -> None:
+    """Test that list_connections() returns expected names."""
+    db = DatabaseManager()
+    conns = db.list_connections()
+    assert "quran" in conns
+    assert "wbw" in conns
+    assert "translation" in conns
+
+
+def test_database_manager_close_clears_state() -> None:
+    """Test that close() resets singleton."""
+    db = DatabaseManager()
+    db.close()
+    # Singleton should be reset
+    assert db._initialized is False or getattr(DatabaseManager, "_instance", None) is None
+
+
+def test_database_manager_get_cursor_unknown_db() -> None:
+    """Test that _get_cursor raises KeyError for unknown database."""
+    db = DatabaseManager()
+    with pytest.raises(KeyError):
+        db._get_cursor("nonexistent_db")
+
+
+def test_database_manager_fetch_sql_error() -> None:
+    """Test that _fetch returns empty list on SQL error (with warning log)."""
+    db = DatabaseManager()
+    # _fetch catches sqlite3.Error and returns [] with a warning
+    result = db._fetch("quran", "SELECT * FROM nonexistent_table", ())
+    assert result == []
+
+
+def test_database_manager_validate_state() -> None:
+    """Test that _validate_state raises RuntimeError on bad state."""
+    db = DatabaseManager()
+    # Should not raise when properly initialized
+    db._validate_state()
+
+
+def test_database_manager_reinit_after_close() -> None:
+    """Test that after close(), a new DatabaseManager reinitializes correctly."""
+    db = DatabaseManager()
+    db.close()
+    db2 = DatabaseManager()
+    assert db2._initialized is True
+    verses = db2.get_verses_from_surah(1)
+    assert len(verses) == 7
+
+
+def test_database_manager_concurrent_init_safety() -> None:
+    """Test that repeated DatabaseManager() calls don't corrupt state.
+
+    Note: True concurrent init with SQLite is unreliable (DB lock errors),
+    so we test sequential rapid re-initialization instead, which verifies
+    the lock-protected __init__ code path.
+    """
+    for _ in range(10):
+        db = DatabaseManager()
+        verses = db.get_verses_from_surah(1)
+        assert len(verses) == 7

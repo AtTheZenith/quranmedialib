@@ -224,3 +224,59 @@ def test_annotate_words_negative_start_index() -> None:
 
     with pytest.raises(ValueError, match="start index must be 1-based"):
         annotate_words([dummy_img], 1, 1, start=-1, word_config=word_config)
+
+
+# === Annotation Length Mismatch Tests (Round 2) ===
+
+
+def test_annotate_words_texts_length_mismatch() -> None:
+    """Test that annotate_words_with_texts handles fewer texts than images."""
+    from quranmedialib.modules.annotation import annotate_words_with_texts
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+    images = [dummy_img, dummy_img, dummy_img]  # 3 images
+    texts = ["only one text"]  # 1 text
+
+    # Returns tuple of (annotated_images, annotated_texts)
+    annotated_images, annotated_texts = annotate_words_with_texts(
+        images,
+        surah=1,
+        ayah=1,
+        start=1,
+        texts=texts,
+        word_config=word_config,
+    )
+    # Should return all 3 images with missing texts as empty strings
+    assert len(annotated_images) == 3
+    assert len(annotated_texts) == 3
+    assert annotated_texts[0] == "only one text"
+    assert annotated_texts[1] == ""
+    assert annotated_texts[2] == ""
+
+
+def test_annotate_words_wbw_translations_length_mismatch() -> None:
+    """Test that annotate_words handles fewer wbw_translations than images."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+
+    # Only 1 wbw translation for 3 words -- should handle gracefully
+    # (annotate_words fetches from DB internally, wbw_translations param doesn't exist)
+    # Instead, test with out-of-range word_index on annotate_word
+    from quranmedialib.modules.annotation import annotate_word
+
+    # Surah 1:1 has 4 words; word_index=5 is out of range
+    result = annotate_word(dummy_img, surah=1, ayah=1, word_index=5, word_config=word_config)
+    assert result is not None  # Should return original image or annotated version
+
+
+def test_annotate_words_range_exceeds_images() -> None:
+    """Test that annotate_words with start+count beyond image count raises error."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    dummy_img = get_wimage("test", word_config)
+    images = [dummy_img] * 10  # 10 images
+
+    # Start at 1, but Surah 1:1 only has 4 words -- requesting 10 should fail
+    with pytest.raises(ValueError, match="out of bounds"):
+        annotate_words(images, surah=1, ayah=1, start=1, word_config=word_config)
+

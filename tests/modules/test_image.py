@@ -89,9 +89,14 @@ def _analyze_image_brightness(filepath: str) -> dict[str, float]:
 
 def _print_stats(label: str, stats: dict[str, float]) -> None:
     """Print brightness statistics in a formatted way."""
-    print(
-        f"  {label:10s}: mean={stats['mean']:6.2f}, median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, stdev={stats['stdev']:6.2f}"
+    fmt = (
+        f"  {label:10s}: mean={stats['mean']:6.2f}, "
+        f"median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, "
+        f"q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, "
+        f"p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, "
+        f"stdev={stats['stdev']:6.2f}"
     )
+    print(fmt)
 
 
 def test_color() -> None:
@@ -400,3 +405,46 @@ def test_glow_invalid_quality_mode() -> None:
 
     with pytest.raises(Exception):
         glow(test_image, strength=1.0, radius=50, quality="invalid_mode")  # type: ignore
+
+
+# === Round 2: Additional Validation Tests ===
+
+
+def test_pad_negative_padding_produces_minimal_image() -> None:
+    """Test that pad with extreme negative padding produces at least a 1x1 image."""
+    test_image = Image.new("RGBA", (100, 100))
+    negative_padding = Padding(-1000, -1000, -1000, -1000)
+    result = pad(test_image, padding=negative_padding)
+    assert result.size[0] >= 1
+    assert result.size[1] >= 1
+
+
+def test_color_color_values_out_of_range() -> None:
+    """Test that color() handles out-of-range color values."""
+    test_image = Image.new("RGBA", (10, 10))
+    result = color(test_image, color=(300, 300, 300))
+    assert result is not None
+    assert result.size == test_image.size
+
+
+def test_pad_zero_padding() -> None:
+    """Test that pad with zero padding returns same-size image."""
+    test_image = Image.new("RGBA", (100, 100))
+    zero_padding = Padding(0, 0, 0, 0)
+    result = pad(test_image, padding=zero_padding)
+    assert result.size == (100, 100)
+
+
+def test_pad_negative_color_values() -> None:
+    """Test that pad handles negative color values."""
+    test_image = Image.new("RGBA", (10, 10))
+    result = pad(test_image, color=(-1, -1, -1))
+    assert result is not None
+
+
+def test_glow_strength_zero() -> None:
+    """Test that glow with strength=0 returns a copy."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=0.0, radius=10)
+    assert result is not test_image
+    assert result.size == test_image.size

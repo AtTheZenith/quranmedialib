@@ -59,7 +59,16 @@ class ParsedSegment(NamedTuple):
 
 
 def normalize_highlight_style(style: str) -> str:
-    """Ensures highlight_style is in the correct #flags#hex# format."""
+    """Ensures highlight_style is in the correct #flags#hex# format.
+
+    Args:
+        style: The highlight style string. If None, defaults to bold.
+
+    Returns:
+        Normalized style string in #flags#hex# format.
+    """
+    if style is None:
+        style = "#b#"
     if not style.startswith("#"):
         style = f"#{style}"
     if not style.endswith("#"):
@@ -71,7 +80,16 @@ def normalize_highlight_style(style: str) -> str:
 
 
 def prepare_translation_segments(translation: list[str]) -> list[ParsedSegment]:
-    """Pre-parses translation segments to avoid redundant regex searches in loops."""
+    """Pre-parses translation segments to avoid redundant regex searches in loops.
+
+    Args:
+        translation: List of translation segment strings. If None, returns empty list.
+
+    Returns:
+        List of ParsedSegment objects.
+    """
+    if translation is None:
+        return []
     parsed = []
 
     for segment in translation:
