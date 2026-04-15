@@ -158,18 +158,15 @@ def test_layout_config_available_height() -> None:
 
 
 def test_layout_config_negative_dimensions() -> None:
-    """Test that LayoutConfig accepts negative dimensions (no validation)."""
-    # Should not raise, even with negative values
-    config = LayoutConfig(max_width=-100, image_height=-100)
-    assert config.max_width == -100
-    assert config.image_height == -100
+    """Test that LayoutConfig raises ValueError for negative dimensions."""
+    with pytest.raises(ValueError, match="content_width must be positive"):
+        LayoutConfig(max_width=-100, image_height=-100)
 
 
 def test_layout_config_zero_dimensions() -> None:
-    """Test that LayoutConfig accepts zero dimensions."""
-    config = LayoutConfig(max_width=0, image_height=0)
-    assert config.max_width == 0
-    assert config.image_height == 0
+    """Test that LayoutConfig raises ValueError for zero dimensions."""
+    with pytest.raises(ValueError, match="content_width must be positive"):
+        LayoutConfig(max_width=0, image_height=0)
 
 
 # === WordConfig Tests ===

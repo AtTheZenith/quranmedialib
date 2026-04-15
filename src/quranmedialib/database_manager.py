@@ -33,6 +33,31 @@ logger = logging.getLogger(__name__)
 # SQL identifier validation (alphanumeric + underscore only)
 _SQL_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
+# Maximum glow radius to prevent resource exhaustion
+MAX_GLOW_RADIUS = 200
+
+# Maximum number of words for DP-based text wrapping (beyond this, greedy fallback)
+MAX_DP_WORDS = 200
+
+# Surah and ayah range constants for runtime validation
+MIN_SURAH = 1
+MAX_SURAH = 114
+MIN_AYAH = 1
+MAX_AYAH = 286
+
+# Trusted packaged database table/column names — hardcoded to prevent SQL injection
+_PACKAGED_DB_SCHEMAS = {
+    "quran.db": {"tablename": "ayat", "surah_col": "sura", "ayah_col": "ayah", "text_col": "text"},
+    "english_sahih.db": {"tablename": "english_sahih", "surah_col": "sura", "ayah_col": "aya", "text_col": "text"},
+    "english_wbw.db": {
+        "tablename": "wbw",
+        "surah_col": "surah",
+        "ayah_col": "ayah",
+        "text_col": "translation",
+        "word_id_col": "word",
+    },
+}
+
 
 def _validate_sql_identifier(name: str, context: str = "identifier") -> str:
     """Validate that a string is a safe SQL identifier.
@@ -52,6 +77,41 @@ def _validate_sql_identifier(name: str, context: str = "identifier") -> str:
     return name
 
 
+def _validate_surah(surah: int) -> int:
+    """Validate surah number is within valid range."""
+    if not MIN_SURAH <= surah <= MAX_SURAH:
+        raise ValueError(f"Surah number must be between {MIN_SURAH} and {MAX_SURAH}, got {surah}")
+    return surah
+
+
+def _validate_ayah(ayah: int) -> int:
+    """Validate ayah number is within valid range."""
+    if not MIN_AYAH <= ayah <= MAX_AYAH:
+        raise ValueError(f"Ayah number must be between {MIN_AYAH} and {MAX_AYAH}, got {ayah}")
+    return ayah
+
+
+def _truncate_for_log(value: Any, max_len: int = 100) -> str:
+    """Truncate a value for safe logging."""
+    s = str(value)
+    if len(s) > max_len:
+        return s[:max_len] + "..."
+    return s
+
+
+def _is_packaged_db(config: DatabaseConfig | WbwDatabaseConfig) -> bool:
+    """Check if a config references a packaged database by filename."""
+    return config.filepath.name in _PACKAGED_DB_SCHEMAS
+
+
+def _get_packaged_schema(config: DatabaseConfig | WbwDatabaseConfig) -> dict[str, str]:
+    """Return hardcoded schema for a packaged database."""
+    schema = _PACKAGED_DB_SCHEMAS.get(config.filepath.name)
+    if schema is None:
+        raise ValueError(f"No hardcoded schema for packaged database: {config.filepath.name}")
+    return schema
+
+
 class DatabaseManager:
     """Manager for multiple database connections with dedicated methods for each data source.
 
@@ -66,7 +126,7 @@ class DatabaseManager:
     """
 
     _instance: Optional[Self] = None
-    _lock = threading.Lock()
+    _init_lock = threading.Lock()
 
     # Default connection names
     DEFAULT_QURAN_NAME = "quran"
@@ -74,9 +134,11 @@ class DatabaseManager:
     DEFAULT_TRANSLATION_NAME = "translation"
 
     def __new__(cls) -> Self:
-        with cls._lock:
+        if cls._instance is not None:
+            return cls._instance
+        with cls._init_lock:
             if cls._instance is None:
-                cls._instance = super(DatabaseManager, cls).__new__(cls)
+                cls._instance = super().__new__(cls)
                 cls._instance._initialized = False
             return cls._instance
 
@@ -91,8 +153,8 @@ class DatabaseManager:
         Raises:
             sqlite3.Error: If database initialization fails.
         """
-        # Thread-safe check-and-init using class-level lock
-        with type(self)._lock:
+        # Thread-safe check-and-init using dedicated init lock
+        with type(self)._init_lock:
             if getattr(self, "_initialized", False):
                 return
 
@@ -105,12 +167,10 @@ class DatabaseManager:
                 self.close()
 
             self._registry: dict[str, dict[str, Any]] = {}
-            self._cursors: dict[str, sqlite3.Cursor] = {}
             self._connections: dict[str, sqlite3.Connection] = {}
             self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
             self._active_wbw: Optional[str] = None
             self._active_translation: Optional[str] = None
-            self._lock = threading.Lock()
 
             try:
                 # Import presets lazily to avoid circular import issues
@@ -154,14 +214,14 @@ class DatabaseManager:
             raise KeyError(f"Unknown database: {name}")
         return self._configs[name]
 
-    def _get_cursor(self, name: str) -> sqlite3.Cursor:
-        """Get the cursor for a named database."""
-        if name not in self._cursors:
+    def _get_connection(self, name: str) -> sqlite3.Connection:
+        """Get the connection for a named database."""
+        if name not in self._connections:
             raise KeyError(f"Unknown database: {name}")
-        return self._cursors[name]
+        return self._connections[name]
 
     def _register_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
-        """Registers a connection and its cursor into the internal registry.
+        """Registers a connection into the internal registry.
 
         Args:
             name: Unique name for the connection.
@@ -169,15 +229,12 @@ class DatabaseManager:
         """
         conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
 
         self._connections[name] = conn
-        self._cursors[name] = cursor
         self._configs[name] = config
         self._registry[name] = {
             "config": config,
             "connection": conn,
-            "cursor": cursor,
         }
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
@@ -250,6 +307,9 @@ class DatabaseManager:
     def _fetch(self, name: str, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         """Execute a query on a named database and return all rows.
 
+        Creates a fresh cursor per call to avoid thread-safety issues
+        with shared cursor objects.
+
         Args:
             name: Registered connection name.
             query: SQL query string.
@@ -259,20 +319,25 @@ class DatabaseManager:
             List of result rows. Returns empty list on sqlite3 errors after logging
             at WARNING level with caller context for debugging.
         """
-        cursor = self._get_cursor(name)
+        conn = self._get_connection(name)
+        cursor = conn.cursor()
         try:
             cursor.execute(query, params)
             return cursor.fetchall()
         except sqlite3.Error as e:
+            params_repr = _truncate_for_log(params)
+            query_repr = _truncate_for_log(query, 200)
             logger.warning(
                 "Database query failed on '%s': %s | Query: %s | Params: %s",
                 name,
                 e,
-                query,
-                params,
+                query_repr,
+                params_repr,
                 exc_info=True,
             )
             return []
+        finally:
+            cursor.close()
 
     def _aggregate_verses(
         self,
@@ -281,6 +346,9 @@ class DatabaseManager:
     ) -> list[str]:
         """Helper to aggregate verses by ayah number.
 
+        Rows are already ORDER BY ayah_col from SQL, so this processes
+        them in a single streaming pass without dict allocation or sorting.
+
         Args:
             rows: Query results containing ayah and text columns.
             config: Database configuration for column name mapping.
@@ -288,14 +356,41 @@ class DatabaseManager:
         Returns:
             A list of verse strings, ordered by ayah number.
         """
-        verses_dict: dict[int, list[str]] = {}
+        result: list[str] = []
+        current_ayah = None
+        current_texts: list[str] = []
+
         for row in rows:
             ayah = row[config.ayah_col]
-            if ayah not in verses_dict:
-                verses_dict[ayah] = []
-            verses_dict[ayah].append(row[config.text_col])
+            if ayah != current_ayah:
+                if current_texts:
+                    result.append(" ".join(current_texts))
+                current_ayah = ayah
+                current_texts = []
+            current_texts.append(row[config.text_col])
 
-        return [" ".join(verses_dict[ayah]) for ayah in sorted(verses_dict.keys())]
+        if current_texts:
+            result.append(" ".join(current_texts))
+
+        return result
+
+    def _resolve_schema(self, config: DatabaseConfig | WbwDatabaseConfig) -> tuple[str, dict[str, str]]:
+        """Resolve database schema, using hardcoded values for packaged DBs.
+
+        Returns:
+            Tuple of (table_name, schema_dict).
+        """
+        if _is_packaged_db(config):
+            return config.filepath.name, _get_packaged_schema(config)
+        return "user", {
+            "tablename": _validate_sql_identifier(config.tablename, "table name"),
+            "surah_col": _validate_sql_identifier(config.surah_col, "column name"),
+            "ayah_col": _validate_sql_identifier(config.ayah_col, "column name"),
+            "text_col": _validate_sql_identifier(config.text_col, "column name"),
+            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name")
+            if isinstance(config, WbwDatabaseConfig)
+            else "word",
+        }
 
     # === Quran Database Methods (always use "quran" database) ===
 
@@ -307,13 +402,20 @@ class DatabaseManager:
         Returns:
             A list of Arabic verse strings, ordered by ayah number.
         """
+        surah_number = _validate_surah(surah_number)
         config = self._get_config(self.DEFAULT_QURAN_NAME)
 
-        # Validate identifiers to prevent SQL injection from untrusted configs
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        if _is_packaged_db(config):
+            schema = _get_packaged_schema(config)
+            tablename = schema["tablename"]
+            ayah_col = schema["ayah_col"]
+            text_col = schema["text_col"]
+            surah_col = schema["surah_col"]
+        else:
+            tablename = _validate_sql_identifier(config.tablename, "table name")
+            ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+            text_col = _validate_sql_identifier(config.text_col, "column name")
+            surah_col = _validate_sql_identifier(config.surah_col, "column name")
 
         query = f"""
             SELECT {ayah_col}, {text_col}
@@ -332,12 +434,21 @@ class DatabaseManager:
         Returns:
             The Arabic verse text as a string.
         """
+        surah_number = _validate_surah(surah_number)
+        ayah_number = _validate_ayah(ayah_number)
         config = self._get_config(self.DEFAULT_QURAN_NAME)
 
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        if _is_packaged_db(config):
+            schema = _get_packaged_schema(config)
+            tablename = schema["tablename"]
+            text_col = schema["text_col"]
+            surah_col = schema["surah_col"]
+            ayah_col = schema["ayah_col"]
+        else:
+            tablename = _validate_sql_identifier(config.tablename, "table name")
+            text_col = _validate_sql_identifier(config.text_col, "column name")
+            surah_col = _validate_sql_identifier(config.surah_col, "column name")
+            ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
 
         query = f"""
             SELECT {text_col}
@@ -357,20 +468,16 @@ class DatabaseManager:
         Returns:
             List of word translations in order.
         """
+        surah_number = _validate_surah(surah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ?
-            ORDER BY {ayah_col}, {word_id_col}
+            SELECT {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ?
+            ORDER BY {schema["ayah_col"]}, {schema["word_id_col"]}
         """
         rows = self._fetch(name, query, (surah_number,))
         return [row[config.text_col] for row in rows]
@@ -383,20 +490,17 @@ class DatabaseManager:
         Returns:
             List of word translations in order.
         """
+        surah_number = _validate_surah(surah_number)
+        ayah_number = _validate_ayah(ayah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ? AND {ayah_col} = ?
-            ORDER BY {word_id_col}
+            SELECT {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
+            ORDER BY {schema["word_id_col"]}
         """
         rows = self._fetch(name, query, (surah_number, ayah_number))
         return [row[config.text_col] for row in rows]
@@ -419,19 +523,16 @@ class DatabaseManager:
         Returns:
             The translation string or None if not found.
         """
+        surah_number = _validate_surah(surah_number)
+        ayah_number = _validate_ayah(ayah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ? AND {ayah_col} = ? AND {word_id_col} = ?
+            SELECT {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ? AND {schema["word_id_col"]} = ?
         """
         rows = self._fetch(name, query, (surah_number, ayah_number, word_index))
         return rows[0][config.text_col] if rows else None
@@ -453,20 +554,16 @@ class DatabaseManager:
             Dictionary mapping ayah numbers to their lists of word translations.
             Example: {1: ["word1", "word2", ...], 2: ["word1", ...], ...}
         """
+        surah_number = _validate_surah(surah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        word_id_col = _validate_sql_identifier(config.word_id_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {ayah_col}, {word_id_col}, {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ?
-            ORDER BY {ayah_col}, {word_id_col}
+            SELECT {schema["ayah_col"]}, {schema["word_id_col"]}, {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ?
+            ORDER BY {schema["ayah_col"]}, {schema["word_id_col"]}
         """
         rows = self._fetch(name, query, (surah_number,))
 
@@ -496,19 +593,16 @@ class DatabaseManager:
         Returns:
             List of verse translations (one per verse).
         """
+        surah_number = _validate_surah(surah_number)
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ?
-            ORDER BY {ayah_col}
+            SELECT {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ?
+            ORDER BY {schema["ayah_col"]}
         """
         rows = self._fetch(name, query, (surah_number,))
         return [row[config.text_col] for row in rows]
@@ -530,18 +624,16 @@ class DatabaseManager:
         Returns:
             The verse translation string or None if not found.
         """
+        surah_number = _validate_surah(surah_number)
+        ayah_number = _validate_ayah(ayah_number)
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ? AND {ayah_col} = ?
+            SELECT {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
         """
         rows = self._fetch(name, query, (surah_number, ayah_number))
         return rows[0][config.text_col] if rows else None
@@ -568,19 +660,18 @@ class DatabaseManager:
         Raises:
             ValueError: If any ayah in the requested range is missing from the database.
         """
+        surah_number = _validate_surah(surah_number)
+        start_ayah = _validate_ayah(start_ayah)
+        end_ayah = _validate_ayah(end_ayah)
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
-
-        tablename = _validate_sql_identifier(config.tablename, "table name")
-        ayah_col = _validate_sql_identifier(config.ayah_col, "column name")
-        text_col = _validate_sql_identifier(config.text_col, "column name")
-        surah_col = _validate_sql_identifier(config.surah_col, "column name")
+        _, schema = self._resolve_schema(config)
 
         query = f"""
-            SELECT {ayah_col}, {text_col}
-            FROM {tablename}
-            WHERE {surah_col} = ? AND {ayah_col} BETWEEN ? AND ?
-            ORDER BY {ayah_col}
+            SELECT {schema["ayah_col"]}, {schema["text_col"]}
+            FROM {schema["tablename"]}
+            WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} BETWEEN ? AND ?
+            ORDER BY {schema["ayah_col"]}
         """
         rows = self._fetch(name, query, (surah_number, start_ayah, end_ayah))
 
@@ -615,7 +706,6 @@ class DatabaseManager:
                 logger.debug("Closed connection: %s", name)
 
         self._connections.clear()
-        self._cursors.clear()
         self._configs.clear()
         self._registry.clear()
         self._active_wbw = None

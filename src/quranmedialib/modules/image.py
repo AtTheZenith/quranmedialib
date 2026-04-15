@@ -1,5 +1,6 @@
 """Image processing utilities for QuranMediaLib."""
 
+import logging
 from typing import Literal
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter
@@ -11,6 +12,9 @@ __all__ = [
     "glow",
     "pad",
 ]
+
+# Maximum glow radius to prevent resource exhaustion
+MAX_GLOW_RADIUS = 200
 
 # === Helper Functions ===
 
@@ -111,13 +115,22 @@ def _glow_rgba(
     return result
 
 
-def _prepare_color_base(img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image) -> Image.Image:
+def _prepare_color_base(
+    img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]
+) -> Image.Image:
     """Prepares the color base for the glow effect by bleeding colors into transparent areas.
 
     This prevents grey/dark edges when blurring RGBA images.
+
+    Args:
+        img_rgba: The RGBA source image.
+        img_rgb: The RGB version of the image.
+        alpha: The alpha channel.
+        small_size: Pre-computed downscaled size (avoid redundant calculation).
+
+    Returns:
+        The color base image ready for blurring.
     """
-    scale = 8
-    small_size = _compute_downscaled_size(img_rgba, scale)
     small = img_rgba.resize(small_size, resample=Image.Resampling.BOX)
     color_base = small.resize(img_rgba.size, resample=Image.Resampling.NEAREST).convert("RGB")
     color_base.paste(img_rgb, mask=alpha)
@@ -171,6 +184,11 @@ def glow(
     if strength <= 0 or radius <= 0:
         return image.copy()
 
+    if radius > MAX_GLOW_RADIUS:
+        logger = logging.getLogger(__name__)
+        logger.warning("Glow radius %d exceeds maximum %d, clamping", radius, MAX_GLOW_RADIUS)
+        radius = MAX_GLOW_RADIUS
+
     # Capture initial state
     initial_mode = image.mode
 
@@ -190,17 +208,15 @@ def glow(
 
     # 1. Prepare the color base for the glow (downscaled for efficient blurring)
     color_base_scale = 8
+    color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
     if is_opaque:
         # For opaque images, downscale directly from RGB for efficiency
         img_rgb = img_rgba.convert("RGB")
-        color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
         color_base = img_rgb.resize(color_base_size, resample=Image.Resampling.BOX)
     else:
         # For RGBA, "bleed" colors into transparent areas to avoid grey edges
-        color_base = _prepare_color_base(img_rgba, img_rgb, alpha)
-        # Downscale the color base for efficient blurring
-        color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
-        color_base = color_base.resize(color_base_size, resample=Image.Resampling.BOX)
+        # Reuse pre-computed color_base_size (PERF-012: avoid redundant calculation)
+        color_base = _prepare_color_base(img_rgba, img_rgb, alpha, color_base_size)
 
     # 2. Multi-scale blur sequence (downscaled)
     # Scaled radii to match downsampled space for equivalent visual effect
@@ -212,17 +228,14 @@ def glow(
         max(1, int(radius * 1.5) // color_base_scale),
     ]
 
-    glow_color_size = color_base.size
-    glow_color = Image.new("RGB", glow_color_size, (0, 0, 0))
-    glow_alpha = None if is_opaque else Image.new("L", glow_color_size, 0)
-
-    # Downscale alpha channel to match color_base size
-    alpha_small = None if is_opaque else alpha.resize(glow_color_size, resample=Image.Resampling.BOX)
+    # Pre-allocate blur buffers — reuse across radii iterations (PERF-003)
+    blur_buffer = Image.new("RGB", color_base_size, (0, 0, 0))
+    glow_color = Image.new("RGB", color_base_size, (0, 0, 0))
+    glow_alpha = None if is_opaque else Image.new("L", color_base_size, 0)
+    alpha_small = None if is_opaque else alpha.resize(color_base_size, resample=Image.Resampling.BOX)
+    blur_alpha_buf = None if is_opaque else Image.new("L", color_base_size, 0)
 
     # Determine blur strategy based on quality mode
-    # fast: 1 pass of BoxBlur at base radius
-    # balanced: 1 pass of BoxBlur at 1.2x radius (smoother without extra brightness)
-    # quality: 1 pass of GaussianBlur at base radius
     radius_multipliers = {"fast": 1.0, "balanced": 1.2, "quality": 1.0}
     radius_mult = radius_multipliers[quality]
     use_gaussian = quality == "quality"
@@ -230,19 +243,19 @@ def glow(
     for r in radii:
         adjusted_r = max(1, int(r * radius_mult))
         if use_gaussian:
-            blur_c = color_base.filter(ImageFilter.GaussianBlur(adjusted_r))
+            blur_result = color_base.filter(ImageFilter.GaussianBlur(adjusted_r))
         else:
-            blur_c = color_base.filter(ImageFilter.BoxBlur(adjusted_r))
-        glow_color = ImageChops.screen(glow_color, blur_c)
-        del blur_c  # Release reference for immediate GC cleanup (CPython-specific)
+            blur_result = color_base.filter(ImageFilter.BoxBlur(adjusted_r))
+        blur_buffer.paste(blur_result)
+        glow_color = ImageChops.screen(glow_color, blur_buffer)
 
         if glow_alpha is not None:
             if use_gaussian:
-                blur_a = alpha_small.filter(ImageFilter.GaussianBlur(adjusted_r))
+                blur_alpha_result = alpha_small.filter(ImageFilter.GaussianBlur(adjusted_r))
             else:
-                blur_a = alpha_small.filter(ImageFilter.BoxBlur(adjusted_r))
-            glow_alpha = ImageChops.lighter(glow_alpha, blur_a)
-            del blur_a  # Release reference for immediate GC cleanup (CPython-specific)
+                blur_alpha_result = alpha_small.filter(ImageFilter.BoxBlur(adjusted_r))
+            blur_alpha_buf.paste(blur_alpha_result)
+            glow_alpha = ImageChops.lighter(glow_alpha, blur_alpha_buf)
 
     # 3. Upscale glow result to original size
     glow_color = glow_color.resize(img_rgba.size, resample=Image.Resampling.BILINEAR)

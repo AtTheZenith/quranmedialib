@@ -7,6 +7,7 @@ translation into a single annotated block, maintaining Right-to-Left (RTL) order
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import overload
 
@@ -15,6 +16,8 @@ from PIL import Image, ImageDraw, ImageFont
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.font_cache import get_font
 from quranmedialib.types import WordConfig
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "annotate_word",
@@ -145,6 +148,10 @@ def annotate_word(
         Annotated image.
     """
     if translation is None:
+        logger.warning(
+            "annotate_word called without pre-fetched translation. "
+            "This triggers N database queries. Use annotate_words() with wbw_translations for batch processing."
+        )
         database = db if db is not None else DatabaseManager()
         translation = database.get_wbw_from_word(surah, ayah, word_index)
 

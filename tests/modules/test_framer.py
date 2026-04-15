@@ -280,22 +280,16 @@ def test_frame_negative_word_spacing(negative_strength: float) -> None:
 
 
 def test_frame_zero_content_width_raises_error() -> None:
-    """Test that frame raises ValueError when content_width is zero."""
+    """Test that LayoutConfig raises ValueError when content_width is zero."""
     # content_width = max_width - padding.left - padding.right = 100 - 50 - 50 = 0
-    config = LayoutConfig(max_width=100, image_height=1080, padding=(50, 50, 50, 50))
-    dummy_img = Image.new("RGBA", (50, 50))
-    items = [WordItem(dummy_img)]
-
+    # Validation now happens at config creation, not in frame()
     with pytest.raises(ValueError, match="content_width must be positive"):
-        frame(items, config=config)
+        LayoutConfig(max_width=100, image_height=1080, padding=(50, 50, 50, 50))
 
 
 def test_frame_negative_content_width_raises_error() -> None:
-    """Test that frame raises ValueError when content_width is negative."""
+    """Test that LayoutConfig raises ValueError when content_width is negative."""
     # content_width = max_width - padding.left - padding.right = 50 - 50 - 50 = -50
-    config = LayoutConfig(max_width=50, image_height=1080, padding=(50, 50, 50, 50))
-    dummy_img = Image.new("RGBA", (50, 50))
-    items = [WordItem(dummy_img)]
-
+    # Validation now happens at config creation, not in frame()
     with pytest.raises(ValueError, match="content_width must be positive"):
-        frame(items, config=config)
+        LayoutConfig(max_width=50, image_height=1080, padding=(50, 50, 50, 50))

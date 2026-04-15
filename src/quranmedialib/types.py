@@ -14,6 +14,7 @@ structures used throughout the library. It includes:
 from __future__ import annotations
 
 import os
+import os.path
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -23,18 +24,26 @@ from PIL import Image, ImageFont
 
 from quranmedialib.resources import get_font_path
 
-# Package working directory (project root where src/ is located)
-_WORKING_DIR = Path(os.getcwd()).resolve()
-
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
 MAX_FONT_SIZE = 2000
+
+# Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
+_working_dir_cache: Path | None = None
+
+
+def _get_working_dir() -> Path:
+    """Return the working directory, caching on first call."""
+    global _working_dir_cache
+    if _working_dir_cache is None:
+        _working_dir_cache = Path(os.getcwd()).resolve()
+    return _working_dir_cache
 
 
 def _ensure_within_working_dir(path: Path) -> None:
     """Validate that a path is within the working directory tree.
 
-    This prevents users from accidentally accessing files outside
-    the project directory (e.g., ../../etc/passwd).
+    Uses os.path.commonpath to prevent prefix-matching bypasses
+    (e.g., working_dir-evil/ appearing to start with working_dir/).
 
     Args:
         path: The path to validate.
@@ -43,10 +52,10 @@ def _ensure_within_working_dir(path: Path) -> None:
         ValueError: If the path is outside the working directory.
     """
     resolved = path.resolve()
-    if not str(resolved).startswith(str(_WORKING_DIR)):
+    working = _get_working_dir()
+    if os.path.commonpath([resolved, working]) != str(working):
         raise ValueError(
-            f"Path {path!r} is outside the working directory {_WORKING_DIR}. "
-            f"Use unsafe_paths=True to bypass this check."
+            f"Path {path!r} is outside the working directory {working}. Use unsafe_paths=True to bypass this check."
         )
 
 
@@ -224,6 +233,7 @@ class DatabaseConfig:
         ayah_col: str = "ayah",
         text_col: str = "text",
         unsafe_paths: bool = False,
+        trust_config: bool = False,
     ) -> DatabaseConfig:
         """Create a DatabaseConfig from an external database file path.
 
@@ -236,6 +246,9 @@ class DatabaseConfig:
             unsafe_paths: If True, bypass working directory validation.
                 **Warning**: Setting this to True allows access to files
                 outside the working directory. Only use with trusted paths.
+            trust_config: If True, accept custom table/column names without
+                additional schema validation. When False (default), the
+                DatabaseManager validates identifiers against SQL injection.
 
         Raises:
             ValueError: If db_path is outside the working directory and
@@ -296,6 +309,7 @@ class WbwDatabaseConfig(DatabaseConfig):
         text_col: str = "translation",
         word_id_col: str = "word",
         unsafe_paths: bool = False,
+        trust_config: bool = False,
     ) -> WbwDatabaseConfig:
         """Create a WbwDatabaseConfig from an external database file path.
 
@@ -309,6 +323,9 @@ class WbwDatabaseConfig(DatabaseConfig):
             unsafe_paths: If True, bypass working directory validation.
                 **Warning**: Setting this to True allows access to files
                 outside the working directory. Only use with trusted paths.
+            trust_config: If True, accept custom table/column names without
+                additional schema validation. When False (default), the
+                DatabaseManager validates identifiers against SQL injection.
 
         Raises:
             ValueError: If db_path is outside the working directory and
@@ -386,7 +403,7 @@ class LayoutConfig:
     wimage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
 
     def __post_init__(self):
-        """Ensure string literals are converted to Enums where applicable."""
+        """Ensure string literals are converted to Enums, validate dimensions."""
         if isinstance(self.timage_vertical_align, str):
             object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
         if isinstance(self.timage_horizontal_align, str):
@@ -401,6 +418,23 @@ class LayoutConfig:
             )
         if not isinstance(self.padding, Padding):
             object.__setattr__(self, "padding", Padding(*self.padding))
+
+        # Validate dimensions (PERF-009: catch issues at config creation, not per frame() call)
+        if self.content_width <= 0:
+            raise ValueError(
+                f"LayoutConfig content_width must be positive, got {self.content_width}. "
+                f"(max_width={self.max_width}, padding.left={self.padding.left}, padding.right={self.padding.right})"
+            )
+        if self.max_width <= 0:
+            raise ValueError(
+                f"LayoutConfig max_width must be positive, got {self.max_width}. "
+                f"Canvas width cannot be zero or negative."
+            )
+        if self.image_height <= 0:
+            raise ValueError(
+                f"LayoutConfig image_height must be positive, got {self.image_height}. "
+                f"Canvas height cannot be zero or negative."
+            )
 
     @property
     def content_width(self) -> int:

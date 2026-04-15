@@ -338,13 +338,21 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
         trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
 
     # Warn if translation image would be clipped off-canvas
-    if (trans_x < 0 or trans_y < 0
-            or trans_x + trans_img.width > config.max_width
-            or trans_y + trans_img.height > config.image_height):
+    if (
+        trans_x < 0
+        or trans_y < 0
+        or trans_x + trans_img.width > config.max_width
+        or trans_y + trans_img.height > config.image_height
+    ):
         logger.warning(
             "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). "
             "Consider adjusting timage offsets or canvas dimensions.",
-            trans_img.width, trans_img.height, trans_x, trans_y, config.max_width, config.image_height,
+            trans_img.width,
+            trans_img.height,
+            trans_x,
+            trans_y,
+            config.max_width,
+            config.image_height,
         )
 
     page_image.paste(
@@ -375,7 +383,7 @@ def frame(
         A list of rendered PIL Images (one per page).
 
     Raises:
-        ValueError: If content_width is zero (would cause infinite loop).
+        ValueError: If one or more WordItems are missing their image content.
     """
     if not words:
         return []
@@ -386,24 +394,7 @@ def frame(
     if word_config is None:
         word_config = WordConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5, font_size=80)
 
-    # Prevent infinite loop in _build_row when no horizontal space is available
-    if config.content_width <= 0:
-        raise ValueError(
-            f"LayoutConfig content_width must be positive, got {config.content_width}. "
-            f"(max_width={config.max_width}, padding.left={config.padding.left}, padding.right={config.padding.right})"
-        )
-
-    # Prevent Image.new from crashing with invalid canvas dimensions
-    if config.max_width <= 0:
-        raise ValueError(
-            f"LayoutConfig max_width must be positive, got {config.max_width}. "
-            f"Canvas width cannot be zero or negative."
-        )
-    if config.image_height <= 0:
-        raise ValueError(
-            f"LayoutConfig image_height must be positive, got {config.image_height}. "
-            f"Canvas height cannot be zero or negative."
-        )
+    # Configs are validated at creation (__post_init__) — no redundant checks needed (PERF-009)
 
     all_items = list(words)
     if any(item.image is None for item in all_items):

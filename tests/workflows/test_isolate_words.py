@@ -80,21 +80,18 @@ if __name__ == "__main__":
 
 
 def test_isolate_words_invalid_surah() -> None:
-    """Test that IsolateWordsWorkflow handles invalid surah by producing empty results."""
+    """Test that IsolateWordsWorkflow raises ValueError for invalid surah."""
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
     workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
 
-    # Using surah 0 which is invalid - database returns empty results
-    results = list(
+    # Surah 0 is invalid — should raise ValueError
+    with pytest.raises(ValueError, match="Surah number must be between"):
         workflow.get_iterator(
             surah=0,
             verse_words=["test"],
             translations=["test translation"],
             ayah=1,
-        )
-    )
-    # Should produce results (though they may be empty or have placeholder translations)
-    assert isinstance(results, list)
+        ).__next__()
 
 
 def test_isolate_words_empty_verse_words() -> None:
@@ -135,8 +132,8 @@ def test_isolate_words_none_ayah() -> None:
 
     # Verify each result is a non-empty list of images
     for i, pages in enumerate(results):
-        assert isinstance(pages, list), f"Word {i+1}: Expected list, got {type(pages)}"
-        assert len(pages) > 0, f"Word {i+1}: Expected at least one page"
+        assert isinstance(pages, list), f"Word {i + 1}: Expected list, got {type(pages)}"
+        assert len(pages) > 0, f"Word {i + 1}: Expected at least one page"
 
 
 def test_isolate_mismatched_wbw_length() -> None:
@@ -159,4 +156,3 @@ def test_isolate_mismatched_wbw_length() -> None:
         )
         # Should produce results (warning is informational)
         assert len(results) >= 1
-

@@ -3,44 +3,35 @@
 This module provides:
 - FONT_* constants: Predefined FontResource instances for shipped fonts
 - DATABASE_* constants: Predefined DatabaseConfig instances for shipped databases
-- LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Layout configurations by resolution
+- build_preset(): Public builder function for custom configs at any resolution
+- LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Pre-built layout configurations
 
-Note: This file contains many hardcoded values for layout presets.
-Consider refactoring to a programmatic builder function for better maintainability.
+The builder uses 1080p as the reference resolution. All sizing parameters
+(font sizes, spacing, padding, offsets) scale linearly with the canvas height.
+Users can call build_preset() directly to generate configs for custom resolutions.
 """
 
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
     LayoutConfig,
+    Padding,
     TextConfig,
     WbwDatabaseConfig,
     WordConfig,
 )
 
-# === Common Constants for Repeated Values ===
-# Colors
-TRANSPARENT_COLOR: tuple[int, int, int, int] = (0, 0, 0, 0)
-WHITE_COLOR: tuple[int, int, int, int] = (255, 255, 255, 255)
-
-# Padding values (frequently repeated across presets)
+# === Common Constants ===
+TRANSPARENT: tuple[int, int, int, int] = (0, 0, 0, 0)
+WHITE: tuple[int, int, int, int] = (255, 255, 255, 255)
 ARABIC_WORD_PADDING: tuple[int, int, int, int] = (8, 8, 0, 0)
-VERSY_NUMBER_PADDING_720P: tuple[int, int, int, int] = (1, 27, 1, 1)
-VERSE_NUMBER_PADDING_1080P: tuple[int, int, int, int] = (1, 41, 1, 1)
 
 # === Font Presets ===
-#: Hafs font for Arabic Quranic text rendering
 FONT_HAFS = FontResource.from_packaged("hafs.otf", "Hafs")
-
-#: Inter regular font for English text rendering
 FONT_INTER = FontResource.from_packaged("inter.ttf", "Inter")
-
-#: Inter italic font for English italic text rendering
 FONT_INTER_ITALIC = FontResource.from_packaged("inter_italic.ttf", "Inter Italic")
 
-
 # === Database Presets ===
-#: Default Quran text database configuration
 DATABASE_QURAN = DatabaseConfig.from_packaged(
     db_name="quran.db",
     tablename="ayat",
@@ -48,8 +39,6 @@ DATABASE_QURAN = DatabaseConfig.from_packaged(
     ayah_col="ayah",
     text_col="text",
 )
-
-#: Default English translation database configuration (Sahih International)
 DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
     db_name="english_sahih.db",
     tablename="english_sahih",
@@ -57,8 +46,6 @@ DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
     ayah_col="aya",
     text_col="text",
 )
-
-#: Default word-by-word translation database configuration
 DATABASE_WBW_EN = WbwDatabaseConfig.from_packaged(
     db_name="english_wbw.db",
     tablename="wbw",
@@ -68,794 +55,362 @@ DATABASE_WBW_EN = WbwDatabaseConfig.from_packaged(
     word_id_col="word",
 )
 
+# === Builder Constants (1080p reference values) ===
+# These are the base values at 1080p. The builder scales them linearly
+# with the canvas height ratio (height / 1080) for any resolution.
+# To microadjust: change the _BASE values here — all presets update automatically.
 
-# === Layout Presets ===
-
-# Landscape (16:9) Presets
-LANDSCAPE_PRESET = {
+# --- Landscape (16:9) base at 1080p ---
+_LANDSCAPE_BASE = {
     "default": {
-        "720p": (
-            LayoutConfig(
-                max_width=1280,
-                image_height=720,
-                padding=(33, 33, 33, 33),
-                wimage_y_offset=-100,
-                timage_y_offset=-80,
-                wimage_vertical_align="center",
-                timage_vertical_align="bottom",
-            ),
-            TextConfig(font_size=24, line_spacing=7, max_width=1280),
-            WordConfig(
-                font_size=53,
-                word_spacing=13,
-                row_spacing=20,
-                max_rows_per_page=2,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_padding=(1, 27, 1, 1),
-                annotation_font_size=19,
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1920,
-                image_height=1080,
-                padding=(50, 50, 50, 50),
-                wimage_y_offset=-150,
-                timage_y_offset=-120,
-                wimage_vertical_align="center",
-                timage_vertical_align="bottom",
-            ),
-            TextConfig(font_size=36, line_spacing=10, max_width=1920),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=30,
-                max_rows_per_page=2,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(1, 41, 1, 1),
-                annotation_font_size=28,
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=2560,
-                image_height=1440,
-                padding=(67, 67, 67, 67),
-                wimage_y_offset=-200,
-                timage_y_offset=-160,
-                wimage_vertical_align="center",
-                timage_vertical_align="bottom",
-            ),
-            TextConfig(font_size=48, line_spacing=13, max_width=2560),
-            WordConfig(
-                font_size=107,
-                word_spacing=27,
-                row_spacing=40,
-                max_rows_per_page=2,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_padding=(2, 55, 2, 2),
-                annotation_font_size=37,
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=3840,
-                image_height=2160,
-                padding=(100, 100, 100, 100),
-                wimage_y_offset=-300,
-                timage_y_offset=-240,
-                wimage_vertical_align="center",
-                timage_vertical_align="bottom",
-            ),
-            TextConfig(font_size=72, line_spacing=20, max_width=3840),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=60,
-                max_rows_per_page=2,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_padding=(2, 82, 2, 2),
-                annotation_font_size=56,
-            ),
-        ),
+        "layout": {
+            "padding": 50,
+            "wimage_y_offset": -150,
+            "timage_y_offset": -120,
+            "wimage_vertical_align": "center",
+            "timage_vertical_align": "bottom",
+        },
+        "text": {"font_size": 36, "line_spacing": 10},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 30,
+            "max_rows_per_page": 2,
+            "verse_number_size": 110,
+            "verse_number_padding_bottom": 41,
+            "annotation_font_size": 28,
+        },
     },
     "arabic": {
-        "720p": (
-            LayoutConfig(
-                max_width=1280,
-                image_height=720,
-                padding=(33, 33, 33, 33),
-                wimage_vertical_align="center",
-                wimage_horizontal_align="center",
-            ),
-            TextConfig(font_size=24, line_spacing=7, max_width=1280, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=53,
-                word_spacing=13,
-                row_spacing=7,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_padding=(1, 9, 1, 1),
-                annotation_font_size=19,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1920,
-                image_height=1080,
-                padding=(50, 50, 50, 50),
-                wimage_vertical_align="center",
-                wimage_horizontal_align="center",
-            ),
-            TextConfig(font_size=36, line_spacing=10, max_width=1920, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=10,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(1, 14, 1, 1),
-                annotation_font_size=28,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=2560,
-                image_height=1440,
-                padding=(67, 67, 67, 67),
-                wimage_vertical_align="center",
-                wimage_horizontal_align="center",
-            ),
-            TextConfig(font_size=48, line_spacing=13, max_width=2560, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=107,
-                word_spacing=27,
-                row_spacing=13,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_padding=(2, 19, 2, 2),
-                annotation_font_size=37,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=3840,
-                image_height=2160,
-                padding=(100, 100, 100, 100),
-                wimage_vertical_align="center",
-                wimage_horizontal_align="center",
-            ),
-            TextConfig(font_size=72, line_spacing=20, max_width=3840, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=20,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_padding=(2, 28, 2, 2),
-                annotation_font_size=56,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 50,
+            "wimage_vertical_align": "center",
+            "wimage_horizontal_align": "center",
+        },
+        "text": {"font_size": 36, "line_spacing": 10, "color": TRANSPARENT},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 10,
+            "max_rows_per_page": 3,
+            "verse_number_size": 110,
+            "verse_number_padding_bottom": 14,
+            "annotation_font_size": 28,
+            "word_padding": ARABIC_WORD_PADDING,
+        },
     },
     "translation": {
-        "720p": (
-            LayoutConfig(
-                max_width=1280,
-                image_height=720,
-                padding=(33, 33, 33, 33),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=24, line_spacing=7, max_width=1280),
-            WordConfig(
-                font_size=53,
-                word_spacing=13,
-                row_spacing=20,
-                max_rows_per_page=5,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 27, 1, 1),
-                annotation_font_size=19,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1920,
-                image_height=1080,
-                padding=(50, 50, 50, 50),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=36, line_spacing=10, max_width=1920),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=30,
-                max_rows_per_page=5,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 41, 1, 1),
-                annotation_font_size=28,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=2560,
-                image_height=1440,
-                padding=(67, 67, 67, 67),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=48, line_spacing=13, max_width=2560),
-            WordConfig(
-                font_size=107,
-                word_spacing=27,
-                row_spacing=40,
-                max_rows_per_page=5,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 55, 2, 2),
-                annotation_font_size=37,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=3840,
-                image_height=2160,
-                padding=(100, 100, 100, 100),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=72, line_spacing=20, max_width=3840),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=60,
-                max_rows_per_page=5,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 82, 2, 2),
-                annotation_font_size=56,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 50,
+            "timage_vertical_align": "center",
+        },
+        "text": {"font_size": 36, "line_spacing": 10},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 30,
+            "max_rows_per_page": 5,
+            "verse_number_size": 110,
+            "verse_number_color": TRANSPARENT,
+            "verse_number_padding_bottom": 41,
+            "annotation_font_size": 28,
+            "word_color": TRANSPARENT,
+            "annotation_color": TRANSPARENT,
+        },
     },
 }
 
-# Portrait/Story (9:16) Presets
-STORY_PRESET = {
+# --- Story/Portrait (9:16) base at 1080p ---
+_STORY_BASE = {
     "default": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=1280,
-                padding=(40, 40, 40, 40),
-                timage_y_offset=640 + 160,
-                wimage_vertical_align="center",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=24, line_spacing=10, max_width=720),
-            WordConfig(
-                font_size=53,
-                word_spacing=15,
-                row_spacing=25,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_padding=(1, 27, 1, 1),
-                annotation_font_size=19,
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1920,
-                padding=(60, 60, 60, 60),
-                timage_y_offset=960 + 240,
-                wimage_vertical_align="center",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=36, line_spacing=15, max_width=1080),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=40,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(1, 41, 1, 1),
-                annotation_font_size=28,
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=2560,
-                padding=(80, 80, 80, 80),
-                timage_y_offset=1280 + 320,
-                wimage_vertical_align="center",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=48, line_spacing=20, max_width=1440),
-            WordConfig(
-                font_size=107,
-                word_spacing=25,
-                row_spacing=55,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_padding=(2, 55, 2, 2),
-                annotation_font_size=37,
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=3840,
-                padding=(120, 120, 120, 120),
-                timage_y_offset=1920 + 480,
-                wimage_vertical_align="center",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=72, line_spacing=30, max_width=2160),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=80,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_padding=(2, 82, 2, 2),
-                annotation_font_size=56,
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+            "timage_y_offset_formula": "height/2 + height/8",  # 960 + 240 = 1200
+            "wimage_vertical_align": "center",
+            "timage_vertical_align": "top",
+        },
+        "text": {"font_size": 36, "line_spacing": 15},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 40,
+            "max_rows_per_page": 8,
+            "verse_number_size": 110,
+            "verse_number_padding_bottom": 41,
+            "annotation_font_size": 28,
+        },
     },
     "arabic": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=1280,
-                padding=(40, 40, 40, 40),
-            ),
-            TextConfig(font_size=24, line_spacing=10, max_width=720, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=53,
-                word_spacing=15,
-                row_spacing=6,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_padding=(1, 9, 1, 1),
-                annotation_font_size=19,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1920,
-                padding=(60, 60, 60, 60),
-            ),
-            TextConfig(font_size=36, line_spacing=15, max_width=1080, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=10,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(1, 14, 1, 1),
-                annotation_font_size=28,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=2560,
-                padding=(80, 80, 80, 80),
-            ),
-            TextConfig(font_size=48, line_spacing=20, max_width=1440, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=107,
-                word_spacing=25,
-                row_spacing=13,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_padding=(2, 19, 2, 2),
-                annotation_font_size=37,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=3840,
-                padding=(120, 120, 120, 120),
-            ),
-            TextConfig(font_size=72, line_spacing=30, max_width=2160, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=20,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_padding=(2, 28, 2, 2),
-                annotation_font_size=56,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+        },
+        "text": {"font_size": 36, "line_spacing": 15, "color": TRANSPARENT},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 10,
+            "max_rows_per_page": 8,
+            "verse_number_size": 110,
+            "verse_number_padding_bottom": 14,
+            "annotation_font_size": 28,
+            "word_padding": ARABIC_WORD_PADDING,
+        },
     },
     "translation": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=1280,
-                padding=(40, 40, 40, 40),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=24, line_spacing=10, max_width=720),
-            WordConfig(
-                font_size=53,
-                word_spacing=15,
-                row_spacing=25,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=73,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 27, 1, 1),
-                annotation_font_size=19,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1920,
-                padding=(60, 60, 60, 60),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=36, line_spacing=15, max_width=1080),
-            WordConfig(
-                font_size=80,
-                word_spacing=20,
-                row_spacing=40,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 41, 1, 1),
-                annotation_font_size=28,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=2560,
-                padding=(80, 80, 80, 80),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=48, line_spacing=20, max_width=1440),
-            WordConfig(
-                font_size=107,
-                word_spacing=25,
-                row_spacing=55,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=147,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 55, 2, 2),
-                annotation_font_size=37,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=3840,
-                padding=(120, 120, 120, 120),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=72, line_spacing=30, max_width=2160),
-            WordConfig(
-                font_size=160,
-                word_spacing=40,
-                row_spacing=80,
-                max_rows_per_page=8,
-                balanced_wrapping=True,
-                verse_number_size=220,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 82, 2, 2),
-                annotation_font_size=56,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+            "timage_vertical_align": "center",
+        },
+        "text": {"font_size": 36, "line_spacing": 15},
+        "word": {
+            "font_size": 80,
+            "word_spacing": 20,
+            "row_spacing": 40,
+            "max_rows_per_page": 8,
+            "verse_number_size": 110,
+            "verse_number_color": TRANSPARENT,
+            "verse_number_padding_bottom": 41,
+            "annotation_font_size": 28,
+            "word_color": TRANSPARENT,
+            "annotation_color": TRANSPARENT,
+        },
     },
 }
 
-SQUARE_PRESET = {
+# --- Square (1:1) base at 1080p ---
+_SQUARE_BASE = {
     "default": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=720,
-                padding=(40, 40, 40, 40),
-                timage_y_offset=360 + 80,
-                wimage_y_offset=-360 + 40,
-                wimage_vertical_align="bottom",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=19, line_spacing=10, max_width=720 - 80),
-            WordConfig(
-                font_size=40,
-                word_spacing=15,
-                row_spacing=25,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=55,
-                verse_number_padding=(1, 20, 1, 1),
-                annotation_font_size=14,
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1080,
-                padding=(60, 60, 60, 60),
-                timage_y_offset=540 + 120,
-                wimage_y_offset=-540 + 60,
-                wimage_vertical_align="bottom",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=28, line_spacing=15, max_width=1080 - 120),
-            WordConfig(
-                font_size=60,
-                word_spacing=20,
-                row_spacing=40,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=83,
-                verse_number_padding=(1, 31, 1, 1),
-                annotation_font_size=21,
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=1440,
-                padding=(80, 80, 80, 80),
-                timage_y_offset=720 + 160,
-                wimage_y_offset=-720 + 80,
-                wimage_vertical_align="bottom",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=37, line_spacing=20, max_width=1440 - 160),
-            WordConfig(
-                font_size=80,
-                word_spacing=25,
-                row_spacing=55,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(2, 41, 2, 2),
-                annotation_font_size=28,
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=2160,
-                padding=(120, 120, 120, 120),
-                timage_y_offset=1080 + 240,
-                wimage_y_offset=-1080 + 120,
-                wimage_vertical_align="bottom",
-                timage_vertical_align="top",
-            ),
-            TextConfig(font_size=56, line_spacing=30, max_width=2160 - 240),
-            WordConfig(
-                font_size=120,
-                word_spacing=40,
-                row_spacing=80,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=165,
-                verse_number_padding=(2, 61, 2, 2),
-                annotation_font_size=42,
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+            "timage_y_offset_formula": "height/2 + height/9",  # 540 + 120 = 660
+            "wimage_y_offset_formula": "-height/2 + padding",  # -540 + 60 = -480
+            "wimage_vertical_align": "bottom",
+            "timage_vertical_align": "top",
+        },
+        "text": {"font_size": 28, "line_spacing": 15, "max_width_subtract": 120},
+        "word": {
+            "font_size": 60,
+            "word_spacing": 20,
+            "row_spacing": 40,
+            "max_rows_per_page": 3,
+            "verse_number_size": 83,
+            "verse_number_padding_bottom": 31,
+            "annotation_font_size": 21,
+        },
     },
     "arabic": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=720,
-                padding=(40, 40, 40, 40),
-            ),
-            TextConfig(font_size=24, line_spacing=10, max_width=720, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=40,
-                word_spacing=15,
-                row_spacing=6,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=55,
-                verse_number_padding=(1, 8, 1, 1),
-                annotation_font_size=14,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1080,
-                padding=(60, 60, 60, 60),
-            ),
-            TextConfig(font_size=36, line_spacing=15, max_width=1080, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=60,
-                word_spacing=20,
-                row_spacing=10,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=83,
-                verse_number_padding=(1, 11, 1, 1),
-                annotation_font_size=21,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=1440,
-                padding=(80, 80, 80, 80),
-            ),
-            TextConfig(font_size=48, line_spacing=20, max_width=1440, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=80,
-                word_spacing=25,
-                row_spacing=13,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_padding=(2, 15, 2, 2),
-                annotation_font_size=28,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=2160,
-                padding=(120, 120, 120, 120),
-            ),
-            TextConfig(font_size=72, line_spacing=30, max_width=2160, color=(0, 0, 0, 0)),
-            WordConfig(
-                font_size=120,
-                word_spacing=40,
-                row_spacing=20,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=165,
-                verse_number_padding=(2, 22, 2, 2),
-                annotation_font_size=42,
-                word_padding=(8, 8, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+        },
+        "text": {"font_size": 36, "line_spacing": 15, "color": TRANSPARENT},
+        "word": {
+            "font_size": 60,
+            "word_spacing": 20,
+            "row_spacing": 10,
+            "max_rows_per_page": 3,
+            "verse_number_size": 83,
+            "verse_number_padding_bottom": 11,
+            "annotation_font_size": 21,
+            "word_padding": ARABIC_WORD_PADDING,
+        },
     },
     "translation": {
-        "720p": (
-            LayoutConfig(
-                max_width=720,
-                image_height=720,
-                padding=(40, 40, 40, 40),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=24, line_spacing=10, max_width=720 - 80),
-            WordConfig(
-                font_size=40,
-                word_spacing=15,
-                row_spacing=25,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=55,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 20, 1, 1),
-                annotation_font_size=14,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1080p": (
-            LayoutConfig(
-                max_width=1080,
-                image_height=1080,
-                padding=(60, 60, 60, 60),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=28, line_spacing=15, max_width=1080 - 120),
-            WordConfig(
-                font_size=60,
-                word_spacing=20,
-                row_spacing=40,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=83,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(1, 31, 1, 1),
-                annotation_font_size=21,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "1440p": (
-            LayoutConfig(
-                max_width=1440,
-                image_height=1440,
-                padding=(80, 80, 80, 80),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=37, line_spacing=20, max_width=1440 - 160),
-            WordConfig(
-                font_size=80,
-                word_spacing=25,
-                row_spacing=55,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=110,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 41, 2, 2),
-                annotation_font_size=28,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
-        "2160p": (
-            LayoutConfig(
-                max_width=2160,
-                image_height=2160,
-                padding=(120, 120, 120, 120),
-                timage_vertical_align="center",
-            ),
-            TextConfig(font_size=56, line_spacing=30, max_width=2160 - 240),
-            WordConfig(
-                font_size=120,
-                word_spacing=40,
-                row_spacing=80,
-                max_rows_per_page=3,
-                balanced_wrapping=True,
-                verse_number_size=165,
-                verse_number_color=(0, 0, 0, 0),
-                verse_number_padding=(2, 61, 2, 2),
-                annotation_font_size=42,
-                word_color=(0, 0, 0, 0),
-                annotation_color=(0, 0, 0, 0),
-            ),
-        ),
+        "layout": {
+            "padding": 60,
+            "timage_vertical_align": "center",
+        },
+        "text": {"font_size": 28, "line_spacing": 15, "max_width_subtract": 120},
+        "word": {
+            "font_size": 60,
+            "word_spacing": 20,
+            "row_spacing": 40,
+            "max_rows_per_page": 3,
+            "verse_number_size": 83,
+            "verse_number_color": TRANSPARENT,
+            "verse_number_padding_bottom": 31,
+            "annotation_font_size": 21,
+            "word_color": TRANSPARENT,
+            "annotation_color": TRANSPARENT,
+        },
     },
 }
+
+# === Known Resolutions ===
+# Each entry maps resolution name -> (width, height) for each aspect ratio
+_RESOLUTIONS: dict[str, dict[str, tuple[int, int]]] = {
+    "landscape": {
+        "720p": (1280, 720),
+        "1080p": (1920, 1080),
+        "1440p": (2560, 1440),
+        "2160p": (3840, 2160),
+    },
+    "story": {
+        "720p": (720, 1280),
+        "1080p": (1080, 1920),
+        "1440p": (1440, 2560),
+        "2160p": (2160, 3840),
+    },
+    "square": {
+        "720p": (720, 720),
+        "1080p": (1080, 1080),
+        "1440p": (1440, 1440),
+        "2160p": (2160, 2160),
+    },
+}
+
+# Reference height for scaling (1080p)
+# For landscape: use height (1080). For story: use width (1080). For square: either (1080).
+# We normalize all presets to a "reference dimension" of 1080.
+_REFERENCE_DIM = 1080
+
+
+def _get_reference_dimension(aspect_ratio: str, width: int, height: int) -> int:
+    """Returns the reference dimension for scaling.
+
+    Landscape: height is the reference (720, 1080, 1440, 2160).
+    Story: width is the reference (720, 1080, 1440, 2160).
+    Square: width = height, so either works.
+    """
+    if aspect_ratio == "landscape":
+        return height
+    elif aspect_ratio == "story":
+        return width
+    else:  # square
+        return width
+
+
+def _round_scale(base: int | float, ref_dim: int) -> int:
+    """Scales a base value linearly with the reference dimension, rounded to nearest int."""
+    return round(base * ref_dim / _REFERENCE_DIM)
+
+
+def build_preset(
+    aspect_ratio: str,
+    mode: str,
+    width: int,
+    height: int,
+) -> tuple[LayoutConfig, TextConfig, WordConfig]:
+    """Builds a complete preset configuration for any resolution.
+
+    All sizing parameters (font sizes, spacing, padding, offsets) scale linearly
+    with the canvas height relative to the 1080p reference. Change the base
+    values in this module to microadjust all presets at once.
+
+    Args:
+        aspect_ratio: One of "landscape" (16:9), "story" (9:16), or "square" (1:1).
+            Used to select the preset profile. The actual dimensions come from
+            width/height parameters.
+        mode: One of "default" (annotated + translation), "arabic" (annotated only),
+            or "translation" (translation only).
+        width: Canvas width in pixels.
+        height: Canvas height in pixels.
+
+    Returns:
+        Tuple of (LayoutConfig, TextConfig, WordConfig) ready for rendering.
+
+    Raises:
+        ValueError: If aspect_ratio or mode is not recognized.
+    """
+    if aspect_ratio not in ("landscape", "story", "square"):
+        raise ValueError(f"aspect_ratio must be 'landscape', 'story', or 'square', got '{aspect_ratio}'")
+    if mode not in ("default", "arabic", "translation"):
+        raise ValueError(f"mode must be 'default', 'arabic', or 'translation', got '{mode}'")
+
+    # Select base config
+    bases = {"landscape": _LANDSCAPE_BASE, "story": _STORY_BASE, "square": _SQUARE_BASE}
+    base = bases[aspect_ratio][mode]
+
+    layout_base = base["layout"]
+    text_base = base["text"]
+    word_base = base["word"]
+
+    # Determine reference dimension for scaling
+    ref_dim = _get_reference_dimension(aspect_ratio, width, height)
+
+    padding_val = _round_scale(layout_base["padding"], ref_dim)
+
+    # Build LayoutConfig
+    layout_kwargs: dict = {
+        "max_width": width,
+        "image_height": height,
+        "padding": Padding(padding_val, padding_val, padding_val, padding_val),
+    }
+    for key in ("wimage_vertical_align", "wimage_horizontal_align", "timage_vertical_align", "timage_horizontal_align"):
+        if key in layout_base:
+            layout_kwargs[key] = layout_base[key]
+
+    # Handle y-offsets (scaled by ref_dim for fixed offsets, actual height for formulas)
+    if "wimage_y_offset" in layout_base:
+        layout_kwargs["wimage_y_offset"] = _round_scale(layout_base["wimage_y_offset"], ref_dim)
+    elif "wimage_y_offset_formula" in layout_base:
+        formula = layout_base["wimage_y_offset_formula"]
+        if formula == "-height/2 + padding":
+            layout_kwargs["wimage_y_offset"] = -height // 2 + padding_val
+
+    if "timage_y_offset" in layout_base:
+        layout_kwargs["timage_y_offset"] = _round_scale(layout_base["timage_y_offset"], ref_dim)
+    elif "timage_y_offset_formula" in layout_base:
+        formula = layout_base["timage_y_offset_formula"]
+        if formula == "height/2 + height/8":
+            layout_kwargs["timage_y_offset"] = height // 2 + height // 8
+        elif formula == "height/2 + height/9":
+            layout_kwargs["timage_y_offset"] = height // 2 + round(height / 9)
+
+    layout_config = LayoutConfig(**layout_kwargs)
+
+    # Build TextConfig
+    text_kwargs: dict = {
+        "font_size": _round_scale(text_base["font_size"], ref_dim),
+        "line_spacing": _round_scale(text_base["line_spacing"], ref_dim),
+        "max_width": width - _round_scale(text_base.get("max_width_subtract", 0), ref_dim),
+    }
+    if "color" in text_base:
+        text_kwargs["color"] = text_base["color"]
+
+    text_config = TextConfig(**text_kwargs)
+
+    # Build WordConfig
+    vnp_bottom = _round_scale(word_base["verse_number_padding_bottom"], ref_dim)
+    vnp_top_side = 1 if ref_dim <= 1080 else 2
+
+    word_kwargs: dict = {
+        "font_size": _round_scale(word_base["font_size"], ref_dim),
+        "word_spacing": _round_scale(word_base["word_spacing"], ref_dim),
+        "row_spacing": _round_scale(word_base["row_spacing"], ref_dim),
+        "max_rows_per_page": word_base["max_rows_per_page"],
+        "balanced_wrapping": True,
+        "verse_number_size": _round_scale(word_base["verse_number_size"], ref_dim),
+        "verse_number_padding": Padding(vnp_top_side, vnp_bottom, vnp_top_side, vnp_top_side),
+        "annotation_font_size": _round_scale(word_base["annotation_font_size"], ref_dim),
+    }
+    for key in ("word_padding", "verse_number_color", "word_color", "annotation_color"):
+        if key in word_base:
+            word_kwargs[key] = word_base[key]
+
+    word_config = WordConfig(**word_kwargs)
+
+    return layout_config, text_config, word_config
+
+
+def _build_all_presets() -> dict:
+    """Generates the full preset dictionary from base constants."""
+    result: dict = {"landscape": {}, "story": {}, "square": {}}
+    for aspect in ("landscape", "story", "square"):
+        for mode in ("default", "arabic", "translation"):
+            result[aspect][mode] = {}
+            for res_name, (w, h) in _RESOLUTIONS[aspect].items():
+                result[aspect][mode][res_name] = build_preset(aspect, mode, w, h)
+    return result
+
+
+_ALL_PRESETS = _build_all_presets()
+
+# === Public Preset Dictionaries ===
+#: Landscape (16:9) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+LANDSCAPE_PRESET = _ALL_PRESETS["landscape"]
+
+#: Story/Portrait (9:16) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+STORY_PRESET = _ALL_PRESETS["story"]
+
+#: Square (1:1) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+SQUARE_PRESET = _ALL_PRESETS["square"]
