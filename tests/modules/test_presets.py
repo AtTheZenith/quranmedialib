@@ -61,8 +61,7 @@ def test_preset_square_1080p_font_sizes() -> None:
         font_sizes.append(text_cfg.font_size)
     for i in range(len(font_sizes) - 1):
         assert font_sizes[i] < font_sizes[i + 1], (
-            f"SQUARE_PRESET['translation'] font_size should increase with resolution: "
-            f"got {font_sizes}"
+            f"SQUARE_PRESET['translation'] font_size should increase with resolution: got {font_sizes}"
         )
 
 
@@ -77,10 +76,6 @@ def test_presets_consistent_scaling() -> None:
             widths.append(layout.max_width)
             heights.append(layout.image_height)
         for i in range(len(widths) - 1):
-            assert widths[i] <= widths[i + 1], (
-                f"{preset_name} width should not decrease: {widths}"
-            )
+            assert widths[i] <= widths[i + 1], f"{preset_name} width should not decrease: {widths}"
         for i in range(len(heights) - 1):
-            assert heights[i] <= heights[i + 1], (
-                f"{preset_name} height should not decrease: {heights}"
-            )
+            assert heights[i] <= heights[i + 1], f"{preset_name} height should not decrease: {heights}"

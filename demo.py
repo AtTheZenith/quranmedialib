@@ -10,6 +10,7 @@ Run this script to generate sample images for all preset configurations.
 """
 
 import os
+from pathlib import Path
 from typing import Literal
 
 from PIL import Image
@@ -140,17 +141,27 @@ def create_square_demo(
 
 def save_images(images: list[Image.Image], output_dir: str) -> None:
     """Applies glow and saves images to the output directory."""
-    os.makedirs(output_dir, exist_ok=True)
+    output_path = Path(output_dir).resolve()
+    # Ensure output directory is within the project tree
+    project_root = Path(__file__).parent.resolve()
+    if os.path.commonpath([output_path, project_root]) != str(project_root):
+        raise ValueError(f"Output directory must be within project root: {project_root}")
+    output_path.mkdir(parents=True, exist_ok=True)
     for i, img in enumerate(images):
         # Apply glow before saving as per original main()
         final_img = glow(img)
         filename = f"{(i + 1):02d}.png"
-        path = os.path.join(output_dir, filename)
+        path = output_path / filename
         final_img.save(path)
         print(f"Saved {filename}")
 
 
 def main() -> None:
+    """Runs all preset combinations sequentially.
+
+    Note: For benchmarking, consider parallel execution via
+    `concurrent.futures.ProcessPoolExecutor` for 3-5x speedup on multi-core systems.
+    """
     db = DatabaseManager()
     surah_id = 108
     data = {"surah": surah_id}

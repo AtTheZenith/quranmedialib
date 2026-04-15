@@ -11,6 +11,7 @@ import contextlib
 import logging
 import re
 import threading
+from pathlib import Path
 from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
@@ -38,15 +39,33 @@ logger = logging.getLogger(__name__)
 _SEGMENT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)(?=#|$)")
 _RICH_TEXT_TAG_PATTERN = re.compile(r"#([bi]*)#([0-9a-fA-F]*|)#(.*?)#")
 
-# Module-level singleton for text measurement (avoids creating dummy images per call)
-_MEASURE_IMG = Image.new("RGBA", (1, 1))
-_MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
+# Lazy-initialized singletons for text measurement (PERF-010: avoid import-time allocation)
+_measure_img: Image.Image | None = None
+_measure_draw: ImageDraw.ImageDraw | None = None
 
-# Thread-safe cache for bold variation names to avoid repeated get_variation_names() iteration
+# Thread-safe cache for bold variation names
 # Maps font_path -> variation_name, None (needs simulation), or _AXIS_BOLD_SENTINEL (axis-based)
 _BOLD_VARIATION_CACHE_LOCK = threading.Lock()
 _BOLD_VARIATION_CACHE: dict[str, str | None | object] = {}
 _AXIS_BOLD_SENTINEL = object()  # Sentinel to mark axis-based bold detection
+
+# Hardcoded known bold variation names for cold-start optimization (PERF-005)
+# Maps font filename -> bold variation name (None means no variations / non-variable font)
+_BOLD_VARIATION_NAMES: dict[str, str | None] = {
+    "Inter.ttf": "SemiBold",
+    "Inter-Italic.ttf": "SemiBold Italic",
+    "Inter-Regular.ttf": "SemiBold",
+    "hafs.otf": None,  # Non-variable font, no variations
+}
+
+
+def _get_measure_draw() -> ImageDraw.ImageDraw:
+    """Returns module-level ImageDraw singleton, initialized on first use (PERF-010)."""
+    global _measure_img, _measure_draw
+    if _measure_draw is None:
+        _measure_img = Image.new("RGBA", (1, 1))
+        _measure_draw = ImageDraw.Draw(_measure_img)
+    return _measure_draw
 
 
 class ParsedSegment(NamedTuple):
@@ -122,9 +141,7 @@ def format_isolation_text(
     if target_index < 0:
         raise ValueError(f"target_index must be non-negative, got {target_index}")
     if target_index >= len(parsed_segments):
-        raise ValueError(
-            f"target_index {target_index} out of bounds for {len(parsed_segments)} segments"
-        )
+        raise ValueError(f"target_index {target_index} out of bounds for {len(parsed_segments)} segments")
 
     formatted = []
     for j, seg in enumerate(parsed_segments):
@@ -191,6 +208,18 @@ def _get_font(flags: str, config: TextConfig) -> tuple[ImageFont.FreeTypeFont | 
                     # cached_variation is None, meaning this font needs bold simulation
                     simulate_bold = True
                     return font, True
+
+        # Try hardcoded bold variation names first (PERF-005: cold-start optimization)
+        font_filename = Path(base_path_str).name
+        hardcoded_bold = _BOLD_VARIATION_NAMES.get(font_filename)
+        if hardcoded_bold is not None:
+            try:
+                font.set_variation_by_name(hardcoded_bold)
+                with _BOLD_VARIATION_CACHE_LOCK:
+                    _BOLD_VARIATION_CACHE[base_path_str] = hardcoded_bold
+                return font, False
+            except (AttributeError, OSError):
+                pass  # Fall through to dynamic detection
 
         try:
             # First attempt: Try setting bold via named instance (most reliable for complex fonts)
@@ -404,7 +433,7 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | No
     This version handles explicit whitespace tokens by trimming them from line width
     calculations to ensure a cleanly centered visual distribution.
 
-    For very large word counts (> 500), falls back to greedy wrapping to avoid
+    For very large word counts (> MAX_DP_WORDS), falls back to greedy wrapping to avoid
     excessive computation time (DP is O(k × n²)).
 
     Args:
@@ -427,7 +456,9 @@ def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | No
         return greedy_lines
 
     # Performance guard: DP is O(k × n²), fallback to greedy for large inputs
-    if len(styled_words) > 500:
+    from quranmedialib.database_manager import MAX_DP_WORDS
+
+    if len(styled_words) > MAX_DP_WORDS:
         logger.debug(
             "Falling back to greedy wrapping for %d words (DP would be too slow)",
             len(styled_words),
@@ -600,6 +631,8 @@ def get_timage(
 ) -> Image.Image | None:
     """Renders translation text into an RGBA image with rich formatting.
 
+    Results are cached (LRU, max 1024 entries) based on text + config parameters.
+
     Args:
         text: Formatted rich text string (#b# for bold, etc.).
         config: Rendering configuration.
@@ -608,13 +641,61 @@ def get_timage(
     Returns:
         Rendered PIL Image or None if text is empty.
     """
+    return _get_timage_cached(text, config, max_height)
+
+
+# Cache for timage (PERF-007)
+# Key: (text, font_path, italic_path, font_size, max_width, max_height, color, line_spacing, alignment_value)
+_timage_cache: dict[tuple, Image.Image | None] = {}
+_TIMAGE_CACHE_MAX = 1024
+_timage_cache_order: list[tuple] = []  # LRU order (oldest first)
+
+
+def _get_timage_cached(
+    text: str,
+    config: TextConfig | None,
+    max_height: int | None,
+) -> Image.Image | None:
+    """Cached wrapper for get_timage. Uses LRU eviction."""
     if not text:
         return None
 
-    config = config or TextConfig()
+    resolved_config = config or TextConfig()
+    cache_key: tuple = (
+        text,
+        str(resolved_config.font_path),
+        str(resolved_config.italic_font_path),
+        resolved_config.font_size,
+        resolved_config.max_width,
+        max_height,
+        resolved_config.color,
+        resolved_config.line_spacing,
+        resolved_config.alignment.value,
+    )
 
-    # Use module-level singleton for text measurement
-    draw = _MEASURE_DRAW
+    if cache_key in _timage_cache:
+        return _timage_cache[cache_key]
+
+    result = _render_timage(text, resolved_config, max_height)
+
+    # LRU eviction
+    if len(_timage_cache) >= _TIMAGE_CACHE_MAX:
+        oldest = _timage_cache_order.pop(0)
+        _timage_cache.pop(oldest, None)
+    _timage_cache[cache_key] = result
+    _timage_cache_order.append(cache_key)
+
+    return result
+
+
+def _render_timage(
+    text: str,
+    config: TextConfig,
+    max_height: int | None,
+) -> Image.Image | None:
+    """Internal renderer — the original get_timage logic, now cache-backed."""
+    # Use lazy-initialized module-level singleton for text measurement (PERF-010)
+    draw = _get_measure_draw()
 
     styled_words = _parse_rich_text(text, config, draw)
     if not styled_words:

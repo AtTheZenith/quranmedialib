@@ -56,29 +56,29 @@ if __name__ == "__main__":
 
 
 def test_database_manager_invalid_surah_range() -> None:
-    """Test that database returns empty list for non-existent surah numbers."""
+    """Test that invalid surah numbers raise ValueError."""
     db = DatabaseManager()
 
-    # Surah 0 doesn't exist, should return empty list
-    verses = db.get_verses_from_surah(0)
-    assert verses == []
+    # Surah 0 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Surah number must be between"):
+        db.get_verses_from_surah(0)
 
-    # Surah 115 doesn't exist, should return empty list
-    verses = db.get_verses_from_surah(115)
-    assert verses == []
+    # Surah 115 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Surah number must be between"):
+        db.get_verses_from_surah(115)
 
 
 def test_database_manager_invalid_ayah_range() -> None:
-    """Test that database returns empty string for non-existent ayah numbers."""
+    """Test that invalid ayah numbers raise ValueError."""
     db = DatabaseManager()
 
-    # Ayah 0 doesn't exist, should return empty string
-    verse = db.get_verse(1, 0)
-    assert verse == ""
+    # Ayah 0 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Ayah number must be between"):
+        db.get_verse(1, 0)
 
-    # Ayah 1000 doesn't exist, should return empty string
-    verse = db.get_verse(1, 1000)
-    assert verse == ""
+    # Ayah 1000 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Ayah number must be between"):
+        db.get_verse(1, 1000)
 
 
 def test_database_manager_surah_boundary_values() -> None:
@@ -157,9 +157,9 @@ def test_database_manager_surah_boundary(invalid_surah: int) -> None:
     """Test surah number boundary validation."""
     db = DatabaseManager()
 
-    # Should return empty list for non-existent surah
-    verses = db.get_verses_from_surah(invalid_surah)
-    assert verses == []
+    # Should raise ValueError for out-of-range surah
+    with pytest.raises(ValueError, match="Surah number must be between"):
+        db.get_verses_from_surah(invalid_surah)
 
 
 @pytest.mark.parametrize("invalid_ayah", [0, -1, 1000])
@@ -167,9 +167,9 @@ def test_database_manager_ayah_boundary(invalid_ayah: int) -> None:
     """Test ayah number boundary validation."""
     db = DatabaseManager()
 
-    # Should return empty string for non-existent ayah
-    verse = db.get_verse(1, invalid_ayah)
-    assert verse == ""
+    # Should raise ValueError for out-of-range ayah
+    with pytest.raises(ValueError, match="Ayah number must be between"):
+        db.get_verse(1, invalid_ayah)
 
 
 # === Round 2: DatabaseManager Internal State and Thread Safety ===
@@ -199,11 +199,11 @@ def test_database_manager_close_clears_state() -> None:
     assert db._initialized is False or getattr(DatabaseManager, "_instance", None) is None
 
 
-def test_database_manager_get_cursor_unknown_db() -> None:
-    """Test that _get_cursor raises KeyError for unknown database."""
+def test_database_manager_get_connection_unknown_db() -> None:
+    """Test that _get_connection raises KeyError for unknown database."""
     db = DatabaseManager()
     with pytest.raises(KeyError):
-        db._get_cursor("nonexistent_db")
+        db._get_connection("nonexistent_db")
 
 
 def test_database_manager_fetch_sql_error() -> None:

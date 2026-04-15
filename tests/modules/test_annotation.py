@@ -116,28 +116,27 @@ def test_annotate_word_missing_config() -> None:
 
 
 def test_annotate_word_invalid_surah() -> None:
-    """Test that annotate_word handles invalid surah numbers (empty translation)."""
+    """Test that annotate_word raises ValueError for invalid surah numbers."""
     arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
     word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
 
-    # Surah 0 doesn't exist - DB returns None/empty, annotation should handle gracefully
-    # Should either skip annotation or return original image
-    result = annotate_word(arabic_img, 0, 1, 1, db=db, word_config=word_config)
-    assert result is not None  # Should return something (original or annotated)
+    # Surah 0 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Surah number must be between"):
+        annotate_word(arabic_img, 0, 1, 1, db=db, word_config=word_config)
 
     # Surah 115 doesn't exist
-    result = annotate_word(arabic_img, 115, 1, 1, db=db, word_config=word_config)
-    assert result is not None
+    with pytest.raises(ValueError, match="Surah number must be between"):
+        annotate_word(arabic_img, 115, 1, 1, db=db, word_config=word_config)
 
 
 def test_annotate_word_invalid_ayah() -> None:
-    """Test that annotate_word handles invalid ayah numbers."""
+    """Test that annotate_word raises ValueError for invalid ayah numbers."""
     arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
     word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
 
-    # Ayah 0 doesn't exist - should handle gracefully
-    result = annotate_word(arabic_img, 1, 0, 1, db=db, word_config=word_config)
-    assert result is not None
+    # Ayah 0 doesn't exist — should raise ValueError
+    with pytest.raises(ValueError, match="Ayah number must be between"):
+        annotate_word(arabic_img, 1, 0, 1, db=db, word_config=word_config)
 
 
 def test_annotate_word_invalid_word_index() -> None:
@@ -279,4 +278,3 @@ def test_annotate_words_range_exceeds_images() -> None:
     # Start at 1, but Surah 1:1 only has 4 words -- requesting 10 should fail
     with pytest.raises(ValueError, match="out of bounds"):
         annotate_words(images, surah=1, ayah=1, start=1, word_config=word_config)
-

@@ -14,12 +14,14 @@ from quranmedialib.types import TextConfig
 
 def test_lazy_image_init() -> None:
     """Test that LazyTranslationImages initializes correctly."""
+    from quranmedialib.modules.lazy_image import _NOT_RENDERED
+
     texts = ["text1", "text2", "text3"]
     config = TextConfig()
     lazy = LazyTranslationImages(texts, config)
 
     assert len(lazy) == 3
-    assert lazy._cache == [None, None, None]
+    assert lazy._cache == [_NOT_RENDERED, _NOT_RENDERED, _NOT_RENDERED]
 
 
 def test_lazy_image_getitem() -> None:

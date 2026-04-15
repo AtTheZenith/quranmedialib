@@ -115,8 +115,8 @@ def test_surah_empty_translations() -> None:
 
     # Verify each result is a non-empty list of images
     for i, pages in enumerate(results):
-        assert isinstance(pages, list), f"Verse {i+1}: Expected list, got {type(pages)}"
-        assert len(pages) > 0, f"Verse {i+1}: Expected at least one page"
+        assert isinstance(pages, list), f"Verse {i + 1}: Expected list, got {type(pages)}"
+        assert len(pages) > 0, f"Verse {i + 1}: Expected at least one page"
 
 
 def test_surah_invalid_surah_range() -> None:
@@ -144,4 +144,3 @@ def test_surah_unrecognized_kwargs_warns() -> None:
         # Should have warned about unrecognized kwarg
         assert any("Unknown kwargs" in str(warning.message) for warning in w)
         assert len(results) == 3  # Surah 108 has 3 verses
-

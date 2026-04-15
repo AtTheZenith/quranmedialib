@@ -17,6 +17,18 @@ from quranmedialib.modules.timage import TextConfig, get_timage
 __all__ = ["LazyTranslationImages"]
 
 
+class _NotRendered:
+    """Sentinel to distinguish 'not yet rendered' from 'rendered as None' (PERF-011)."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "_NOT_RENDERED"
+
+
+_NOT_RENDERED = _NotRendered()
+
+
 class LazyTranslationImages(Sequence):
     """Lazy sequence that defers get_timage() calls until items are accessed.
 
@@ -38,7 +50,7 @@ class LazyTranslationImages(Sequence):
         """
         self._texts = texts
         self._config = config
-        self._cache: list[Image.Image | None] = [None] * len(texts)
+        self._cache: list[Image.Image | None | _NotRendered] = [_NOT_RENDERED] * len(texts)
 
     def __len__(self) -> int:
         return len(self._texts)
@@ -50,9 +62,10 @@ class LazyTranslationImages(Sequence):
             raise IndexError(f"negative index {index} not supported; use non-negative indices")
         if index >= len(self._texts):
             raise IndexError(f"index {index} out of range for {len(self._texts)} texts")
-        if self._cache[index] is None and self._texts[index]:
+        if self._cache[index] is _NOT_RENDERED:
             self._cache[index] = get_timage(self._texts[index], self._config)
-        return self._cache[index]
+        result = self._cache[index]
+        return None if result is _NOT_RENDERED else result
 
     def render_all(self) -> list[Image.Image | None]:
         """Force rendering of all translation images.
