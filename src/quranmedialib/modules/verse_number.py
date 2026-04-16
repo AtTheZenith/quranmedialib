@@ -16,7 +16,7 @@ __all__ = ["verse_number"]
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
-# Lazy-initialized singleton for text measurement (PERF-010)
+# Lazy-initialized singleton for text measurement
 _measure_draw: ImageDraw.ImageDraw | None = None
 
 
@@ -63,7 +63,7 @@ def verse_number(
     # Convert number to Arabic-Indic numerals
     number_str = str(number).translate(ARABIC_INDIC_TRANS)
 
-    # Measure text bounding box using lazy-initialized module singleton (PERF-010)
+    # Measure text bounding box using lazy-initialized module singleton
     bbox = _get_measure_draw().textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
 
     text_w = bbox[2] - bbox[0]

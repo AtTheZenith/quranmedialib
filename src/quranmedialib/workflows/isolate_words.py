@@ -6,7 +6,7 @@ from typing import Iterator
 
 from PIL import Image
 
-from quranmedialib.modules.annotation import annotate_word
+from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import (
     format_isolation_text,
@@ -76,17 +76,15 @@ class IsolateWordsWorkflow(BaseWorkflow):
         word_images = [get_wimage(word, self.word_config) for word in verse_words]
 
         if annotate:
-            annotated_images = [
-                annotate_word(
-                    img,
-                    surah,
-                    ayah or 1,
-                    i + 1,
-                    translation=wbw_translations[i] if wbw_translations and i < len(wbw_translations) else None,
-                    word_config=self.word_config,
-                )
-                for i, img in enumerate(word_images)
-            ]
+            # Standardize: use the plural version which supports batching and caching
+            annotated_images = annotate_words(
+                images=word_images,
+                surah=surah,
+                ayah=ayah or 1,
+                start=1,
+                word_config=self.word_config,
+                wbw_translations=wbw_translations,
+            )
         else:
             annotated_images = word_images
 

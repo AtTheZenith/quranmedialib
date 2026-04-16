@@ -7,6 +7,7 @@ translation into a single annotated block, maintaining Right-to-Left (RTL) order
 
 from __future__ import annotations
 
+import functools
 import logging
 from pathlib import Path
 from typing import overload
@@ -20,7 +21,6 @@ from quranmedialib.types import WordConfig
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "annotate_word",
     "annotate_words",
     "annotate_words_with_texts",
 ]
@@ -45,9 +45,7 @@ def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | Im
     return get_font(font_path, word_config.annotation_font_size)
 
 
-def _combine_images_rtl(
-    images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]
-) -> Image.Image:
+def _combine_images_rtl(images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]) -> Image.Image:
     """Combines multiple word images into a single canvas in RTL order.
 
     Args:
@@ -124,43 +122,70 @@ def _annotate_image(
     return new_img
 
 
-def annotate_word(
+@functools.lru_cache(maxsize=1024)
+def _annotate_word_cached(
+    text: str,
+    translation: str,
+    font_path: str,
+    font_size: int,
+    word_padding: tuple[int, int, int, int],
+    word_color: tuple[int, ...],
+    bg_color: tuple[int, ...],
+    ann_font_path: str,
+    ann_font_size: int,
+    ann_color: tuple[int, ...],
+) -> Image.Image:
+    """Cached internal renderer for word + annotation.
+
+    Avoids tobytes() bottleneck by using text/config as keys.
+    """
+    from quranmedialib.modules.wimage import _get_wimage_cached
+
+    # Re-use cached word image
+    image = _get_wimage_cached(text, font_path, font_size, word_padding, word_color, bg_color)
+
+    font = get_font(ann_font_path, ann_font_size)
+    return _annotate_image(image, translation, font, ann_color, bg_color)  # type: ignore[arg-type]
+
+
+def _annotate_word(
     image: Image.Image,
     surah: int,
     ayah: int,
     word_index: int,
+    word_config: WordConfig,
     db: DatabaseManager | None = None,
     translation: str | None = None,
-    word_config: WordConfig | None = None,
+    text: str | None = None,
 ) -> Image.Image:
-    """Annotates a single word image with its translation.
+    """Internal implementation for annotating a single word image.
 
-    Args:
-        image: The source word image.
-        surah: Surah number for DB lookup.
-        ayah: Ayah number for DB lookup.
-        word_index: Word index in verse for DB lookup.
-        db: Optional database manager instance.
-        translation: Optional pre-fetched translation text.
-        word_config: Rendering configuration.
-
-    Returns:
-        Annotated image.
+    This function coordinates database lookup and caching for the annotation process.
+    It is the core logic used by the batch-optimized plural API.
     """
     if translation is None:
-        logger.warning(
-            "annotate_word called without pre-fetched translation. "
-            "This triggers N database queries. Use annotate_words() with wbw_translations for batch processing."
-        )
         database = db if db is not None else DatabaseManager()
         translation = database.get_wbw_from_word(surah, ayah, word_index)
 
     if not translation:
         return image
 
-    if word_config is None:
-        raise ValueError("word_config is required for annotation.")
+    # High-performance path: cache based on text/config instead of bits
+    if text:
+        return _annotate_word_cached(
+            text,
+            translation,
+            str(word_config.font.path),
+            word_config.font_size,
+            tuple(word_config.word_padding),
+            word_config.word_color,
+            word_config.background_color,
+            str(word_config.annotation_font_path),
+            word_config.annotation_font_size,
+            word_config.annotation_color,
+        )
 
+    # Fallback to slower bit-based cache for arbitrary images
     font = _get_annotation_font(word_config)
     return _annotate_image(image, translation, font, word_config.annotation_color, word_config.background_color)
 
@@ -224,13 +249,9 @@ def annotate_words(
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(
-        images, surah, ayah, start, db, word_config, wbw_translations, texts
-    )
+    result, annotated_texts = _annotate_words_internal(images, surah, ayah, start, db, word_config, wbw_translations, texts)
 
-    if texts is not None:
-        return result, annotated_texts
-    return result
+    return (result, annotated_texts) if texts is not None else result
 
 
 def annotate_words_with_texts(
@@ -263,9 +284,7 @@ def annotate_words_with_texts(
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(
-        images, surah, ayah, start, db, word_config, wbw_translations, texts
-    )
+    result, annotated_texts = _annotate_words_internal(images, surah, ayah, start, db, word_config, wbw_translations, texts)
     return result, annotated_texts  # type: ignore[return-value]  # texts is always provided here
 
 
@@ -302,10 +321,7 @@ def _annotate_words_internal(
         raise ValueError("word_config is required for annotation.")
 
     if start < 1:
-        raise ValueError(
-            f"start index must be 1-based (>= 1), got {start}. "
-            "The start parameter represents the 1-indexed word position in the verse."
-        )
+        raise ValueError(f"start index must be 1-based (>= 1), got {start}. The start parameter represents the 1-indexed word position in the verse.")
 
     # Use pre-fetched translations if provided, otherwise fetch from DB
     if wbw_translations is not None:
@@ -315,16 +331,20 @@ def _annotate_words_internal(
 
     range_len = len(images)
 
-    if start < 1 or (start + range_len - 1) > len(verse_wbws):
-        raise ValueError(f"Range {start}-{start + range_len - 1} out of bounds for verse {surah}:{ayah}.")
-
     # Slice the translations needed for our specific images
+    if start - 1 >= len(verse_wbws):
+        raise ValueError(f"start index {start} is out of bounds for the verse (length {len(verse_wbws)})")
+
+    # Pad with None if images exceed translations to maintain backward compatibility and handle mismatches
     target_wbws = verse_wbws[start - 1 : start - 1 + range_len]
+    if len(target_wbws) < range_len:
+        target_wbws.extend([None] * (range_len - len(target_wbws)))
+
     font = _get_annotation_font(word_config)
 
     i = 0
     annotated_images = []
-    annotated_texts: list[str] = [] if texts is not None else []
+    annotated_texts: list[str] = []
 
     while i < range_len:
         current_wbw = target_wbws[i]
@@ -334,23 +354,41 @@ def _annotate_words_internal(
         while (i + batch_count < range_len) and (target_wbws[i + batch_count] == current_wbw):
             batch_count += 1
 
-        if batch_count >= 2:
+        # Use the provided text to enable caching if possible
+        batch_images = images[i : i + batch_count]
+
+        # If no translation, return plain image (NO batching/combining)
+        if not current_wbw:
+            img = batch_images[0]
+            annotated_images.append(img)
+            if texts is not None:
+                batch_text = texts[i] if texts and i < len(texts) else ""
+                annotated_texts.append(batch_text)
+            batch_count = 1  # Force single item processing
+        elif batch_count >= 2:
             # Multi-word batch: Combine first, then annotate
-            batch_images = images[i : i + batch_count]
             combined = _combine_images_rtl(batch_images, word_config.word_spacing, word_config.background_color)
-            annotated_images.append(
-                _annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color)
-            )
+            annotated_images.append(_annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color))
             if texts is not None:
                 batch_text = " ".join(texts[i : i + batch_count]) if i < len(texts) else ""
                 annotated_texts.append(batch_text)
         else:
-            # Single word
-            annotated_images.append(
-                _annotate_image(
-                    images[i], current_wbw, font, word_config.annotation_color, word_config.background_color
-                )
+            # Single word - use high-performance cached path if text exists
+            img = batch_images[0]
+            txt = texts[i] if texts and i < len(texts) else None
+
+            ann_img = _annotate_word(
+                image=img,
+                surah=surah,
+                ayah=ayah,
+                word_index=start + i,
+                word_config=word_config,
+                db=db,
+                translation=current_wbw,
+                text=txt
             )
+            annotated_images.append(ann_img)
+
             if texts is not None and i < len(texts):
                 annotated_texts.append(texts[i])
             elif texts is not None:

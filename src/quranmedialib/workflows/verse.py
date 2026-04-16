@@ -12,7 +12,7 @@ from typing import Iterator
 from PIL import Image
 
 from quranmedialib.database_manager import DatabaseManager
-from quranmedialib.modules.annotation import annotate_word
+from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.lazy_image import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
@@ -46,24 +46,20 @@ class VerseWorkflow(BaseWorkflow):
         # Generate base word images
         word_images = [get_wimage(word, self.word_config) for word in verse_words]
 
-        if not annotate:
-            return word_images
-
-        # Annotate words with word-by-word translations
-        annotated = []
-        for i, img in enumerate(word_images):
-            translation = wbw_translations[i] if i < len(wbw_translations) else None
-            ann_img = annotate_word(
-                image=img,
+        if annotate:
+            # annotate_words returns a tuple (images, texts) when texts are provided
+            annotated_images, _ = annotate_words(
+                images=word_images,
                 surah=surah,
                 ayah=ayah,
-                word_index=i + 1,
-                translation=translation,
+                start=1,
                 word_config=self.word_config,
+                texts=verse_words,
             )
-            annotated.append(ann_img)
+        else:
+            annotated_images = word_images
 
-        return annotated
+        return annotated_images
 
     def _prepare_translation_images(self, translations: list[str]) -> LazyTranslationImages:
         """Creates a lazy wrapper that defers get_timage() calls until accessed."""

@@ -12,13 +12,14 @@ from typing import Sequence
 
 from PIL import Image
 
-from quranmedialib.modules.timage import TextConfig, get_timage
+from quranmedialib.modules.timage import get_timage
+from quranmedialib.types import TextConfig
 
 __all__ = ["LazyTranslationImages"]
 
 
 class _NotRendered:
-    """Sentinel to distinguish 'not yet rendered' from 'rendered as None' (PERF-011)."""
+    """Sentinel to distinguish 'not yet rendered' from 'rendered as None'."""
 
     __slots__ = ()
 

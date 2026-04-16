@@ -48,8 +48,8 @@ def test_get_font_caching() -> None:
     # Second call should use cache
     font2 = get_font(font_path, 72)
 
-    # Should be different objects (copies) but from same cache
-    assert font1 is not font2
+    # Should be the same object (shared for performance)
+    assert font1 is font2
     assert font1.size == font2.size
 
 
