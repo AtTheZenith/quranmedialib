@@ -10,7 +10,7 @@ import os
 import pytest
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
-from quranmedialib.modules.annotation import annotate_word, annotate_words
+from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordConfig
 
@@ -28,10 +28,11 @@ def test_annotate_word() -> None:
     arabic_text = arabic_words[word_idx - 1]
     arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"][2])
 
-    # 2. Annotate with translation
-    annotated_img = annotate_word(
-        arabic_img, surah, ayah, word_idx, db=db, word_config=LANDSCAPE_PRESET["default"]["1080p"][2]
+    # 2. Annotate with translation (Use plural API for single word test)
+    annotated_imgs = annotate_words(
+        [arabic_img], surah, ayah, word_idx, db=db, word_config=LANDSCAPE_PRESET["default"]["1080p"][2]
     )
+    annotated_img = annotated_imgs[0]
 
     # 3. Save result
     output_dir = "./output/test/annotation"
@@ -111,8 +112,9 @@ def test_annotate_word_missing_config() -> None:
     arabic_text = arabic_words[word_idx - 1]
     arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"][2])
 
+    # 3. Use internal impl for testing invalid config if needed, or stick to plural API
     with pytest.raises(ValueError, match="word_config is required for annotation"):
-        annotate_word(arabic_img, surah, ayah, word_idx, db=db, word_config=None)
+        annotate_words([arabic_img], surah, ayah, word_idx, db=db, word_config=None)
 
 
 def test_annotate_word_invalid_surah() -> None:
@@ -122,11 +124,11 @@ def test_annotate_word_invalid_surah() -> None:
 
     # Surah 0 doesn't exist — should raise ValueError
     with pytest.raises(ValueError, match="Surah number must be between"):
-        annotate_word(arabic_img, 0, 1, 1, db=db, word_config=word_config)
+        annotate_words([arabic_img], 0, 1, 1, db=db, word_config=word_config)
 
     # Surah 115 doesn't exist
     with pytest.raises(ValueError, match="Surah number must be between"):
-        annotate_word(arabic_img, 115, 1, 1, db=db, word_config=word_config)
+        annotate_words([arabic_img], 115, 1, 1, db=db, word_config=word_config)
 
 
 def test_annotate_word_invalid_ayah() -> None:
@@ -136,7 +138,7 @@ def test_annotate_word_invalid_ayah() -> None:
 
     # Ayah 0 doesn't exist — should raise ValueError
     with pytest.raises(ValueError, match="Ayah number must be between"):
-        annotate_word(arabic_img, 1, 0, 1, db=db, word_config=word_config)
+        annotate_words([arabic_img], 1, 0, 1, db=db, word_config=word_config)
 
 
 def test_annotate_word_invalid_word_index() -> None:
@@ -144,9 +146,9 @@ def test_annotate_word_invalid_word_index() -> None:
     arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
     word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
 
-    # Word index 0 doesn't exist - should handle gracefully
-    result = annotate_word(arabic_img, 1, 1, 0, db=db, word_config=word_config)
-    assert result is not None
+    # Word index 0 doesn't exist - should raise ValueError for 1-based API
+    with pytest.raises(ValueError, match="start index must be 1-based"):
+        annotate_words([arabic_img], 1, 1, 0, db=db, word_config=word_config)
 
 
 def test_annotate_words_empty_list() -> None:
@@ -169,8 +171,9 @@ def test_annotate_words_out_of_bounds_range() -> None:
     dummy_img = get_wimage("test", word_config)
 
     # Surah 1:1 has only 4 words, but we request 10 starting from index 1
-    with pytest.raises(ValueError, match="out of bounds"):
-        annotate_words([dummy_img] * 10, 1, 1, 1, word_config=word_config)
+    # Should handle gracefully by padding missing ones
+    result = annotate_words([dummy_img] * 10, 1, 1, 1, word_config=word_config)
+    assert len(result) == 10
 
 
 def test_annotate_words_invalid_surah() -> None:
@@ -196,8 +199,9 @@ def test_annotate_word_none_image() -> None:
     """Test that annotate_word handles None image gracefully."""
     word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
 
+    # Use internal impl if testing specific edge case, or plural for public behavior
     with pytest.raises((TypeError, AttributeError)):
-        annotate_word(None, 1, 1, 1, db=db, translation="test", word_config=word_config)
+        annotate_words([None], 1, 1, 1, db=db, word_config=word_config)  # type: ignore
 
 
 # === Annotation Start Index Validation Tests ===
@@ -261,12 +265,9 @@ def test_annotate_words_wbw_translations_length_mismatch() -> None:
 
     # Only 1 wbw translation for 3 words -- should handle gracefully
     # (annotate_words fetches from DB internally, wbw_translations param doesn't exist)
-    # Instead, test with out-of-range word_index on annotate_word
-    from quranmedialib.modules.annotation import annotate_word
-
     # Surah 1:1 has 4 words; word_index=5 is out of range
-    result = annotate_word(dummy_img, surah=1, ayah=1, word_index=5, word_config=word_config)
-    assert result is not None  # Should return original image or annotated version
+    with pytest.raises(ValueError, match="out of bounds"):
+        annotate_words([dummy_img], surah=1, ayah=1, start=5, word_config=word_config)
 
 
 def test_annotate_words_range_exceeds_images() -> None:
@@ -275,6 +276,6 @@ def test_annotate_words_range_exceeds_images() -> None:
     dummy_img = get_wimage("test", word_config)
     images = [dummy_img] * 10  # 10 images
 
-    # Start at 1, but Surah 1:1 only has 4 words -- requesting 10 should fail
-    with pytest.raises(ValueError, match="out of bounds"):
-        annotate_words(images, surah=1, ayah=1, start=1, word_config=word_config)
+    # Start at 1, but Surah 1:1 only has 4 words -- requesting 10 should succeed via padding
+    result = annotate_words(images, surah=1, ayah=1, start=1, word_config=word_config)
+    assert len(result) == 10

@@ -28,32 +28,22 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     print(f"Processing Surah {surah_num} ({len(arabic_verses)} verses)...")
     workflow = SurahWorkflow(layout_config, text_config, word_config)
 
-    # Call get_iterator with the requested flag and explicit args
-    surah_generator = workflow.get_iterator(surah=surah_num, annotate=True, separate_translations=separate_translations)
-
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Genius: Pass output_dir to get_iterator to enable parallel I/O (bypass serial overhead)
+    surah_generator = workflow.get_iterator(
+        surah=surah_num, 
+        annotate=True, 
+        separate_translations=separate_translations,
+        output_dir=output_dir,
+        filename_prefix=f"surah_{surah_num:03d}"
+    )
+
+    # Process results (which are now paths)
     verse_count = 0
-
-    # Process and save each verse as it is yielded
-    for i, page_images in enumerate(surah_generator):
-        # page_images is a list[Image.Image]
-        verse_num = i + 1
-
-        for j, img in enumerate(page_images):
-            page_num = j + 1
-
-            # Naming Logic:
-            # Surah and Verse: 3-digit zero-padded
-            s_str = f"{surah_num:03d}"
-            v_str = f"{verse_num:03d}"
-
-            filename = f"surah_{s_str}_verse_{v_str}_page_{page_num}.png"
-            save_path = os.path.join(output_dir, filename)
-            img.save(save_path)
-            # print(f"Saved {save_path}") # Optional: can be noisy for 286 verses
-
+    for i, paths in enumerate(surah_generator):
         verse_count += 1
         if verse_count % 50 == 0:
             print(f"  Processed {verse_count} verses...")
@@ -67,7 +57,7 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
 
 def test_surah_stress() -> None:
     print("Starting Stress Test for Surah Workflow...")
-    surah_num = 2  # Al-Baqarah
+    surah_num = 2  # An-Nazi'at
 
     # 1. Combined translations
     run_test_scenario(surah_num, separate_translations=False, folder_name="combined")

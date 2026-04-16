@@ -214,45 +214,48 @@ def _get_image_rows(
     return rows
 
 
+from quranmedialib.types import (
+    balance_lines_pyramid,
+)
+
+
 def _balance_image_rows(
     items: list[WordItem],
     target_num_rows: int,
     config: LayoutConfig,
     word_config: WordConfig,
 ) -> list[list[WordItem]]:
-    """Binary searches for an optimal width that balances rows.
+    """Binary searches for the minimum first-line width that produces target_num_rows.
 
-    Goal: Find the minimum width that produces `target_num_rows` while ensuring
-    the layout is 'top-heavy' or 'centered' (earlier lines are wider than or equal
-    to subsequent lines), which is visually more pleasing for short verses.
+    Strictly enforces an inverted pyramid shape (W_i >= W_{i+1}).
+    Delegates to the centralized balance_lines_pyramid utility.
     """
     if not items:
         return []
 
-    low = max((it.width for it in items), default=0)
-    high = config.content_width
-    best_rows = _get_image_rows(items, word_config, high)
+    widths = [it.width for it in items]
+    best_breaks = balance_lines_pyramid(
+        widths=widths,
+        spacing=word_config.word_spacing,
+        target_k=target_num_rows,
+        max_width=config.content_width,
+    )
 
-    while low <= high:
-        mid = (low + high) // 2
-        rows = _get_image_rows(items, word_config, mid, max_rows=target_num_rows * 2)
+    if best_breaks is None:
+        return _get_image_rows(items, word_config, config.content_width)
 
-        # Calculate actual widths for 'top-heavy' validation.
-        row_widths = []
-        for row in rows:
-            w = sum(it.width for it in row) + (len(row) - 1) * word_config.word_spacing
-            row_widths.append(w)
+    final_rows = []
+    current_row = []
+    break_set = set(best_breaks)
+    for i, item in enumerate(items):
+        if i in break_set:
+            final_rows.append(current_row)
+            current_row = []
+        current_row.append(item)
+    if current_row:
+        final_rows.append(current_row)
 
-        # A layout is 'top-heavy' if every line is at least as wide as the one after it.
-        is_top_heavy = all(row_widths[i] >= row_widths[i + 1] for i in range(len(row_widths) - 1))
-
-        if len(rows) <= target_num_rows and is_top_heavy:
-            best_rows = rows
-            high = mid - 1  # Try even smaller width
-        else:
-            low = mid + 1  # Width too small or bottom-heavy
-
-    return best_rows
+    return final_rows
 
 
 def _get_verse_start_y(content_height: int, config: LayoutConfig, word_config: WordConfig) -> int:
@@ -338,15 +341,9 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
         trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
 
     # Warn if translation image would be clipped off-canvas
-    if (
-        trans_x < 0
-        or trans_y < 0
-        or trans_x + trans_img.width > config.max_width
-        or trans_y + trans_img.height > config.image_height
-    ):
+    if trans_x < 0 or trans_y < 0 or trans_x + trans_img.width > config.max_width or trans_y + trans_img.height > config.image_height:
         logger.warning(
-            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). "
-            "Consider adjusting timage offsets or canvas dimensions.",
+            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). Consider adjusting timage offsets or canvas dimensions.",
             trans_img.width,
             trans_img.height,
             trans_x,
@@ -394,7 +391,7 @@ def frame(
     if word_config is None:
         word_config = WordConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5, font_size=80)
 
-    # Configs are validated at creation (__post_init__) — no redundant checks needed (PERF-009)
+    # Configs are validated at creation (__post_init__) — no redundant checks needed
 
     all_items = list(words)
     if any(item.image is None for item in all_items):

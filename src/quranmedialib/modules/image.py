@@ -30,8 +30,8 @@ def _compute_downscaled_size(image: Image.Image, scale: int) -> tuple[int, int]:
 def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Image:
     """Multiplies the luminance of each pixel with the specified color.
 
-    This function colorizes the image by converting it to grayscale and then
-    multiplying it with a solid color layer. Alpha values are preserved.
+    This function colorizes the image efficiently by treating the input's alpha
+    channel as a mask for the new solid color.
 
     Args:
         image: The input PIL Image to colorize.
@@ -51,7 +51,15 @@ def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Imag
     if len(color) == 3:
         color = (*color, 255)
 
-    # Convert to grayscale with alpha (LA) then back to RGBA for multiplication
+    # Fast path for mask-like images (already have alpha or are grayscale)
+    # PERF-023: use alpha-composite style creation for mask-based colorization
+    if image.mode in ("RGBA", "LA", "L"):
+        mask = image.getchannel("A") if "A" in image.mode else image
+        result = Image.new("RGBA", image.size, color)
+        result.putalpha(mask)
+        return result
+
+    # Fallback for complex images (e.g. RGB with luminance variations)
     return ImageChops.multiply(image.convert("LA").convert("RGBA"), Image.new("RGBA", image.size, color))
 
 
@@ -115,9 +123,7 @@ def _glow_rgba(
     return result
 
 
-def _prepare_color_base(
-    img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]
-) -> Image.Image:
+def _prepare_color_base(img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]) -> Image.Image:
     """Prepares the color base for the glow effect by bleeding colors into transparent areas.
 
     This prevents grey/dark edges when blurring RGBA images.
@@ -228,7 +234,7 @@ def glow(
         max(1, int(radius * 1.5) // color_base_scale),
     ]
 
-    # Pre-allocate blur buffers — reuse across radii iterations (PERF-003)
+    # Pre-allocate blur buffers — reuse across radii iterations
     blur_buffer = Image.new("RGB", color_base_size, (0, 0, 0))
     glow_color = Image.new("RGB", color_base_size, (0, 0, 0))
     glow_alpha = None if is_opaque else Image.new("L", color_base_size, 0)

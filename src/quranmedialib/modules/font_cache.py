@@ -42,18 +42,14 @@ def _load_font_base(font_path: str, font_size: int) -> ImageFont.FreeTypeFont | 
 
 
 def get_font(font_path: str, font_size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Returns a fresh copy of the font to prevent state mutation across callers.
-
-    The base font is cached, but each call returns an independent copy that
-    can be safely mutated (e.g., via set_variation_by_name) without affecting
-    other callers.
+    """Returns a cached font instance.
 
     Args:
         font_path: Path to the font file as a string.
         font_size: Font size in points (must be in range 1 to MAX_FONT_SIZE).
 
     Returns:
-        A fresh PIL Font object copy.
+        A PIL Font object.
 
     Raises:
         ValueError: If font_size is not in range (1, MAX_FONT_SIZE).
@@ -63,5 +59,4 @@ def get_font(font_path: str, font_size: int) -> ImageFont.FreeTypeFont | ImageFo
         raise ValueError(f"font_size must be positive, got {font_size}")
     if font_size > MAX_FONT_SIZE:
         raise ValueError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {font_size}")
-    base_font = _load_font_base(font_path, font_size)
-    return base_font.font_variant()
+    return _load_font_base(font_path, font_size)

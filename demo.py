@@ -9,6 +9,7 @@ This script demonstrates various usage patterns including:
 Run this script to generate sample images for all preset configurations.
 """
 
+import concurrent.futures
 import os
 from pathlib import Path
 from typing import Literal
@@ -102,9 +103,7 @@ def create_square_demo(
     if mode in ["default", "arabic"]:
         verses = db.get_verses_from_surah(surah_id)
         for i, verse_text in enumerate(verses):
-            annotated_imgs, annotated_txts = _process_verse_words(
-                verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default")
-            )
+            annotated_imgs, annotated_txts = _process_verse_words(verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default"))
             all_word_images.extend(annotated_imgs)
             all_words_text.extend(annotated_txts)
 
@@ -115,7 +114,6 @@ def create_square_demo(
 
     elif mode == "translation":
         # In translation mode, we use a dummy item as per original code
-        # "all_items = [WordItem(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "a")]"
         all_word_images.append(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
         all_words_text.append("a")
 
@@ -139,29 +137,34 @@ def create_square_demo(
     )
 
 
+def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
+    """Worker function to apply glow and save image in a separate process."""
+    img, index, output_path = args
+    final_img = glow(img)
+    filename = f"{(index + 1):02d}.png"
+    final_img.save(output_path / filename)
+    print(f"Saved {filename}")
+
+
 def save_images(images: list[Image.Image], output_dir: str) -> None:
-    """Applies glow and saves images to the output directory."""
+    """Applies glow and saves images to the output directory in parallel."""
     output_path = Path(output_dir).resolve()
     # Ensure output directory is within the project tree
     project_root = Path(__file__).parent.resolve()
     if os.path.commonpath([output_path, project_root]) != str(project_root):
         raise ValueError(f"Output directory must be within project root: {project_root}")
     output_path.mkdir(parents=True, exist_ok=True)
-    for i, img in enumerate(images):
-        # Apply glow before saving as per original main()
-        final_img = glow(img)
-        filename = f"{(i + 1):02d}.png"
-        path = output_path / filename
-        final_img.save(path)
-        print(f"Saved {filename}")
+
+    # Use ProcessPoolExecutor for parallel glow processing
+    # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        tasks = [(img, i, output_path) for i, img in enumerate(images)]
+        # Map tasks to worker function
+        list(executor.map(_glow_and_save, tasks))
 
 
 def main() -> None:
-    """Runs all preset combinations sequentially.
-
-    Note: For benchmarking, consider parallel execution via
-    `concurrent.futures.ProcessPoolExecutor` for 3-5x speedup on multi-core systems.
-    """
+    """Runs all preset combinations sequentially with parallel image post-processing."""
     db = DatabaseManager()
     surah_id = 108
     data = {"surah": surah_id}
@@ -197,11 +200,9 @@ def main() -> None:
         all_results.extend(run_workflow_demo(STORY_PRESET["translation"][resolution], data))
 
         # Square
-        all_results.extend(
-            create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation")
-        )
+        all_results.extend(create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation"))
 
-        # Save all results
+        # Save all results (glow is applied here in parallel)
         save_images(all_results, "output/demo")
 
     finally:

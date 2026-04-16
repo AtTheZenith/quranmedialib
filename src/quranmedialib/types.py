@@ -571,6 +571,10 @@ class TextConfig:
     height: int | None
     max_width: int | None
     alignment: HorizontalAlignment
+    balanced_wrapping: bool
+    highlight_font_path: Path
+    highlight_font_size: int
+    highlight_color: Color
 
     def __init__(
         self,
@@ -582,6 +586,10 @@ class TextConfig:
         height: int | None = None,
         max_width: int | None = None,
         alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER,
+        balanced_wrapping: bool = True,
+        highlight_font_path: Path | str | FontResource | None = None,
+        highlight_font_size: int | None = None,
+        highlight_color: Color | None = None,
     ):
         """Initialize TextConfig with resolved font paths.
 
@@ -616,12 +624,16 @@ class TextConfig:
         object.__setattr__(self, "height", height)
         object.__setattr__(self, "max_width", max_width)
         object.__setattr__(self, "alignment", alignment)
+        object.__setattr__(self, "balanced_wrapping", balanced_wrapping)
+        object.__setattr__(self, "highlight_font_path", _resolve_path(highlight_font_path, "inter.ttf"))
+        object.__setattr__(self, "highlight_font_size", highlight_font_size if highlight_font_size else font_size)
+        object.__setattr__(self, "highlight_color", highlight_color if highlight_color else (255, 215, 0, 255))
 
 
 # === Text Rendering Types ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StyledWord:
     """A word with specific styling applied, ready for rendering."""
 
@@ -629,6 +641,7 @@ class StyledWord:
     font: ImageFont.ImageFont
     color: Color
     width: int
+    height: int = 0
     is_transparent: bool = False
     simulate_bold: bool = False
 
@@ -636,13 +649,102 @@ class StyledWord:
 class Line:
     """A collection of styled words representing a single line of text."""
 
+    __slots__ = ("words", "width", "height")
+
     def __init__(self):
         self.words: list[StyledWord] = []
         self.width: int = 0
+        self.height: int = 0
 
-    def add_word(self, word: StyledWord, space_width: int):
+    def add_word(self, word: StyledWord, space_width: int = 0):
         """Adds a word to the line, accounting for word spacing."""
         if self.words:
             self.width += space_width
         self.words.append(word)
         self.width += word.width
+        self.height = max(self.height, word.height)
+
+
+import bisect
+
+def balance_lines_pyramid(
+    widths: list[int],
+    spacing: int,
+    target_k: int,
+    max_width: int,
+) -> list[int] | None:
+    """Core IPL-B algorithm: finds line break indices for a top-heavy layout.
+    
+    Uses Prefix Sums + Bisection (O(K log N log W)) for high-performance partitioning.
+    """
+    if not widths:
+        return []
+
+    # Pre-calculate prefix sums for O(log N) line break lookups
+    n = len(widths)
+    # sums[i] = width of first i items + (i-1) spacings
+    sums = [0] * (n + 1)
+    for i, w in enumerate(widths):
+        sums[i+1] = sums[i] + w + spacing
+
+    _spacing = spacing
+    _target_k = target_k
+    _n = n
+
+    def check_feasibility(w1_limit: int) -> int:
+        """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
+        curr_idx = 0
+        prev_limit = w1_limit
+        count = 0
+
+        while curr_idx < _n:
+            count += 1
+            if count > _target_k: return 9999
+            
+            # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
+            # Target = prev_limit + spacing + sums[curr_idx]
+            target = prev_limit + _spacing + sums[curr_idx]
+            next_idx = bisect.bisect_right(sums, target) - 1
+            
+            if next_idx <= curr_idx: return 9999
+            
+            # Update limit for next line (Inverted Pyramid constraint)
+            prev_limit = (sums[next_idx] - sums[curr_idx]) - _spacing
+            curr_idx = next_idx
+            
+        return count
+
+    # Bounds
+    max_w = max(widths)
+    total_w = sums[n] - spacing
+    
+    low = max(max_w, total_w // target_k)
+    high = max_width
+    best_w1 = -1
+
+    while low <= high:
+        mid = (low + high) // 2
+        if check_feasibility(mid) <= target_k:
+            best_w1 = mid
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    if best_w1 == -1:
+        return None
+
+    # Final pass: Reconstruct breaks
+    breaks = []
+    curr_idx = 0
+    prev_limit = best_w1
+    while curr_idx < n:
+        target = prev_limit + spacing + sums[curr_idx]
+        next_idx = bisect.bisect_right(sums, target) - 1
+        if next_idx < n:
+            breaks.append(next_idx)
+            prev_limit = (sums[next_idx] - sums[curr_idx]) - spacing
+            curr_idx = next_idx
+        else:
+            break
+            
+    return breaks

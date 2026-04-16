@@ -17,8 +17,8 @@ __all__ = ["get_wimage"]
 
 
 # Cache key: (text, font_path, font_size, padding_tuple, word_color, bg_color)
-# Max 2048 entries covers ~2,699 unique words in the Quran (PERF-007)
-@lru_cache(maxsize=2048)
+# Max 3072 entries covers all ~2,699 unique words in the Quran
+@lru_cache(maxsize=3072)
 def _get_wimage_cached(
     text: str,
     font_path: str,

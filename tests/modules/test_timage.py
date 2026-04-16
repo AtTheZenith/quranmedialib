@@ -32,9 +32,7 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
 
     assert len(lines) > 0, "Expected at least one line."
     for i in range(len(widths) - 1):
-        assert widths[i] >= widths[i + 1], (
-            f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
-        )
+        assert widths[i] >= widths[i + 1], f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
 
     # Save image for human review if a filename is provided
     if filename:
@@ -68,8 +66,7 @@ def test_timage_rendering():
         img = get_timage(text, text_config, max_height=max_height)
         assert img is not None
 
-        if filename == "center_vertical":
-            img = ImageOps.expand(img, border=2, fill="white")
+        img = ImageOps.expand(img, border=2, fill="white")
 
         img.save(f"{output_dir}/{filename}.png")
 
@@ -156,7 +153,7 @@ def test_timage_invalid_rich_text_format() -> None:
 def test_timage_very_long_text() -> None:
     """Test that get_timage handles very long text without crashing."""
     config = TextConfig(max_width=1200)
-    very_long_text = "word " * 10000
+    very_long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat." * 300
 
     result = get_timage(very_long_text, config)
     assert result is not None
@@ -244,19 +241,19 @@ def test_timage_very_large_font_size() -> None:
         TextConfig(font_size=MAX_FONT_SIZE + 1, max_width=500)
 
 
+def _assert_format_isolation_text_target_index_bounds(segments, target_index):
+    # Index 0
+    result_0 = format_isolation_text(segments, target_index=target_index, highlight_style="#b#FF0000#")
+    assert result_0 is not None
+    assert "#b#" in result_0  # Should contain highlight
+
+
 def test_format_isolation_text_target_index_bounds() -> None:
     """Test format_isolation_text with index exactly 0 and len-1."""
     segments = prepare_translation_segments(["first", "second", "third"])
 
-    # Index 0
-    result_0 = format_isolation_text(segments, target_index=0, highlight_style="#b#FF0000#")
-    assert result_0 is not None
-    assert "#b#" in result_0  # Should contain highlight
-
-    # Index len-1
-    result_last = format_isolation_text(segments, target_index=2, highlight_style="#b#FF0000#")
-    assert result_last is not None
-    assert "#b#" in result_last
+    _assert_format_isolation_text_target_index_bounds(segments, 0)
+    _assert_format_isolation_text_target_index_bounds(segments, 2)
 
 
 def test_timage_single_word_no_wrapping() -> None:

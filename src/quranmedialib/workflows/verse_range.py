@@ -7,13 +7,16 @@ verses in sequence, supporting optional translation separation and batch annotat
 from __future__ import annotations
 
 import dataclasses
+import io
 import logging
+import os
+from concurrent.futures import ProcessPoolExecutor
 from typing import Iterator
 
-from PIL import Image
+from PIL import Image, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
-from quranmedialib.modules.annotation import annotate_word
+from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.lazy_image import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
@@ -33,46 +36,6 @@ class VerseRangeWorkflow(BaseWorkflow):
     Handles data retrieval, image generation, and layout orchestration for multiple
     verses. Supports 'combined' and 'separate' translation rendering modes.
     """
-
-    def _prepare_verse_images(
-        self,
-        surah: int,
-        ayah: int,
-        verse_words: list[str],
-        annotate: bool,
-        wbw_translations: list[str],
-    ) -> list[Image.Image]:
-        """Generates and optionally annotates word images for a specific verse.
-
-        Args:
-            surah: Surah number (1-114).
-            ayah: Ayah (verse) number (1-indexed).
-            verse_words: List of Arabic word strings in the verse.
-            annotate: Whether to annotate words with word-by-word translations.
-            wbw_translations: Pre-fetched WBW translations for this verse.
-
-        Returns:
-            list[Image.Image]: List of word images (annotated or plain).
-        """
-        word_images = [get_wimage(word, self.word_config) for word in verse_words]
-
-        if not annotate:
-            return word_images
-
-        annotated = []
-        for i, img in enumerate(word_images):
-            translation = wbw_translations[i] if i < len(wbw_translations) else None
-            ann_img = annotate_word(
-                image=img,
-                surah=surah,
-                ayah=ayah,
-                word_index=i + 1,
-                translation=translation,
-                word_config=self.word_config,
-            )
-            annotated.append(ann_img)
-
-        return annotated
 
     def _render_separate_translation_pages(
         self,
@@ -147,9 +110,7 @@ class VerseRangeWorkflow(BaseWorkflow):
             raise ValueError(f"Ayah must be between 1 and 286, got end_ayah={end_ayah}")
 
         if start_ayah > end_ayah:
-            raise ValueError(
-                f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
-            )
+            raise ValueError(f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah}).")
 
         return self._process_range(
             surah=surah,
@@ -168,7 +129,9 @@ class VerseRangeWorkflow(BaseWorkflow):
         translations: list[list[str]],
         annotate: bool = True,
         separate_translations: bool = False,
-    ) -> Iterator[list[Image.Image]]:
+        parallel: bool = True,
+        **kwargs,
+    ) -> Iterator[list[Image.Image] | list[str]]:
         """Internal iterator implementation for processing a verse range.
 
         Args:
@@ -178,60 +141,188 @@ class VerseRangeWorkflow(BaseWorkflow):
             translations: Nested list of translation texts [verse_index][page_index].
             annotate: Whether to annotate words with word-by-word translations.
             separate_translations: If True, render translations on separate pages.
-
-        Yields:
-            list[Image.Image]: List of page images for each verse in the range.
+            parallel: Whether to use parallel processing for rendering.
+            **kwargs:
+                - output_dir: Optional path to save images directly in parallel.
+                - filename_prefix: Optional prefix for saved filenames.
         """
         db = DatabaseManager()
         arabic_verses = db.get_verses_from_surah(surah)
+        verse_slice = arabic_verses[start_verse - 1 : end_verse]
 
-        # Fetch all WBW data once for the entire surah if annotating
-        all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
+        # Fetch all WBW translations for the requested range to avoid DB contention in workers
+        all_wbw = {}
+        if annotate:
+            all_wbw = db.get_wbw_grouped_by_verse(surah)
+            # Filter to specific range to optimize memory during parallel distribution
+            all_wbw = {k: v for k, v in all_wbw.items() if start_verse <= k <= end_verse}
 
-        for i, verse_text in enumerate(arabic_verses[start_verse - 1 : end_verse]):
+        # Prepare tasks for workers. All required data is passed as arguments to avoid sub-process DB access.
+        tasks = []
+        for i, verse_text in enumerate(verse_slice):
             current_ayah = start_verse + i
-            verse_words = verse_text.split()
-
-            # Get pre-fetched WBW data for this verse
             wbw_translations = all_wbw.get(current_ayah, []) if annotate else []
-
-            # 1. Image Generation
-            annotated_images = self._prepare_verse_images(surah, current_ayah, verse_words, annotate, wbw_translations)
-
-            # Add verse number marker
-            vn_image = verse_number(current_ayah, self.word_config)
-            annotated_images.append(vn_image)
-
-            # 2. Translation Preparation (lazy - renders on demand)
             verse_trans_texts = translations[i]
-            lazy_trans_images = LazyTranslationImages(verse_trans_texts, self.text_config)
 
-            # 3. Layout Rendering
-            all_text = list(verse_words) + [""]
-            word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)]
-
-            if separate_translations:
-                # Arabic-only rendering (restricted row count)
-                arabic_word_cfg = dataclasses.replace(self.word_config, max_rows_per_page=2)
-                arabic_pages = list(
-                    frame(
-                        words=word_items,
-                        translation_images=None,
-                        config=self.layout_config,
-                        word_config=arabic_word_cfg,
-                    )
+            tasks.append(
+                (
+                    surah,
+                    current_ayah,
+                    verse_text,
+                    wbw_translations,
+                    verse_trans_texts,
+                    self.layout_config,
+                    self.text_config,
+                    self.word_config,
+                    annotate,
+                    separate_translations,
                 )
+            )
 
-                # Dedicated translation pages (need all translations rendered)
-                trans_pages = self._render_separate_translation_pages(lazy_trans_images.render_all())
-                yield arabic_pages + trans_pages
+        output_dir = kwargs.get("output_dir")
+        filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
+
+        if parallel and len(tasks) > 1:
+            # Parallel execution using process pool for CPU-bound rendering tasks
+            with ProcessPoolExecutor() as executor:
+                # Add output_dir and prefix to task arguments for worker-level I/O
+                p_tasks = [(t + (output_dir, filename_prefix)) for t in tasks]
+                for result in executor.map(_render_verse_worker, p_tasks, chunksize=5):
+                    if isinstance(result, list) and result and isinstance(result[0], str):
+                        # Result contains file paths (direct-to-disk mode)
+                        yield result
+                    else:
+                        # Result contains PNG byte streams; materialize back to PIL Images
+                        yield [Image.open(io.BytesIO(b)) for b in result]
+        else:
+            # Serial execution for small ranges or single-process environments
+            for t in tasks:
+                p_task = t + (output_dir, filename_prefix)
+                result = _render_verse_worker(p_task)
+                if isinstance(result, list) and result and isinstance(result[0], str):
+                    yield result
+                else:
+                    yield [Image.open(io.BytesIO(b)) for b in result]
+
+
+# process-local cache for fonts to avoid redundant re-initialization in workers.
+_WORKER_FONT_CACHE: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+
+
+def _get_worker_font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Retrieves a font instance from the process-local cache."""
+    key = (path, size)
+    if key not in _WORKER_FONT_CACHE:
+        _WORKER_FONT_CACHE[key] = ImageFont.truetype(path, size)
+    return _WORKER_FONT_CACHE[key]
+
+
+def _render_verse_worker(args: tuple) -> list[bytes] | list[str]:
+    """Worker function for rendering individual verses in parallel.
+
+    This function is executed in sub-processes. It avoids database access by
+    receiving all required data (verse text, WBW, translations) as arguments.
+    Results are returned as PNG byte streams to minimize IPC overhead.
+    """
+    (
+        surah,
+        ayah,
+        verse_text,
+        wbw_translations,
+        translations,
+        layout_config,
+        text_config,
+        word_config,
+        annotate,
+        separate_translations,
+        output_dir,
+        filename_prefix,
+    ) = args
+
+    # Resolve DB manager internally if needed (singleton startup)
+    # Actually, we don't need it if we have all data.
+
+    verse_words = verse_text.split()
+    word_images = [get_wimage(word, word_config) for word in verse_words]
+
+    if annotate:
+        # Genius: use Plural version for batching + Plural version uses Cache V2 (text-based)
+        annotated_images, annotated_text = annotate_words(
+            images=word_images,
+            surah=surah,
+            ayah=ayah,
+            start=1,
+            word_config=word_config,
+            wbw_translations=wbw_translations,
+            texts=verse_words,
+        )
+    else:
+        annotated_images = word_images
+        annotated_text = verse_words
+
+    # Add verse number marker
+    vn_image = verse_number(ayah, word_config)
+    annotated_images.append(vn_image)
+    annotated_text.append("")
+
+    # Prepare WordItems
+    word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+
+    # Prepare Translation Images (materialize for pickling)
+    lazy_trans = LazyTranslationImages(translations, text_config)
+    translation_images = list(lazy_trans)
+
+    if separate_translations:
+        # Arabic-only rendering
+        arabic_word_cfg = dataclasses.replace(word_config, max_rows_per_page=2)
+        pages = list(
+            frame(
+                words=word_items,
+                translation_images=None,
+                config=layout_config,
+                word_config=arabic_word_cfg,
+            )
+        )
+
+        # Dedicated translation pages
+        for trans_img in translation_images:
+            if not trans_img:
+                continue
+
+            canvas = Image.new("RGBA", (layout_config.max_width, layout_config.image_height), (0, 0, 0, 0))
+            if layout_config.timage_y_offset > 0:
+                ty = layout_config.timage_y_offset - trans_img.height // 2
             else:
-                # Combined rendering (Arabic + Translation on same page)
-                # Translation images are rendered lazily as pages are generated
-                combined_pages = frame(
-                    words=word_items,
-                    translation_images=lazy_trans_images,
-                    config=self.layout_config,
-                    word_config=self.word_config,
-                )
-                yield list(combined_pages)
+                ty = layout_config.image_height - layout_config.padding.bottom - trans_img.height // 2
+            tx = (layout_config.max_width - trans_img.width) // 2 + layout_config.timage_x_offset
+            canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
+            pages.append(canvas)
+    else:
+        # Combined rendering
+        pages = list(
+            frame(
+                words=word_items,
+                translation_images=translation_images,
+                config=layout_config,
+                word_config=word_config,
+            )
+        )
+
+    if output_dir:
+        # Genius: Save directly in the worker to bypass IPC and main-process I/O bottleneck
+        os.makedirs(output_dir, exist_ok=True)
+        paths = []
+        for i, p in enumerate(pages):
+            filename = f"{filename_prefix}_verse_{ayah:03d}_page_{i + 1}.png"
+            full_path = os.path.join(output_dir, filename)
+            p.save(full_path, format="PNG")
+            paths.append(full_path)
+        return paths
+
+    # Genius Serialization: Convert PIL Images to PNG Bytes for IPC efficiency
+    results = []
+    for p in pages:
+        buf = io.BytesIO()
+        p.save(buf, format="PNG", optimize=False)
+        results.append(buf.getvalue())
+    return results
