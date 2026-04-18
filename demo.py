@@ -9,7 +9,6 @@ This script demonstrates various usage patterns including:
 Run this script to generate sample images for all preset configurations.
 """
 
-import concurrent.futures
 import os
 from pathlib import Path
 from typing import Literal
@@ -33,6 +32,7 @@ from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 
 
 def run_workflow_demo(
@@ -142,10 +142,18 @@ def create_square_demo(
 def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
     """Worker function to apply glow and save image in a separate process."""
     img, index, output_path = args
+
+    # Genius optimization: Resource safety heartbeat for post-processing
+    worker_heartbeat(process_limit_mb=192.0)
+
     final_img = glow(img)
     filename = f"{(index + 1):02d}.png"
     final_img.save(output_path / filename)
     print(f"Saved {filename}")
+
+    # Explicit cleanup to stay within 192MB target
+    del final_img
+    del img
 
 
 def save_images(images: list[Image.Image], output_dir: str) -> None:
@@ -157,12 +165,17 @@ def save_images(images: list[Image.Image], output_dir: str) -> None:
         raise ValueError(f"Output directory must be within project root: {project_root}")
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Use ProcessPoolExecutor for parallel glow processing
+    # Use ParallelRenderer for parallel glow processing
     # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        tasks = [(img, i, output_path) for i, img in enumerate(images)]
-        # Map tasks to worker function
-        list(executor.map(_glow_and_save, tasks))
+    renderer = ParallelRenderer(
+        mode=ExecutionMode.PROCESS,
+        process_limit_mb=192.0,
+    )
+
+    tasks = [(img, i, output_path) for i, img in enumerate(images)]
+    # Map tasks to worker function.
+    # iterator consumption ensures all images are processed.
+    list(renderer.map(_glow_and_save, tasks))
 
 
 def main() -> None:

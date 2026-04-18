@@ -7,21 +7,27 @@ verses in sequence, supporting optional translation separation and batch annotat
 from __future__ import annotations
 
 import dataclasses
-import io
+import gc
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor
-from typing import Iterator
+from typing import Any, Iterator
 
 from PIL import Image, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
-from quranmedialib.modules.lazy_image import LazyTranslationImages
+from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
+from quranmedialib.utils.memory import (
+    DEFAULT_PROCESS_LIMIT_MB,
+    MEMORY_FLUSH_THRESHOLD_RATIO,
+    clear_rendering_caches,
+    get_current_rss_mb,
+)
+from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 from quranmedialib.workflows.base import BaseWorkflow
 
 # Logger setup
@@ -136,75 +142,76 @@ class VerseRangeWorkflow(BaseWorkflow):
     ) -> Iterator[list[Image.Image] | list[str]]:
         """Internal iterator implementation for processing a verse range.
 
-        Args:
-            surah: Surah number (1-114).
-            start_verse: Starting verse number (1-indexed).
-            end_verse: Ending verse number (inclusive).
-            translations: Nested list of translation texts [verse_index][page_index].
-            annotate: Whether to annotate words with word-by-word translations.
-            separate_translations: If True, render translations on separate pages.
-            parallel: Whether to use parallel processing for rendering.
-            **kwargs:
-                - output_dir: Optional path to save images directly in parallel.
-                - filename_prefix: Optional prefix for saved filenames.
+        Logic:
+        - If parallel=True, divides the range into N batches based on CPU count.
+        - Each batch is processed by a worker that fetches its own data from the DB.
+        - This minimizes IPC overhead (serialization) by orders of magnitude.
         """
-        db = DatabaseManager()
-        arabic_verses = db.get_verses_from_surah(surah)
-        verse_slice = arabic_verses[start_verse - 1 : end_verse]
-
-        # Fetch all WBW translations for the requested range to avoid DB contention in workers
-        all_wbw = {}
-        if annotate:
-            all_wbw = db.get_wbw_grouped_by_verse(surah)
-            # Filter to specific range to optimize memory during parallel distribution
-            all_wbw = {k: v for k, v in all_wbw.items() if start_verse <= k <= end_verse}
-
-        # Prepare tasks for workers. All required data is passed as arguments to avoid sub-process DB access.
-        tasks = []
-        for i, verse_text in enumerate(verse_slice):
-            current_ayah = start_verse + i
-            wbw_translations = all_wbw.get(current_ayah, []) if annotate else []
-            verse_trans_texts = translations[i]
-
-            tasks.append(
-                (
-                    surah,
-                    current_ayah,
-                    verse_text,
-                    wbw_translations,
-                    verse_trans_texts,
-                    self.layout_config,
-                    self.text_config,
-                    self.word_config,
-                    annotate,
-                    separate_translations,
-                )
-            )
-
         output_dir = kwargs.get("output_dir")
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
 
-        if parallel and len(tasks) > 1:
-            # Parallel execution using process pool for CPU-bound rendering tasks
-            with ProcessPoolExecutor() as executor:
-                # Add output_dir and prefix to task arguments for worker-level I/O
-                p_tasks = [(t + (output_dir, filename_prefix)) for t in tasks]
-                for result in executor.map(_render_verse_worker, p_tasks, chunksize=5):
-                    if isinstance(result, list) and result and isinstance(result[0], str):
-                        # Result contains file paths (direct-to-disk mode)
-                        yield result
+        total_verses = end_verse - start_verse + 1
+
+        if parallel and total_verses > 1:
+            renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
+            num_workers = renderer.max_workers
+
+            # Simple balancing: even chunks for even distribution
+            chunk_size = max(1, (total_verses + num_workers - 1) // num_workers)
+
+            batches = []
+            for i in range(0, total_verses, chunk_size):
+                b_start = start_verse + i
+                b_end = min(end_verse, b_start + chunk_size - 1)
+
+                # Slices for translations (relative to range start)
+                b_trans = translations[i : i + (b_end - b_start + 1)]
+
+                batches.append(
+                    (
+                        surah,
+                        b_start,
+                        b_end,
+                        b_trans,
+                        self.layout_config,
+                        self.text_config,
+                        self.word_config,
+                        annotate,
+                        separate_translations,
+                        output_dir,
+                        filename_prefix,
+                    )
+                )
+
+            # PERF: Batch-based map reduces IPC task count from 280+ to ~8
+            for batch_results in renderer.map(_render_verse_batch_worker, batches):
+                for verse_pages in batch_results:
+                    if output_dir:
+                        # Verse_pages is [path, path, ...]
+                        yield verse_pages
                     else:
-                        # Result contains PNG byte streams; materialize back to PIL Images
-                        yield [Image.open(io.BytesIO(b)) for b in result]
+                        # Verse_pages is [(mode, size, data), ...]
+                        yield [Image.frombytes(m, s, d) for m, s, d in verse_pages]
         else:
-            # Serial execution for small ranges or single-process environments
-            for t in tasks:
-                p_task = t + (output_dir, filename_prefix)
-                result = _render_verse_worker(p_task)
-                if isinstance(result, list) and result and isinstance(result[0], str):
-                    yield result
+            # Serial execution (uses the batch worker for code reuse)
+            task = (
+                surah,
+                start_verse,
+                end_verse,
+                translations,
+                self.layout_config,
+                self.text_config,
+                self.word_config,
+                annotate,
+                separate_translations,
+                output_dir,
+                filename_prefix,
+            )
+            for verse_pages in _render_verse_batch_worker(task):
+                if output_dir:
+                    yield verse_pages
                 else:
-                    yield [Image.open(io.BytesIO(b)) for b in result]
+                    yield [Image.frombytes(m, s, d) for m, s, d in verse_pages]
 
 
 # process-local cache for fonts to avoid redundant re-initialization in workers.
@@ -219,112 +226,110 @@ def _get_worker_font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont
     return _WORKER_FONT_CACHE[key]
 
 
-def _render_verse_worker(args: tuple) -> list[bytes] | list[str]:
-    """Worker function for rendering individual verses in parallel.
+def _render_verse_batch_worker(args: tuple) -> list[list[Any]]:
+    """Worker function for rendering a batch of verses in a single process lifecycle.
 
-    This function is executed in sub-processes. It avoids database access by
-    receiving all required data (verse text, WBW, translations) as arguments.
-    Results are returned as PNG byte streams to minimize IPC overhead.
+    Logic:
+    - Zero-Payload: Fetches its own data from DB to minimize IPC overhead.
+    - Simplicity: Processes a strictly linear range.
     """
     (
         surah,
-        ayah,
-        verse_text,
-        wbw_translations,
-        translations,
-        layout_config,
-        text_config,
-        word_config,
+        start_ayah,
+        end_ayah,
+        translations_batch,
+        layout_cfg,
+        text_cfg,
+        word_cfg,
         annotate,
         separate_translations,
         output_dir,
         filename_prefix,
     ) = args
 
-    # Resolve DB manager internally if needed (singleton startup)
-    # Actually, we don't need it if we have all data.
+    # Initialize process-local database manager
+    db = DatabaseManager()
 
-    verse_words = verse_text.split()
-    word_images = [get_wimage(word, word_config) for word in verse_words]
+    # Fetch data once for the batch
+    arabic_verses = db.get_verses_from_surah(surah)
+    all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
 
-    if annotate:
-        # Genius: use Plural version for batching + Plural version uses Cache V2 (text-based)
-        annotated_images, annotated_text = annotate_words(
-            images=word_images,
-            surah=surah,
-            ayah=ayah,
-            start=1,
-            word_config=word_config,
-            wbw_translations=wbw_translations,
-            texts=verse_words,
-        )
-    else:
-        annotated_images = word_images
-        annotated_text = verse_words
+    batch_results = []
 
-    # Add verse number marker
-    vn_image = verse_number(ayah, word_config)
-    annotated_images.append(vn_image)
-    annotated_text.append("")
+    # Pre-calculate flush trigger based on centralized ratio
+    flush_trigger = DEFAULT_PROCESS_LIMIT_MB * MEMORY_FLUSH_THRESHOLD_RATIO
 
-    # Prepare WordItems
-    word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+    for i, ayah in enumerate(range(start_ayah, end_ayah + 1)):
+        # Memory safety: Conditional Cache Flushing
+        if get_current_rss_mb() > flush_trigger:
+            clear_rendering_caches()
+            gc.collect()
 
-    # Prepare Translation Images (materialize for pickling)
-    lazy_trans = LazyTranslationImages(translations, text_config)
-    translation_images = list(lazy_trans)
+        worker_heartbeat()
 
-    if separate_translations:
-        # Arabic-only rendering
-        arabic_word_cfg = dataclasses.replace(word_config, max_rows_per_page=2)
-        pages = list(
-            frame(
-                words=word_items,
-                translation_images=None,
-                config=layout_config,
-                word_config=arabic_word_cfg,
+        verse_text = arabic_verses[ayah - 1]
+        wbw_translations = all_wbw.get(ayah, [])
+        verse_translations = translations_batch[i]
+
+        verse_words = verse_text.split()
+        word_images = [get_wimage(word, word_cfg) for word in verse_words]
+
+        if annotate:
+            annotated_images, annotated_text = annotate_words(
+                images=word_images,
+                surah=surah,
+                ayah=ayah,
+                start=1,
+                word_config=word_cfg,
+                wbw_translations=wbw_translations,
+                texts=verse_words,
             )
-        )
+        else:
+            annotated_images = word_images
+            annotated_text = verse_words
 
-        # Dedicated translation pages
-        for trans_img in translation_images:
-            if not trans_img:
-                continue
+        # Add verse number marker
+        vn_img = verse_number(ayah, word_cfg)
+        annotated_images.append(vn_img)
+        annotated_text.append("")
 
-            canvas = Image.new("RGBA", (layout_config.max_width, layout_config.image_height), (0, 0, 0, 0))
-            if layout_config.timage_y_offset > 0:
-                ty = layout_config.timage_y_offset - trans_img.height // 2
-            else:
-                ty = layout_config.image_height - layout_config.padding.bottom - trans_img.height // 2
-            tx = (layout_config.max_width - trans_img.width) // 2 + layout_config.timage_x_offset
-            canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
-            pages.append(canvas)
-    else:
-        # Combined rendering
-        pages = list(
-            frame(
-                words=word_items,
-                translation_images=translation_images,
-                config=layout_config,
-                word_config=word_config,
-            )
-        )
+        word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+        trans_images = list(LazyTranslationImages(verse_translations, text_cfg))
 
-    if output_dir:
-        # Genius: Save directly in the worker to bypass IPC and main-process I/O bottleneck
-        os.makedirs(output_dir, exist_ok=True)
-        paths = []
-        for i, p in enumerate(pages):
-            filename = f"{filename_prefix}_verse_{ayah:03d}_page_{i + 1}.png"
-            full_path = os.path.join(output_dir, filename)
-            p.save(full_path, format="PNG")
-            paths.append(full_path)
-        return paths
+        if separate_translations:
+            # Arabic-only + Translation-only
+            arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
+            pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
+            for t_img in trans_images:
+                if not t_img:
+                    continue
+                canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
+                ty = (
+                    layout_cfg.timage_y_offset or layout_cfg.image_height - layout_cfg.padding.bottom
+                ) - t_img.height // 2
+                tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
+                canvas.alpha_composite(t_img, (tx, ty))
+                pages.append(canvas)
+        else:
+            pages = list(frame(word_items, trans_images, layout_cfg, word_cfg))
 
-    # Genius Serialization: Convert PIL Images to PNG Bytes for IPC efficiency
-    results = []
-    for p in pages:
-        buf = io.BytesIO()
-        p.save(buf, format="PNG", optimize=False)
-        results.append(buf.getvalue())
-    return results
+        # Result handling
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            paths = []
+            for j, p in enumerate(pages):
+                path = os.path.join(output_dir, f"{filename_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
+                p.save(path, format="PNG")
+                paths.append(path)
+                del p
+            batch_results.append(paths)
+        else:
+            batch_results.append([(p.mode, p.size, p.tobytes()) for p in pages])
+            for p in pages:
+                del p
+
+        del word_items, trans_images, pages
+        if i % 10 == 0:
+            gc.collect()
+
+    return batch_results

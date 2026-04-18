@@ -14,7 +14,7 @@ from PIL import Image
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
-from quranmedialib.modules.lazy_image import LazyTranslationImages
+from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem

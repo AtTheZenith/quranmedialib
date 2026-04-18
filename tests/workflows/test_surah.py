@@ -12,6 +12,7 @@ import warnings
 import pytest
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
+from quranmedialib.utils.memory import MemoryMonitor
 from quranmedialib.workflows.surah import SurahWorkflow
 
 
@@ -66,29 +67,21 @@ def test_surah_standard(request: pytest.FixtureRequest) -> None:
 @pytest.mark.benchmark
 def test_surah_al_baqarah_benchmark(request: pytest.FixtureRequest) -> None:
     """Heavy benchmark for the entire Surah Al-Baqarah (286 verses) - Worst Case Scenario."""
-    import os
-
-    try:
-        import psutil
-    except ImportError:
-        psutil = None
-
-    process = psutil.Process(os.getpid()) if psutil else None
-    mem_start = process.memory_info().rss / (1024 * 1024) if process else 0
 
     print("Starting Al-Baqarah Worst-Case Benchmark (Surah 2)...")
     surah_num = 2  # Al-Baqarah
-    run_test_scenario(surah_num, separate_translations=False, folder_name="bulk_al_baqarah")
 
-    if process:
-        mem_end = process.memory_info().rss / (1024 * 1024)
-        growth_mb = mem_end - mem_start
-        request.node.benchmark_data = [f"RAM {mem_start:.2f}MB -> +{growth_mb:.2f}MB"]
-        print(
-            f"Memory Footprint (Al-Baqarah): Start={mem_start:.2f}MB, End={mem_end:.2f}MB, Growth={growth_mb:.2f}MB"
-        )
-        # Contract: Even for Baqarah, we should stay within sane limits.
-        assert growth_mb < 300.0
+    # Use MemoryMonitor to capture the true aggregate peak of all hardware-parallel workers
+    with MemoryMonitor(limit_mb=2048.0) as monitor:
+        run_test_scenario(surah_num, separate_translations=False, folder_name="bulk_al_baqarah")
+        peak_mb = monitor.peak_rss
+
+    request.node.benchmark_data = [f"Peak Aggregate RAM: {peak_mb:.2f}MB"]
+    print(f"Memory Footprint (Al-Baqarah): Peak Aggregate RAM={peak_mb:.2f}MB")
+
+    # Contract: Aggregate RAM (Main + N Workers) should stay within 1.6GB for this 1080p workload.
+    # Note: 8 workers * ~180MB each = ~1.4GB + Main Process (~50MB) = ~1.5GB.
+    assert peak_mb < 1600.0
 
 
 if __name__ == "__main__":

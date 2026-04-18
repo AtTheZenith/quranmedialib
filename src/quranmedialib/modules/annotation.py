@@ -124,7 +124,7 @@ def _annotate_image(
     return new_img
 
 
-@functools.lru_cache(maxsize=1024)
+@functools.lru_cache(maxsize=512)
 def _annotate_word_cached(
     text: str,
     translation: str,

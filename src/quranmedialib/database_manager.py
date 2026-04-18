@@ -18,6 +18,7 @@ import logging
 import re
 import sqlite3
 import threading
+import time
 from types import TracebackType
 from typing import Any, Optional, Self
 
@@ -134,6 +135,7 @@ class DatabaseManager:
 
     _instance: Optional[Self] = None
     _init_lock = threading.Lock()
+    _state_lock = threading.RLock()
 
     # Default connection names
     DEFAULT_QURAN_NAME = "quran"
@@ -165,23 +167,24 @@ class DatabaseManager:
             if getattr(self, "_initialized", False):
                 return
 
-            # Auto-close orphaned connections before re-initialization
-            if hasattr(self, "_connections") and self._connections:
-                logger.warning(
-                    "DatabaseManager re-initialized without calling .close() first. "
-                    "Automatically closing orphaned connections."
-                )
-                self.close()
+            with self._state_lock:
+                # Auto-close orphaned connections before re-initialization
+                if hasattr(self, "_connections") and self._connections:
+                    logger.warning(
+                        "DatabaseManager re-initialized without calling .close() first. "
+                        "Automatically closing orphaned connections."
+                    )
+                    self.close()
 
-            self._registry: dict[str, dict[str, Any]] = {}
-            self._connections: dict[str, sqlite3.Connection] = {}
-            self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
-            self._active_wbw: Optional[str] = None
-            self._active_translation: Optional[str] = None
+                self._registry: dict[str, dict[str, Any]] = {}
+                self._connections: dict[str, sqlite3.Connection] = {}
+                self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
+                self._active_wbw: Optional[str] = None
+                self._active_translation: Optional[str] = None
 
-            # Performance caches
-            self._schema_cache: dict[str, dict[str, str]] = {}
-            self._query_cache: dict[str, str] = {}
+                # Performance caches
+                self._schema_cache: dict[str, dict[str, str]] = {}
+                self._query_cache: dict[str, str] = {}
 
             try:
                 # Import presets lazily to avoid circular import issues
@@ -246,12 +249,13 @@ class DatabaseManager:
 
         conn.row_factory = sqlite3.Row
 
-        self._connections[name] = conn
-        self._configs[name] = config
-        self._registry[name] = {
-            "config": config,
-            "connection": conn,
-        }
+        with self._state_lock:
+            self._connections[name] = conn
+            self._configs[name] = config
+            self._registry[name] = {
+                "config": config,
+                "connection": conn,
+            }
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Internal method to add a connection without validation (used during initialization)."""
@@ -290,10 +294,11 @@ class DatabaseManager:
             KeyError: If the name is not a registered connection.
         """
         self._validate_state()
-        if name not in self._registry:
-            raise KeyError(f"Unknown translation: {name}. Available: {list(self._registry.keys())}")
-        self._active_translation = name
-        logger.debug("Active translation set to: %s", name)
+        with self._state_lock:
+            if name not in self._registry:
+                raise KeyError(f"Unknown translation: {name}. Available: {list(self._registry.keys())}")
+            self._active_translation = name
+            logger.debug("Active translation set to: %s", name)
 
     def get_active_translation_name(self) -> Optional[str]:
         """Get the name of the currently active translation."""
@@ -311,10 +316,11 @@ class DatabaseManager:
             KeyError: If the name is not a registered connection.
         """
         self._validate_state()
-        if name not in self._registry:
-            raise KeyError(f"Unknown WBW database: {name}. Available: {list(self._registry.keys())}")
-        self._active_wbw = name
-        logger.debug("Active WBW set to: %s", name)
+        with self._state_lock:
+            if name not in self._registry:
+                raise KeyError(f"Unknown WBW database: {name}. Available: {list(self._registry.keys())}")
+            self._active_wbw = name
+            logger.debug("Active WBW set to: %s", name)
 
     def get_active_wbw_name(self) -> Optional[str]:
         """Get the name of the currently active WBW database."""
@@ -343,12 +349,21 @@ class DatabaseManager:
             List of result rows. Returns empty list on sqlite3 errors after logging
             at WARNING level with caller context for debugging.
         """
-        conn = self._get_connection(name)
-        old_factory = conn.row_factory
-        conn.row_factory = row_factory
+        with self._state_lock:
+            conn = self._get_connection(name)
+            old_factory = conn.row_factory
+            conn.row_factory = row_factory
         cursor = conn.cursor()
         try:
+            start_time = time.perf_counter()
             cursor.execute(query, params)
+            end_time = time.perf_counter()
+
+            # Log slow queries or all queries at DEBUG level
+            duration = end_time - start_time
+            query_log = _truncate_for_log(query, 100)
+            logger.debug("SQL EXECUTE: %.4f seconds | DB: %s | Query: %s", duration, name, query_log)
+
             return cursor.fetchall()
         except sqlite3.Error as e:
             params_repr = _truncate_for_log(params)
@@ -739,25 +754,42 @@ class DatabaseManager:
         if not getattr(self, "_initialized", False):
             return
 
-        for name, conn in self._connections.items():
-            if conn:
-                conn.close()
-                logger.debug("Closed connection: %s", name)
+        with self._state_lock:
+            for name, conn in self._connections.items():
+                if conn:
+                    conn.close()
+                    logger.debug("Closed connection: %s", name)
 
-        self._connections.clear()
-        self._configs.clear()
-        self._registry.clear()
-        self._schema_cache.clear()
-        self._query_cache.clear()
-        self._active_wbw = None
-        self._active_translation = None
-        self._initialized = False
+            self._connections.clear()
+            self._configs.clear()
+            self._registry.clear()
+            self._schema_cache.clear()
+            self._query_cache.clear()
+            self._active_wbw = None
+            self._active_translation = None
+            self._initialized = False
 
-        # Clear method caches
+            # Reset singleton instance under init lock for complete cleanup
+            with type(self)._init_lock:
+                type(self)._instance = None
+
+    def minimize_caches(self) -> None:
+        """Clears performance caches to minimize memory footprint.
+
+        Useful in multi-process/multi-thread workers to free up RAM used by
+        pre-fetched metadata and cached query plans.
+        """
+        with self._state_lock:
+            self._schema_cache.clear()
+            self._query_cache.clear()
+
+        # Clear functools.lru_cache methods
         self.get_verses_from_surah.cache_clear()
         self.get_verse.cache_clear()
         self.get_wbw_grouped_by_verse.cache_clear()
         self.get_translation_from_surah.cache_clear()
+
+        logger.debug("DatabaseManager caches minimized.")
 
         # Reset singleton instance so next DatabaseManager() creates a fresh instance
         type(self)._instance = None
