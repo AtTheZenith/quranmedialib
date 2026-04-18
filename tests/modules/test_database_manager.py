@@ -15,11 +15,9 @@ def test_database_manager() -> None:
 
     # Test Quran methods (always use "quran" database)
     verses = db.get_verses_from_surah(1)
-    print(f"Verses in Surah 1: {verses[:2]}")
     assert len(verses) > 0
 
     verse_text = db.get_verse(1, 1)
-    print(f"Verse 1:1 text: {verse_text}")
     assert "بِسۡمِ" in verse_text
 
     # Test WBW methods (always use "wbw" database)
@@ -265,7 +263,10 @@ def test_database_manager_concurrency_benchmark(request: pytest.FixtureRequest) 
         except Exception as e:
             errors.append(e)
 
-    threads = [threading.Thread(target=task) for _ in range(10)]
+    import os
+
+    num_threads = os.cpu_count() or 4
+    threads = [threading.Thread(target=task) for _ in range(num_threads)]
 
     start = time.perf_counter()
     for t in threads:

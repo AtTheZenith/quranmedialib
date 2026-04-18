@@ -290,33 +290,39 @@ def _render_page(
     word_config: WordConfig,
 ) -> Image.Image:
     """Renders a single page of rows into an RGBA image."""
-    page_image = Image.new("RGBA", (config.max_width, config.image_height), color=(0, 0, 0, 0))
+    # Hoist properties to local variables for micro-optimization of hot loops
+    l_max_width = config.max_width
+    l_image_height = config.image_height
+    l_word_spacing = word_config.word_spacing
+    l_row_spacing = word_config.row_spacing
+
+    page_image = Image.new("RGBA", (l_max_width, l_image_height), color=(0, 0, 0, 0))
 
     row_heights = [max((item.height for item in row), default=0) for row in rows]
-    total_verse_height = sum(row_heights) + (len(rows) - 1) * word_config.row_spacing if rows else 0
+    total_verse_height = sum(row_heights) + (len(rows) - 1) * l_row_spacing if rows else 0
 
     draw_y = _get_verse_start_y(total_verse_height, config, word_config)
 
+    # Local reference to alpha_composite for faster calls
+    _alpha_composite = page_image.alpha_composite
+
     for i, row in enumerate(rows):
         max_row_height = row_heights[i]
-        row_width = sum(item.width for item in row) + (len(row) - 1) * word_config.word_spacing
+        row_width = sum(item.width for item in row) + (len(row) - 1) * l_word_spacing
 
         current_x = _get_row_start_x(row_width, config)
 
         for item in row:
             word_image = item.image
-            word_width, word_height = word_image.size
+            w_w, w_h = word_image.size
             # Vertical centering within the row's tallest item.
-            word_y = draw_y + (max_row_height - word_height) // 2
+            word_y = draw_y + (max_row_height - w_h) // 2
 
-            page_image.paste(
-                word_image,
-                (current_x - word_width, word_y),
-                mask=word_image if word_image.mode == "RGBA" else None,
-            )
-            current_x -= word_width + word_config.word_spacing
+            # PERF: alpha_composite is faster than paste(mask=RGBA) for RGBA-on-RGBA
+            _alpha_composite(word_image, dest=(current_x - w_w, word_y))
+            current_x -= w_w + l_word_spacing
 
-        draw_y += max_row_height + word_config.row_spacing
+        draw_y += max_row_height + l_row_spacing
 
     return page_image
 
@@ -355,11 +361,10 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
             config.image_height,
         )
 
-    page_image.paste(
-        trans_img,
-        (trans_x, trans_y),
-        mask=trans_img if trans_img.mode == "RGBA" else None,
-    )
+    if trans_img.mode == "RGBA":
+        page_image.alpha_composite(trans_img, dest=(trans_x, trans_y))
+    else:
+        page_image.paste(trans_img, (trans_x, trans_y))
 
 
 def frame(

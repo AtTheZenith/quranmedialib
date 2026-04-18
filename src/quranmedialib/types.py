@@ -25,6 +25,25 @@ from PIL import Image, ImageFont
 
 from quranmedialib.resources import get_font_path
 
+# === Exceptions ===
+
+
+class QuranMediaLibError(Exception):
+    """Base class for all QuranMediaLib exceptions."""
+
+
+class LayoutError(QuranMediaLibError):
+    """Raised when rendering dimensions or layouts are invalid."""
+
+
+class DatabaseError(QuranMediaLibError):
+    """Raised when database operations fail or schema is invalid."""
+
+
+class ResourceError(QuranMediaLibError):
+    """Raised when external assets (fonts, DBs) cannot be loaded."""
+
+
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
 MAX_FONT_SIZE = 2000
 
@@ -43,21 +62,24 @@ def _get_working_dir() -> Path:
 def _ensure_within_working_dir(path: Path) -> None:
     """Validate that a path is within the working directory tree.
 
-    Uses os.path.commonpath to prevent prefix-matching bypasses
-    (e.g., working_dir-evil/ appearing to start with working_dir/).
+    Uses realpath to prevent prefix-matching bypasses and symlink traversal.
 
     Args:
         path: The path to validate.
 
     Raises:
-        ValueError: If the path is outside the working directory.
+        ResourceError: If the path is outside the working directory.
     """
-    resolved = path.resolve()
-    working = _get_working_dir()
-    if os.path.commonpath([resolved, working]) != str(working):
-        raise ValueError(
-            f"Path {path!r} is outside the working directory {working}. Use unsafe_paths=True to bypass this check."
-        )
+    try:
+        # resolve() is more robust on Windows/Python 3.10+
+        resolved = path.resolve()
+        working = _get_working_dir()
+
+        # Check if resolved path is actually under the working directory
+        if not str(resolved).startswith(str(working) + os.sep) and str(resolved) != str(working):
+            raise ResourceError(f"Path {path!r} (resolved: {resolved!r}) is outside the working directory {working}.")
+    except (OSError, ValueError) as e:
+        raise ResourceError(f"Failed to validate path {path}: {e}")
 
 
 # === Layout Primitives ===
@@ -109,7 +131,7 @@ type WordIndex = int
 # === Font Resource ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FontResource:
     """Reference to a font file with metadata.
 
@@ -173,7 +195,7 @@ class FontResource:
 # === Database Configuration ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DatabaseConfig:
     """Configuration for a verse-by-verse database table.
 
@@ -268,7 +290,7 @@ class DatabaseConfig:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WbwDatabaseConfig(DatabaseConfig):
     """Extended configuration for word-by-word databases.
 
@@ -349,7 +371,7 @@ class WbwDatabaseConfig(DatabaseConfig):
 # === Data Transmission Types ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WordItem:
     """Combines a word image with its text metadata for layout processing.
 
@@ -373,7 +395,7 @@ class WordItem:
 # === Configuration Types ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LayoutConfig:
     """Stores canvas sizing and top-level layout offsets.
 
@@ -448,7 +470,7 @@ class LayoutConfig:
         return self.image_height - self.padding.top - self.padding.bottom
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class WordConfig:
     """Configuration for word and verse rendering behavior.
 
@@ -557,7 +579,7 @@ class WordConfig:
         object.__setattr__(self, "font", resolved_font)
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class TextConfig:
     """Configuration for translation/rich text rendering.
 

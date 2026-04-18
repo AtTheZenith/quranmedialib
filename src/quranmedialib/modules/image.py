@@ -52,15 +52,20 @@ def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Imag
         color = (*color, 255)
 
     # Fast path for mask-like images (already have alpha or are grayscale)
-    # PERF-023: use alpha-composite style creation for mask-based colorization
+    # PERF: use putalpha directly on a new color-filled canvas
     if image.mode in ("RGBA", "LA", "L"):
+        # getchannel is faster than split()
         mask = image.getchannel("A") if "A" in image.mode else image
         result = Image.new("RGBA", image.size, color)
         result.putalpha(mask)
         return result
 
-    # Fallback for complex images (e.g. RGB with luminance variations)
-    return ImageChops.multiply(image.convert("LA").convert("RGBA"), Image.new("RGBA", image.size, color))
+    # Fallback for complex images: convert directly to RGBA via L
+    # converting to L preserves luminance weights (R*299 + G*587 + B*114)
+    l_mask = image.convert("L")
+    result = Image.new("RGBA", image.size, color)
+    result.putalpha(l_mask)
+    return result
 
 
 # === Pad Function ===
@@ -110,7 +115,8 @@ def _glow_rgba(
 ) -> Image.Image:
     """Composite glow layer behind original content for RGBA images."""
     if strength != 1.0:
-        glow_alpha = glow_alpha.point(lambda p: min(255, int(p * strength)))
+        # Optimized alpha multiplication
+        glow_alpha = ImageEnhance.Brightness(glow_alpha).enhance(strength)
 
     glow_layer = glow_color.convert("RGBA")
     glow_layer.putalpha(glow_alpha)
@@ -237,33 +243,28 @@ def glow(
     ]
 
     # Pre-allocate blur buffers — reuse across radii iterations
-    blur_buffer = Image.new("RGB", color_base_size, (0, 0, 0))
     glow_color = Image.new("RGB", color_base_size, (0, 0, 0))
     glow_alpha = None if is_opaque else Image.new("L", color_base_size, 0)
     alpha_small = None if is_opaque else alpha.resize(color_base_size, resample=Image.Resampling.BOX)
-    blur_alpha_buf = None if is_opaque else Image.new("L", color_base_size, 0)
 
     # Determine blur strategy based on quality mode
     radius_multipliers = {"fast": 1.0, "balanced": 1.2, "quality": 1.0}
     radius_mult = radius_multipliers[quality]
     use_gaussian = quality == "quality"
 
+    # Determine filter class for faster lookup
+    FilterClass = ImageFilter.GaussianBlur if use_gaussian else ImageFilter.BoxBlur
+
     for r in radii:
         adjusted_r = max(1, int(r * radius_mult))
-        if use_gaussian:
-            blur_result = color_base.filter(ImageFilter.GaussianBlur(adjusted_r))
-        else:
-            blur_result = color_base.filter(ImageFilter.BoxBlur(adjusted_r))
-        blur_buffer.paste(blur_result)
-        glow_color = ImageChops.screen(glow_color, blur_buffer)
+
+        # PERF: Filter results are processed directly into screen/lighter to avoid buffer copies
+        blur_res = color_base.filter(FilterClass(adjusted_r))
+        glow_color = ImageChops.screen(glow_color, blur_res)
 
         if glow_alpha is not None:
-            if use_gaussian:
-                blur_alpha_result = alpha_small.filter(ImageFilter.GaussianBlur(adjusted_r))
-            else:
-                blur_alpha_result = alpha_small.filter(ImageFilter.BoxBlur(adjusted_r))
-            blur_alpha_buf.paste(blur_alpha_result)
-            glow_alpha = ImageChops.lighter(glow_alpha, blur_alpha_buf)
+            blur_alpha_res = alpha_small.filter(FilterClass(adjusted_r))
+            glow_alpha = ImageChops.lighter(glow_alpha, blur_alpha_res)
 
     # 3. Upscale glow result to original size
     glow_color = glow_color.resize(img_rgba.size, resample=Image.Resampling.BILINEAR)

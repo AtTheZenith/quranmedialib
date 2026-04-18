@@ -18,6 +18,7 @@ from quranmedialib.types import (
     LayoutConfig,
     Line,
     Padding,
+    ResourceError,
     StyledWord,
     TextConfig,
     VerticalAlignment,
@@ -284,7 +285,7 @@ def test_font_resource_none_font_name() -> None:
 
 def test_font_resource_from_path_outside_working_dir() -> None:
     """Test that FontResource.from_path rejects paths outside working dir."""
-    with pytest.raises(ValueError, match="outside the working directory"):
+    with pytest.raises(ResourceError, match="outside the working directory"):
         FontResource.from_path("C:\\Windows\\Fonts\\arial.ttf")
 
 
@@ -312,7 +313,7 @@ def test_font_resource_from_path_inside_working_dir() -> None:
 def test_database_config_from_path() -> None:
     """Test that DatabaseConfig.from_path rejects paths outside working dir."""
     # Path outside working directory should be rejected by default
-    with pytest.raises(ValueError, match="outside the working directory"):
+    with pytest.raises(ResourceError, match="outside the working directory"):
         DatabaseConfig.from_path(
             "/path/to/db.sqlite",
             tablename="verses",
@@ -352,7 +353,7 @@ def test_database_config_invalid_tablename() -> None:
 
 def test_wbw_database_config_from_path() -> None:
     """Test that WbwDatabaseConfig.from_path rejects paths outside working dir."""
-    with pytest.raises(ValueError, match="outside the working directory"):
+    with pytest.raises(ResourceError, match="outside the working directory"):
         WbwDatabaseConfig.from_path(
             "/external/path/wbw.sqlite",
             tablename="words",
