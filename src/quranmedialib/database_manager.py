@@ -167,7 +167,10 @@ class DatabaseManager:
 
             # Auto-close orphaned connections before re-initialization
             if hasattr(self, "_connections") and self._connections:
-                logger.warning("DatabaseManager re-initialized without calling .close() first. Automatically closing orphaned connections.")
+                logger.warning(
+                    "DatabaseManager re-initialized without calling .close() first. "
+                    "Automatically closing orphaned connections."
+                )
                 self.close()
 
             self._registry: dict[str, dict[str, Any]] = {}
@@ -420,7 +423,9 @@ class DatabaseManager:
             "surah_col": _validate_sql_identifier(config.surah_col, "column name"),
             "ayah_col": _validate_sql_identifier(config.ayah_col, "column name"),
             "text_col": _validate_sql_identifier(config.text_col, "column name"),
-            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name") if isinstance(config, WbwDatabaseConfig) else "word",
+            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name")
+            if isinstance(config, WbwDatabaseConfig)
+            else "word",
         }
         self._schema_cache[cache_key] = schema
         return "user", schema
@@ -479,7 +484,9 @@ class DatabaseManager:
                 WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
             """
 
-        rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None)
+        rows = self._fetch(
+            self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None
+        )
         return rows[0][0] if rows and rows[0][0] else ""
 
     # === WBW Database Methods (use active WBW database) ===
@@ -716,7 +723,10 @@ class DatabaseManager:
         # Check for missing ayahs and raise error if any are missing
         missing_ayah = [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]
         if missing_ayah:
-            raise ValueError(f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. Database may be corrupted or incomplete.")
+            raise ValueError(
+                f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. "
+                "Database may be corrupted or incomplete."
+            )
 
         return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1)]
 

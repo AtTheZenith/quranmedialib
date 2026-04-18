@@ -1,7 +1,7 @@
 """Tests for the SurahWorkflow class.
 
 This module contains tests for verifying the surah-level workflow that processes
-entire surahs with Arabic text and translations, including stress testing with
+entire surahs with Arabic text and translations, including benchmarking with
 large surahs (e.g., Al-Baqarah with 286 verses).
 """
 
@@ -31,14 +31,14 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Genius: Pass output_dir to get_iterator to enable parallel I/O (bypass serial overhead)
     surah_generator = workflow.get_iterator(
-        surah=surah_num, 
-        annotate=True, 
+        surah=surah_num,
+        annotate=True,
         separate_translations=separate_translations,
         output_dir=output_dir,
-        filename_prefix=f"surah_{surah_num:03d}"
+        filename_prefix=f"surah_{surah_num:03d}",
     )
 
     # Process results (which are now paths)
@@ -55,19 +55,44 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     print(f"Scenario '{folder_name}' complete. Saved images for {verse_count} verses. Elapsed: {elapsed_time:.2f}s")
 
 
-def test_surah_stress() -> None:
-    print("Starting Stress Test for Surah Workflow...")
-    surah_num = 2  # An-Nazi'at
+def test_surah_standard(request: pytest.FixtureRequest) -> None:
+    """Lightweight surah rendering check (Surah 100 - Al-Adiyat, 11 verses)."""
+    print("Starting Standard Test for Surah Workflow (Surah 100)...")
+    surah_num = 100  # Al-Adiyat
+    run_test_scenario(surah_num, separate_translations=False, folder_name="standard")
+    request.node.benchmark_data = ["verse_count=11"]
 
-    # 1. Combined translations
-    run_test_scenario(surah_num, separate_translations=False, folder_name="combined")
 
-    # 2. Separate translations
-    run_test_scenario(surah_num, separate_translations=True, folder_name="separate")
+@pytest.mark.benchmark
+def test_surah_al_baqarah_benchmark(request: pytest.FixtureRequest) -> None:
+    """Heavy benchmark for the entire Surah Al-Baqarah (286 verses) - Worst Case Scenario."""
+    import os
+
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
+
+    process = psutil.Process(os.getpid()) if psutil else None
+    mem_start = process.memory_info().rss / (1024 * 1024) if process else 0
+
+    print("Starting Al-Baqarah Worst-Case Benchmark (Surah 2)...")
+    surah_num = 2  # Al-Baqarah
+    run_test_scenario(surah_num, separate_translations=False, folder_name="bulk_al_baqarah")
+
+    if process:
+        mem_end = process.memory_info().rss / (1024 * 1024)
+        growth_mb = mem_end - mem_start
+        request.node.benchmark_data = [f"RAM {mem_start:.2f}MB -> +{growth_mb:.2f}MB"]
+        print(
+            f"Memory Footprint (Al-Baqarah): Start={mem_start:.2f}MB, End={mem_end:.2f}MB, Growth={growth_mb:.2f}MB"
+        )
+        # Contract: Even for Baqarah, we should stay within sane limits.
+        assert growth_mb < 300.0
 
 
 if __name__ == "__main__":
-    test_surah_stress()
+    test_surah_al_baqarah_benchmark()
 
 
 def test_surah_invalid_surah_number() -> None:

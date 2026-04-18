@@ -12,8 +12,9 @@ from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
 
-def test_verse_range() -> None:
+def test_verse_range(request: pytest.FixtureRequest) -> None:
     print("Starting test_verse_range (Surah 108 - Per-Verse Iteration)...")
+    request.node.benchmark_data = ["surah=108", "verses=3"]
 
     db = DatabaseManager()
 

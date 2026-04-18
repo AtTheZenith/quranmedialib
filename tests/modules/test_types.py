@@ -16,7 +16,9 @@ from quranmedialib.types import (
     FontResource,
     HorizontalAlignment,
     LayoutConfig,
+    Line,
     Padding,
+    StyledWord,
     TextConfig,
     VerticalAlignment,
     WbwDatabaseConfig,
@@ -506,3 +508,64 @@ def test_word_config_verse_number_size_exceeds_max() -> None:
 
     with pytest.raises(ValueError, match="verse_number_size exceeds maximum limit"):
         WordConfig(font_size=72, verse_number_size=MAX_FONT_SIZE + 1)
+
+
+# === StyledWord and Line Tests ===
+
+
+def test_styled_word_creation() -> None:
+    """Test StyledWord initialization and attributes."""
+    from PIL import ImageFont
+
+    # Mock font
+    font = ImageFont.load_default()
+    sw = StyledWord(
+        text="test",
+        font=font,
+        color=(255, 255, 255, 255),
+        width=100,
+        height=20,
+    )
+    assert sw.text == "test"
+    assert sw.width == 100
+    assert sw.height == 20
+    assert sw.color == (255, 255, 255, 255)
+
+
+def test_line_add_word() -> None:
+    """Test Line accumulation of words and width calculations."""
+    from PIL import ImageFont
+
+    font = ImageFont.load_default()
+    line = Line()
+
+    word1 = StyledWord("one", font, (0, 0, 0), 50, 20)
+    word2 = StyledWord("two", font, (0, 0, 0), 60, 25)
+
+    line.add_word(word1)
+    assert line.width == 50
+    assert line.height == 20
+    assert len(line.words) == 1
+
+    # Add second word with spacing
+    line.add_word(word2, space_width=10)
+    assert line.width == 50 + 10 + 60
+    assert line.height == 25
+    assert len(line.words) == 2
+
+
+# === Alignment Enum Consistency ===
+
+
+def test_alignment_string_case_insensitivity() -> None:
+    """Test that LayoutConfig handles case-insensitive alignment strings."""
+    config = LayoutConfig(
+        max_width=1000,
+        image_height=1000,
+        timage_vertical_align="CENTER",
+        timage_horizontal_align="Right",
+    )
+    from quranmedialib.types import HorizontalAlignment, VerticalAlignment
+
+    assert config.timage_vertical_align == VerticalAlignment.CENTER
+    assert config.timage_horizontal_align == HorizontalAlignment.RIGHT

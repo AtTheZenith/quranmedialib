@@ -26,9 +26,10 @@ def _save_result(output_dir: str, file_name: str, results: list, index: int) -> 
     print(f"Saved {save_path}")
 
 
-def test_verse() -> None:
+def test_verse(request: pytest.FixtureRequest) -> None:
     """Test VerseWorkflow with Surah 1, Verse 1 (Al-Fatiha)."""
     print("Starting test_verse...")
+    request.node.benchmark_data = ["verse=1:1"]
     db = DatabaseManager()
 
     surah = 1

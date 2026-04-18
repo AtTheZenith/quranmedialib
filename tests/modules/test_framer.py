@@ -20,7 +20,7 @@ from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 
 
-def test_framer() -> None:
+def test_framer(request: pytest.FixtureRequest) -> None:
     print("\nRunning test_framer...")
     database_manager = DatabaseManager()
 
@@ -69,11 +69,11 @@ def test_framer() -> None:
     images[0].save(f"{output_dir}/framer_1.png")
     images[1].save(f"{output_dir}/framer_2.png")
     images[2].save(f"{output_dir}/framer_3.png")
-
+    request.node.benchmark_data = ["verse=2:255", f"pages={len(images)}"]
     print("test_framer completed successfully.")
 
 
-def test_framer_alignment() -> None:
+def test_framer_alignment(request: pytest.FixtureRequest) -> None:
     print("\nRunning test_framer_alignment...")
     database_manager = DatabaseManager()
 
@@ -130,6 +130,7 @@ def test_framer_alignment() -> None:
     images = frame(items, translation_images=t_imgs_cr, config=config_cr, word_config=word_config_cr)
     images[0].save(f"{output_dir}/framer_alignment_center_right.png")
 
+    request.node.benchmark_data = ["surah=108", "alignments=4"]
     print("test_framer_alignment completed successfully.")
 
 

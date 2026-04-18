@@ -123,7 +123,9 @@ def _glow_rgba(
     return result
 
 
-def _prepare_color_base(img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]) -> Image.Image:
+def _prepare_color_base(
+    img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]
+) -> Image.Image:
     """Prepares the color base for the glow effect by bleeding colors into transparent areas.
 
     This prevents grey/dark edges when blurring RGBA images.

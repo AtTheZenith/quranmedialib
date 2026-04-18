@@ -214,11 +214,6 @@ def _get_image_rows(
     return rows
 
 
-from quranmedialib.types import (
-    balance_lines_pyramid,
-)
-
-
 def _balance_image_rows(
     items: list[WordItem],
     target_num_rows: int,
@@ -232,6 +227,8 @@ def _balance_image_rows(
     """
     if not items:
         return []
+
+    from quranmedialib.types import balance_lines_pyramid
 
     widths = [it.width for it in items]
     best_breaks = balance_lines_pyramid(
@@ -341,9 +338,15 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
         trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
 
     # Warn if translation image would be clipped off-canvas
-    if trans_x < 0 or trans_y < 0 or trans_x + trans_img.width > config.max_width or trans_y + trans_img.height > config.image_height:
+    if (
+        trans_x < 0
+        or trans_y < 0
+        or trans_x + trans_img.width > config.max_width
+        or trans_y + trans_img.height > config.image_height
+    ):
         logger.warning(
-            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). Consider adjusting timage offsets or canvas dimensions.",
+            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). "
+            "Consider adjusting timage offsets or canvas dimensions.",
             trans_img.width,
             trans_img.height,
             trans_x,

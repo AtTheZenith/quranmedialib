@@ -13,6 +13,7 @@ structures used throughout the library. It includes:
 
 from __future__ import annotations
 
+import bisect
 import os
 import os.path
 from dataclasses import dataclass
@@ -665,8 +666,6 @@ class Line:
         self.height = max(self.height, word.height)
 
 
-import bisect
-
 def balance_lines_pyramid(
     widths: list[int],
     spacing: int,
@@ -674,7 +673,7 @@ def balance_lines_pyramid(
     max_width: int,
 ) -> list[int] | None:
     """Core IPL-B algorithm: finds line break indices for a top-heavy layout.
-    
+
     Uses Prefix Sums + Bisection (O(K log N log W)) for high-performance partitioning.
     """
     if not widths:
@@ -685,7 +684,7 @@ def balance_lines_pyramid(
     # sums[i] = width of first i items + (i-1) spacings
     sums = [0] * (n + 1)
     for i, w in enumerate(widths):
-        sums[i+1] = sums[i] + w + spacing
+        sums[i + 1] = sums[i] + w + spacing
 
     _spacing = spacing
     _target_k = target_k
@@ -699,25 +698,27 @@ def balance_lines_pyramid(
 
         while curr_idx < _n:
             count += 1
-            if count > _target_k: return 9999
-            
+            if count > _target_k:
+                return 9999
+
             # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
             # Target = prev_limit + spacing + sums[curr_idx]
             target = prev_limit + _spacing + sums[curr_idx]
             next_idx = bisect.bisect_right(sums, target) - 1
-            
-            if next_idx <= curr_idx: return 9999
-            
+
+            if next_idx <= curr_idx:
+                return 9999
+
             # Update limit for next line (Inverted Pyramid constraint)
             prev_limit = (sums[next_idx] - sums[curr_idx]) - _spacing
             curr_idx = next_idx
-            
+
         return count
 
     # Bounds
     max_w = max(widths)
     total_w = sums[n] - spacing
-    
+
     low = max(max_w, total_w // target_k)
     high = max_width
     best_w1 = -1
@@ -746,5 +747,5 @@ def balance_lines_pyramid(
             curr_idx = next_idx
         else:
             break
-            
+
     return breaks
