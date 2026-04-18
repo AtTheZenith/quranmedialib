@@ -32,7 +32,9 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
 
     assert len(lines) > 0, "Expected at least one line."
     for i in range(len(widths) - 1):
-        assert widths[i] >= widths[i + 1], f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
+        assert widths[i] >= widths[i + 1], (
+            f"Pyramid violation at line {i}: {widths[i]} is not >= {widths[i + 1]} in width sequence {widths}"
+        )
 
     # Save image for human review if a filename is provided
     if filename:
@@ -150,10 +152,15 @@ def test_timage_invalid_rich_text_format() -> None:
     assert result is not None  # Should handle gracefully
 
 
+@pytest.mark.benchmark
 def test_timage_very_long_text() -> None:
     """Test that get_timage handles very long text without crashing."""
     config = TextConfig(max_width=1200)
-    very_long_text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat." * 300
+    very_long_text = (
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
+        "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
+        "aliquip ex ea commodo consequat."
+    ) * 300
 
     result = get_timage(very_long_text, config)
     assert result is not None

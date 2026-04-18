@@ -110,7 +110,9 @@ class VerseRangeWorkflow(BaseWorkflow):
             raise ValueError(f"Ayah must be between 1 and 286, got end_ayah={end_ayah}")
 
         if start_ayah > end_ayah:
-            raise ValueError(f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah}).")
+            raise ValueError(
+                f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
+            )
 
         return self._process_range(
             surah=surah,

@@ -103,7 +103,9 @@ def create_square_demo(
     if mode in ["default", "arabic"]:
         verses = db.get_verses_from_surah(surah_id)
         for i, verse_text in enumerate(verses):
-            annotated_imgs, annotated_txts = _process_verse_words(verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default"))
+            annotated_imgs, annotated_txts = _process_verse_words(
+                verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default")
+            )
             all_word_images.extend(annotated_imgs)
             all_words_text.extend(annotated_txts)
 
@@ -200,7 +202,9 @@ def main() -> None:
         all_results.extend(run_workflow_demo(STORY_PRESET["translation"][resolution], data))
 
         # Square
-        all_results.extend(create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation"))
+        all_results.extend(
+            create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation")
+        )
 
         # Save all results (glow is applied here in parallel)
         save_images(all_results, "output/demo")

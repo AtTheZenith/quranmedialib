@@ -45,7 +45,9 @@ def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | Im
     return get_font(font_path, word_config.annotation_font_size)
 
 
-def _combine_images_rtl(images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]) -> Image.Image:
+def _combine_images_rtl(
+    images: list[Image.Image], word_spacing: int, background_color: tuple[int, int, int, int]
+) -> Image.Image:
     """Combines multiple word images into a single canvas in RTL order.
 
     Args:
@@ -249,7 +251,9 @@ def annotate_words(
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(images, surah, ayah, start, db, word_config, wbw_translations, texts)
+    result, annotated_texts = _annotate_words_internal(
+        images, surah, ayah, start, db, word_config, wbw_translations, texts
+    )
 
     return (result, annotated_texts) if texts is not None else result
 
@@ -284,7 +288,9 @@ def annotate_words_with_texts(
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(images, surah, ayah, start, db, word_config, wbw_translations, texts)
+    result, annotated_texts = _annotate_words_internal(
+        images, surah, ayah, start, db, word_config, wbw_translations, texts
+    )
     return result, annotated_texts  # type: ignore[return-value]  # texts is always provided here
 
 
@@ -321,7 +327,10 @@ def _annotate_words_internal(
         raise ValueError("word_config is required for annotation.")
 
     if start < 1:
-        raise ValueError(f"start index must be 1-based (>= 1), got {start}. The start parameter represents the 1-indexed word position in the verse.")
+        raise ValueError(
+            f"start index must be 1-based (>= 1), got {start}. "
+            "The start parameter represents the 1-indexed word position in the verse."
+        )
 
     # Use pre-fetched translations if provided, otherwise fetch from DB
     if wbw_translations is not None:
@@ -368,7 +377,9 @@ def _annotate_words_internal(
         elif batch_count >= 2:
             # Multi-word batch: Combine first, then annotate
             combined = _combine_images_rtl(batch_images, word_config.word_spacing, word_config.background_color)
-            annotated_images.append(_annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color))
+            annotated_images.append(
+                _annotate_image(combined, current_wbw, font, word_config.annotation_color, word_config.background_color)
+            )
             if texts is not None:
                 batch_text = " ".join(texts[i : i + batch_count]) if i < len(texts) else ""
                 annotated_texts.append(batch_text)
@@ -385,7 +396,7 @@ def _annotate_words_internal(
                 word_config=word_config,
                 db=db,
                 translation=current_wbw,
-                text=txt
+                text=txt,
             )
             annotated_images.append(ann_img)
 

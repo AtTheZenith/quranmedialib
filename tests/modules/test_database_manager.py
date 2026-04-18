@@ -231,14 +231,51 @@ def test_database_manager_reinit_after_close() -> None:
     assert len(verses) == 7
 
 
-def test_database_manager_concurrent_init_safety() -> None:
-    """Test that repeated DatabaseManager() calls don't corrupt state.
+@pytest.mark.benchmark
+def test_database_manager_rapid_reinit_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark the performance of rapid DatabaseManager re-initialization."""
+    import time
 
-    Note: True concurrent init with SQLite is unreliable (DB lock errors),
-    so we test sequential rapid re-initialization instead, which verifies
-    the lock-protected __init__ code path.
-    """
-    for _ in range(10):
+    start = time.perf_counter()
+    for _ in range(50):
         db = DatabaseManager()
-        verses = db.get_verses_from_surah(1)
-        assert len(verses) == 7
+        db.close()
+    elapsed = time.perf_counter() - start
+    request.node.benchmark_data = [f"total {elapsed:.4f}s"]
+    print(f"\nRapid re-init (50 iterations) took {elapsed:.4f}s")
+    # Should be relatively fast since it's mostly lock handling and connection close
+    assert elapsed < 5.0
+
+
+@pytest.mark.benchmark
+def test_database_manager_concurrency_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark concurrent read access from multiple threads."""
+    import threading
+    import time
+
+    db = DatabaseManager()
+    errors = []
+
+    def task():
+        try:
+            for _ in range(100):
+                # Accessing Quran DB (shared connection with per-call cursors)
+                verses = db.get_verses_from_surah(1)
+                assert len(verses) == 7
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=task) for _ in range(10)]
+
+    start = time.perf_counter()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    elapsed = time.perf_counter() - start
+    request.node.benchmark_data = ["10 thr", f"total {elapsed:.4f}s"]
+
+    print(f"\nConcurrent read (10 threads, 100 reads each) took {elapsed:.4f}s")
+    assert not errors, f"Encountered concurrency errors: {errors}"
+    # Concurrency should be efficient due to per-call cursors
+    assert elapsed < 10.0

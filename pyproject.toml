@@ -13,11 +13,22 @@ dependencies = [
 dev = [
     "ruff>=0.5.0",
     "pytest>=8.0.0",
+    "psutil>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "benchmark: performance benchmarks (skipped by default)",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "psutil>=7.2.2",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quranmedialib"]
