@@ -44,7 +44,7 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
 
     # Process results (which are now paths)
     verse_count = 0
-    for i, paths in enumerate(surah_generator):
+    for _ in surah_generator:
         verse_count += 1
         if verse_count % 50 == 0:
             print(f"  Processed {verse_count} verses...")

@@ -312,22 +312,55 @@ def _render_page(
 
         current_x = _get_row_start_x(row_width, config)
 
-        for item in row:
-            word_image = item.image
-            w_w, w_h = word_image.size
-            # Vertical centering within the row's tallest item.
-            word_y = draw_y + (max_row_height - w_h) // 2
+        # OPTIM: Check if row can be merged into a single mask (L mode + uniform color)
+        # uniform color = all items use global color or all use SAME item.color
+        first_item_color = row[0].color if row else None
+        can_merge = all(item.image.mode == "L" and item.color == first_item_color for item in row)
 
-            # PERF: alpha_composite is faster than paste(mask=RGBA) for RGBA-on-RGBA
-            _alpha_composite(word_image, dest=(current_x - w_w, word_y))
-            current_x -= w_w + l_word_spacing
+        if can_merge:
+            # Stage 1: Build Row Mask (Fast 1-byte copies)
+            row_mask = Image.new("L", (row_width, max_row_height), 0)
+            _rx = 0  # relative x in row mask
+            for item in row:
+                word_image = item.image
+                w_w, w_h = word_image.size
+                word_y = (max_row_height - w_h) // 2
+                row_mask.paste(word_image, (_rx, word_y))
+                _rx += w_w + l_word_spacing
+
+            # Stage 2: Single paste onto page (1 slow alpha math call)
+            row_color = first_item_color if first_item_color is not None else word_config.word_color
+            page_image.paste(row_color, (current_x - row_width, draw_y), mask=row_mask)
+        else:
+            # Fallback: Word-by-word (Safe but slower)
+            for item in row:
+                word_image = item.image
+                w_w, w_h = word_image.size
+                # Vertical centering within the row's tallest item.
+                word_y = draw_y + (max_row_height - w_h) // 2
+
+                # Use item-specific color or fall back to global config
+                current_color = item.color if item.color is not None else word_config.word_color
+
+                # PERF: Use masked paste for grayscale masks (L), alpha_composite for RGBA
+                if word_image.mode == "L":
+                    page_image.paste(current_color, (current_x - w_w, word_y), mask=word_image)
+                else:
+                    _alpha_composite(word_image, dest=(current_x - w_w, word_y))
+                
+                current_x -= w_w + l_word_spacing
 
         draw_y += max_row_height + l_row_spacing
 
     return page_image
 
 
-def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, config: LayoutConfig) -> None:
+def _paste_translation_image(
+    page_image: Image.Image,
+    trans_img: Image.Image,
+    config: LayoutConfig,
+    text_color: Color = (255, 255, 255, 255),
+) -> None:
     """Pastes a translation image onto a page based on configured alignment."""
     # Vertical placement
     trans_y = config.padding.top + config.timage_y_offset
@@ -361,7 +394,10 @@ def _paste_translation_image(page_image: Image.Image, trans_img: Image.Image, co
             config.image_height,
         )
 
-    if trans_img.mode == "RGBA":
+    # PERF: Use masked paste for grayscale masks (L), alpha_composite for RGBA
+    if trans_img.mode == "L":
+        page_image.paste(text_color, (trans_x, trans_y), mask=trans_img)
+    elif trans_img.mode == "RGBA":
         page_image.alpha_composite(trans_img, dest=(trans_x, trans_y))
     else:
         page_image.paste(trans_img, (trans_x, trans_y))
@@ -372,6 +408,7 @@ def frame(
     translation_images: Sequence[Image.Image | None] | None = None,
     config: LayoutConfig | None = None,
     word_config: WordConfig | None = None,
+    text_color: Color | None = None,
 ) -> list[Image.Image]:
     """Manages the 2D grid layout of word images into one or more pages.
 
@@ -434,7 +471,12 @@ def frame(
         # 5. Overlays: Translation images.
         if translation_images and page_index < len(translation_images):
             if trans_img := translation_images[page_index]:
-                _paste_translation_image(page_image, trans_img, config)
+                _paste_translation_image(
+                    page_image,
+                    trans_img,
+                    config,
+                    text_color=text_color or (255, 255, 255, 255),
+                )
 
         pages.append(page_image)
         current_index += items_consumed

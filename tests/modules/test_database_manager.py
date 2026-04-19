@@ -263,9 +263,9 @@ def test_database_manager_concurrency_benchmark(request: pytest.FixtureRequest) 
         except Exception as e:
             errors.append(e)
 
-    import os
+    from quranmedialib.config import CPU_COUNT
 
-    num_threads = os.cpu_count() or 4
+    num_threads = CPU_COUNT
     threads = [threading.Thread(target=task) for _ in range(num_threads)]
 
     start = time.perf_counter()
@@ -274,9 +274,9 @@ def test_database_manager_concurrency_benchmark(request: pytest.FixtureRequest) 
     for t in threads:
         t.join()
     elapsed = time.perf_counter() - start
-    request.node.benchmark_data = ["10 thr", f"total {elapsed:.4f}s"]
+    request.node.benchmark_data = [f"{num_threads} thr", f"total {elapsed:.4f}s"]
 
-    print(f"\nConcurrent read (10 threads, 100 reads each) took {elapsed:.4f}s")
+    print(f"\nConcurrent read ({num_threads} threads, 100 reads each) took {elapsed:.4f}s")
     assert not errors, f"Encountered concurrency errors: {errors}"
     # Concurrency should be efficient due to per-call cursors
     assert elapsed < 10.0

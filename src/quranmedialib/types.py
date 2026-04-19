@@ -16,7 +16,7 @@ from __future__ import annotations
 import bisect
 import os
 import os.path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, NamedTuple
@@ -380,16 +380,16 @@ class WordItem:
 
     image: Image.Image
     text: str | None = None
+    color: Color | None = None
+    width: int = field(init=False)
+    height: int = field(init=False)
 
-    @property
-    def width(self) -> int:
-        """Width of the word image in pixels."""
-        return self.image.width
-
-    @property
-    def height(self) -> int:
-        """Height of the word image in pixels."""
-        return self.image.height
+    def __post_init__(self):
+        """Pre-calculate image dimensions to speed up layout loops."""
+        if self.image is not None:
+            # Use object.__setattr__ because the dataclass is frozen
+            object.__setattr__(self, "width", self.image.width)
+            object.__setattr__(self, "height", self.image.height)
 
 
 # === Configuration Types ===

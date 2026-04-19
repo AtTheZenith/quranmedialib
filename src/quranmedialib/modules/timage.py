@@ -133,7 +133,9 @@ def get_timage(
     tw = max(total_width, 1)
     th = max(total_height, 1)
 
-    img = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+    # Detect if we can use an 'L' mask (no color tags in original text)
+    use_mask = "#" not in s_text
+    img = Image.new("L" if use_mask else "RGBA", (tw, th), 0 if use_mask else (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     _draw_text = draw.text
 
@@ -168,7 +170,12 @@ def get_timage(
                 txt = "".join(w.text for w in batch_words)
                 sf = last_style[0]
                 sa, _ = sf.getmetrics()
-                _draw_text((curr_x, current_y + (max_ascent - sa)), txt, font=sf, fill=last_style[1])
+                _draw_text(
+                    (curr_x, current_y + (max_ascent - sa)),
+                    txt,
+                    font=sf,
+                    fill=255 if use_mask else last_style[1],
+                )
                 curr_x += sum(w.width for w in batch_words)
                 batch_words = []
 
@@ -179,7 +186,12 @@ def get_timage(
             txt = "".join(w.text for w in batch_words)
             sf = last_style[0]
             sa, _ = sf.getmetrics()
-            _draw_text((curr_x, current_y + (max_ascent - sa)), txt, font=sf, fill=last_style[1])
+            _draw_text(
+                (curr_x, current_y + (max_ascent - sa)),
+                txt,
+                font=sf,
+                fill=255 if use_mask else last_style[1],
+            )
 
         current_y += l_height + l_spacing
 
