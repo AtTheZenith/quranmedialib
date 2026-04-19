@@ -24,10 +24,13 @@ def _get_wimage_cached(
     font_path: str,
     font_size: int,
     word_padding: tuple[int, int, int, int],
-    word_color: tuple[int, ...],
     bg_color: tuple[int, ...],
 ) -> Image.Image:
-    """Cached internal renderer. Returns new PIL Image for the given text + config."""
+    """Cached internal renderer. Returns new PIL Image for the given text + config.
+
+    Uses mode 'L' (8-bit pixels, black and white) to serve as an alpha mask.
+    The text is rendered in white (255) on a black background (0).
+    """
     font = _load_font_base(font_path, font_size)
 
     ascent, descent = font.getmetrics()
@@ -40,14 +43,15 @@ def _get_wimage_cached(
     img_w = max(1, int(w + padding.horizontal))
     img_h = max(1, int(h + padding.vertical))
 
-    img = Image.new("RGBA", (img_w, img_h), color=(0, 0, 0, 0))
+    # mode 'L' for efficient alpha masking
+    img = Image.new("L", (img_w, img_h), color=0)
     draw = ImageDraw.Draw(img)
 
     draw.text(
         (padding.left - bbox[0], padding.top + ascent),
         text,
         font=font,
-        fill=word_color,
+        fill=255,
         anchor="ls",
     )
 
@@ -55,23 +59,22 @@ def _get_wimage_cached(
 
 
 def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
-    """Converts an Arabic word string into an image.
+    """Converts an Arabic word string into an image mask.
 
-    Results are cached (LRU, max 2048 entries) based on text + config parameters.
-    Repeated words (e.g., "Allah" × 2,699) render once and reuse the cached image.
+    Results are cached (LRU) based on text + config parameters.
+    Returns an 'L' mode image representing the glyph mask.
 
     Args:
         text: The Arabic text to render.
         word_config: Configuration containing font size, colors, padding, and font.
 
     Returns:
-        A PIL Image containing the rendered text with padding.
+        A PIL Image (mode 'L') containing the rendered text mask.
     """
     return _get_wimage_cached(
         text,
         str(word_config.font.path),
         word_config.font_size,
         tuple(word_config.word_padding),
-        word_config.word_color,
         word_config.background_color,
     )

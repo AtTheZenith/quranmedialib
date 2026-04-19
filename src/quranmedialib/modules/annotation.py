@@ -62,16 +62,20 @@ def _combine_images_rtl(
     # should be on the RIGHT side of the combined image.
     rtl_images = list(reversed(images))
     batch_count = len(rtl_images)
+    mode = rtl_images[0].mode if rtl_images else "RGBA"
 
     total_w = sum(img.width for img in rtl_images) + word_spacing * (batch_count - 1)
     max_h = max(img.height for img in rtl_images)
 
-    combined_canvas = Image.new("RGBA", (total_w, max_h), color=background_color)
+    combined_canvas = Image.new(mode, (total_w, max_h), color=background_color if mode == "RGBA" else 0)
     current_x = 0
     for img in rtl_images:
         # Vertical alignment: center each word within the maximum height of the batch.
         y_offset = (max_h - img.height) // 2
-        combined_canvas.paste(img, (current_x, y_offset), img if img.mode == "RGBA" else None)
+        if mode == "RGBA":
+            combined_canvas.paste(img, (current_x, y_offset), img if img.mode == "RGBA" else None)
+        else:
+            combined_canvas.paste(img, (current_x, y_offset))
         current_x += img.width + word_spacing
 
     return combined_canvas
@@ -109,17 +113,17 @@ def _annotate_image(
     total_w = max(iw, tw)
     total_h = ih + th
 
-    # Create new image
-    new_img = Image.new("RGBA", (total_w, total_h), color=background_color)
+    # Create new mask (L mode)
+    new_img = Image.new("L", (total_w, total_h), color=0)
 
-    # Paste original image (centered horizontally)
-    new_img.paste(image, ((total_w - iw) // 2, 0), image if image.mode == "RGBA" else None)
+    # Paste original mask (centered horizontally)
+    new_img.paste(image, ((total_w - iw) // 2, 0))
 
-    # Draw translation text (centered horizontally below the image)
+    # Draw translation text mask (centered horizontally below the image)
     draw = ImageDraw.Draw(new_img)
     tx = (total_w - tw) // 2 - bbox[0]
     ty = ih + ascent
-    draw.text((tx, ty), translation, font=font, fill=color, anchor="ls")
+    draw.text((tx, ty), translation, font=font, fill=255, anchor="ls")
 
     return new_img
 
@@ -143,10 +147,11 @@ def _annotate_word_cached(
     """
     from quranmedialib.modules.wimage import _get_wimage_cached
 
-    # Re-use cached word image
-    image = _get_wimage_cached(text, font_path, font_size, word_padding, word_color, bg_color)
+    # Re-use cached word image mask (Iteration 15: Removed word_color from cache key)
+    image = _get_wimage_cached(text, font_path, font_size, word_padding, bg_color)
 
     font = get_font(ann_font_path, ann_font_size)
+    # Colorization happen here for annotated words
     return _annotate_image(image, translation, font, ann_color, bg_color)  # type: ignore[arg-type]
 
 

@@ -17,12 +17,13 @@ try:
 except ImportError:
     psutil = None
 
-logger = logging.getLogger(__name__)
+from quranmedialib.config import (
+    DEFAULT_AGGREGATE_LIMIT_MB,
+    DEFAULT_PROCESS_LIMIT_MB,
+    MEMORY_FLUSH_THRESHOLD_RATIO,
+)
 
-# Constants for default limits
-DEFAULT_PROCESS_LIMIT_MB = 256.0
-DEFAULT_AGGREGATE_LIMIT_MB = 2048.0
-MEMORY_FLUSH_THRESHOLD_RATIO = 0.8  # Flush caches when usage exceeds 80% of limit
+logger = logging.getLogger(__name__)
 
 
 class MemoryLimitExceededError(RuntimeError):

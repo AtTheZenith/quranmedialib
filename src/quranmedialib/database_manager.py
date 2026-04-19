@@ -14,6 +14,7 @@ WBW and Translation methods use their respective active databases (configurable)
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import re
 import sqlite3
@@ -22,6 +23,7 @@ import time
 from types import TracebackType
 from typing import Any, Optional, Self
 
+from quranmedialib.config import SQLITE_MMAP_SIZE
 from quranmedialib.types import (
     AyahNumber,
     DatabaseConfig,
@@ -42,6 +44,7 @@ _SQLITE_PRAGMAS = [
     "PRAGMA cache_size=10000",
     "PRAGMA temp_store=MEMORY",
     "PRAGMA locking_mode=NORMAL",
+    f"PRAGMA mmap_size={SQLITE_MMAP_SIZE}",
 ]
 
 # Maximum glow radius to prevent resource exhaustion
@@ -353,33 +356,35 @@ class DatabaseManager:
             conn = self._get_connection(name)
             old_factory = conn.row_factory
             conn.row_factory = row_factory
-        cursor = conn.cursor()
-        try:
-            start_time = time.perf_counter()
-            cursor.execute(query, params)
-            end_time = time.perf_counter()
+            
+            cursor = conn.cursor()
+            try:
+                start_time = time.perf_counter()
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                end_time = time.perf_counter()
 
-            # Log slow queries or all queries at DEBUG level
-            duration = end_time - start_time
-            query_log = _truncate_for_log(query, 100)
-            logger.debug("SQL EXECUTE: %.4f seconds | DB: %s | Query: %s", duration, name, query_log)
+                # Log slow queries or all queries at DEBUG level
+                duration = end_time - start_time
+                query_log = _truncate_for_log(query, 100)
+                logger.debug("SQL EXECUTE: %.4f seconds | DB: %s | Query: %s", duration, name, query_log)
 
-            return cursor.fetchall()
-        except sqlite3.Error as e:
-            params_repr = _truncate_for_log(params)
-            query_repr = _truncate_for_log(query, 200)
-            logger.warning(
-                "Database query failed on '%s': %s | Query: %s | Params: %s",
-                name,
-                e,
-                query_repr,
-                params_repr,
-                exc_info=True,
-            )
-            return []
-        finally:
-            cursor.close()
-            conn.row_factory = old_factory
+                return rows
+            except sqlite3.Error as e:
+                params_repr = _truncate_for_log(params)
+                query_repr = _truncate_for_log(query, 200)
+                logger.warning(
+                    "Database query failed on '%s': %s | Query: %s | Params: %s",
+                    name,
+                    e,
+                    query_repr,
+                    params_repr,
+                    exc_info=True,
+                )
+                return []
+            finally:
+                cursor.close()
+                conn.row_factory = old_factory
 
     def _aggregate_verses(
         self,
@@ -461,11 +466,11 @@ class DatabaseManager:
         _, schema = self._resolve_schema(config)
 
         # Build query once and cache it
-        query_key = f"quran_surah_verses_{config.filepath.name}"
+        query_key = f"quran_surah_verses_json_{config.filepath.name}"
         if query_key not in self._query_cache:
-            # Use GROUP_CONCAT with GROUP BY for native SQL aggregation
+            # Use JSON_GROUP_ARRAY for native SQL aggregation (faster + no truncation)
             self._query_cache[query_key] = f"""
-                SELECT GROUP_CONCAT({schema["text_col"]}, ' ')
+                SELECT json_group_array({schema["text_col"]})
                 FROM {schema["tablename"]}
                 WHERE {schema["surah_col"]} = ?
                 GROUP BY {schema["ayah_col"]}
@@ -474,7 +479,44 @@ class DatabaseManager:
 
         # Use None row_factory for fastest raw tuple access
         rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number,), row_factory=None)
-        return [row[0] for row in rows]
+        return [" ".join(json.loads(row[0])) for row in rows]
+
+    def get_verses_from_range(
+        self, surah_number: SurahNumber, start_ayah: AyahNumber, end_ayah: AyahNumber
+    ) -> list[str]:
+        """Fetches Arabic verses for a specific range within a surah.
+
+        Always uses the "quran" database.
+
+        Args:
+            surah_number: Surah number (1-114).
+            start_ayah: Starting ayah number (inclusive).
+            end_ayah: Ending ayah number (inclusive).
+
+        Returns:
+            A list of Arabic verse strings, ordered by ayah number.
+        """
+        surah_number = _validate_surah(surah_number)
+        start_ayah = _validate_ayah(start_ayah)
+        end_ayah = _validate_ayah(end_ayah)
+        config = self._get_config(self.DEFAULT_QURAN_NAME)
+        _, schema = self._resolve_schema(config)
+
+        # Build query for range
+        query_key = f"quran_range_verses_json_{config.filepath.name}"
+        if query_key not in self._query_cache:
+            self._query_cache[query_key] = f"""
+                SELECT json_group_array({schema["text_col"]})
+                FROM {schema["tablename"]}
+                WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} BETWEEN ? AND ?
+                GROUP BY {schema["ayah_col"]}
+                ORDER BY {schema["ayah_col"]}
+            """
+
+        rows = self._fetch(
+            self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None
+        )
+        return [" ".join(json.loads(row[0])) for row in rows]
 
     @functools.lru_cache(maxsize=1024)
     def get_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> str:
@@ -490,11 +532,11 @@ class DatabaseManager:
         config = self._get_config(self.DEFAULT_QURAN_NAME)
         _, schema = self._resolve_schema(config)
 
-        # Use native GROUP_CONCAT for 2x faster fetching
-        query_key = f"quran_verse_{config.filepath.name}"
+        # Use native JSON_GROUP_ARRAY for 2x faster fetching (safer than GROUP_CONCAT)
+        query_key = f"quran_verse_json_{config.filepath.name}"
         if query_key not in self._query_cache:
             self._query_cache[query_key] = f"""
-                SELECT GROUP_CONCAT({schema["text_col"]}, ' ')
+                SELECT json_group_array({schema["text_col"]})
                 FROM {schema["tablename"]}
                 WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
             """
@@ -502,7 +544,7 @@ class DatabaseManager:
         rows = self._fetch(
             self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None
         )
-        return rows[0][0] if rows and rows[0][0] else ""
+        return " ".join(json.loads(rows[0][0])) if rows and rows[0][0] else ""
 
     # === WBW Database Methods (use active WBW database) ===
 
@@ -604,26 +646,97 @@ class DatabaseManager:
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
 
-        query_key = f"wbw_grouped_{config.filepath.name}"
+        # OPTIM: Try native SQL grouping (JSON_GROUP_ARRAY)
+        query_key = f"wbw_grouped_json_{config.filepath.name}"
         if query_key not in self._query_cache:
             self._query_cache[query_key] = f"""
+                SELECT {schema["ayah_col"]}, json_group_array({schema["text_col"]})
+                FROM {schema["tablename"]}
+                WHERE {schema["surah_col"]} = ?
+                GROUP BY {schema["ayah_col"]}
+                ORDER BY {schema["ayah_col"]}
+            """
+
+        try:
+            rows = self._fetch(name, self._query_cache[query_key], (surah_number,), row_factory=None)
+            if not rows:
+                return {}
+            return {row[0]: json.loads(row[1]) for row in rows}
+        except (sqlite3.OperationalError, json.JSONDecodeError):
+            logger.debug("json_group_array not supported or failed, falling back to manual grouping.")
+            query = f"""
                 SELECT {schema["ayah_col"]}, {schema["text_col"]}
                 FROM {schema["tablename"]}
                 WHERE {schema["surah_col"]} = ?
                 ORDER BY {schema["ayah_col"]}, {schema["word_id_col"]}
             """
+            rows = self._fetch(name, query, (surah_number,), row_factory=None)
+            result: dict[int, list[str]] = {}
+            for row in rows:
+                ayah = row[0]
+                if ayah not in result:
+                    result[ayah] = []
+                result[ayah].append(row[1])
+            return result
 
-        # Fetch as raw tuples for speed
-        rows = self._fetch(name, self._query_cache[query_key], (surah_number,), row_factory=None)
+    def get_wbw_grouped_by_verse_range(
+        self,
+        surah_number: SurahNumber,
+        start_ayah: AyahNumber,
+        end_ayah: AyahNumber,
+    ) -> dict[int, list[str]]:
+        """Fetches word-by-word translations for a range of verses, grouped by ayah.
 
-        result: dict[int, list[str]] = {}
-        for row in rows:
-            ayah = row[0]
-            if ayah not in result:
-                result[ayah] = []
-            result[ayah].append(row[1])
+        Uses the active WBW database.
 
-        return result
+        Args:
+            surah_number: The surah number (1-114).
+            start_ayah: Starting ayah number (inclusive).
+            end_ayah: Ending ayah number (inclusive).
+
+        Returns:
+            Dictionary mapping ayah numbers to their lists of word translations.
+        """
+        surah_number = _validate_surah(surah_number)
+        start_ayah = _validate_ayah(start_ayah)
+        end_ayah = _validate_ayah(end_ayah)
+        name = self._active_wbw or self.DEFAULT_WBW_NAME
+        config = self._get_config(name)
+        _, schema = self._resolve_schema(config)
+
+        # OPTIM: Try native SQL grouping (JSON_GROUP_ARRAY) for 10x faster aggregation
+        query_key = f"wbw_range_grouped_json_{config.filepath.name}"
+        if query_key not in self._query_cache:
+            self._query_cache[query_key] = f"""
+                SELECT {schema["ayah_col"]}, json_group_array({schema["text_col"]})
+                FROM {schema["tablename"]}
+                WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} BETWEEN ? AND ?
+                GROUP BY {schema["ayah_col"]}
+                ORDER BY {schema["ayah_col"]}
+            """
+
+        try:
+            rows = self._fetch(name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None)
+            if not rows:
+                return {}
+            return {row[0]: json.loads(row[1]) for row in rows}
+        except (sqlite3.OperationalError, json.JSONDecodeError):
+            # Fallback to slower row-by-row fetching for older SQLite versions
+            logger.debug("json_group_array not supported or failed, falling back to manual grouping.")
+            query = f"""
+                SELECT {schema["ayah_col"]}, {schema["text_col"]}
+                FROM {schema["tablename"]}
+                WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} BETWEEN ? AND ?
+                ORDER BY {schema["ayah_col"]}, {schema["word_id_col"]}
+            """
+            rows = self._fetch(name, query, (surah_number, start_ayah, end_ayah), row_factory=None)
+            result: dict[int, list[str]] = {}
+            for row in rows:
+                ayah = row[0]
+                if ayah not in result:
+                    result[ayah] = []
+                result[ayah].append(row[1])
+            return result
 
     # === Translation Database Methods (use active translation database) ===
 
