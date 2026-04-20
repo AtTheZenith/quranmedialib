@@ -128,7 +128,7 @@ def _annotate_image(
     return new_img
 
 
-@functools.lru_cache(maxsize=512)
+@functools.lru_cache(maxsize=1024)
 def _annotate_word_cached(
     text: str,
     translation: str,
@@ -147,7 +147,7 @@ def _annotate_word_cached(
     """
     from quranmedialib.modules.wimage import _get_wimage_cached
 
-    # Re-use cached word image mask (Iteration 15: Removed word_color from cache key)
+    # Re-use cached word image mask
     image = _get_wimage_cached(text, font_path, font_size, word_padding, bg_color)
 
     font = get_font(ann_font_path, ann_font_size)

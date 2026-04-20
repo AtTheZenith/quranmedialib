@@ -190,18 +190,6 @@ class VerseRangeWorkflow(BaseWorkflow):
                     yield [Image.frombytes(m, s, d) for m, s, d in result]
 
 
-# process-local cache for fonts to avoid redundant re-initialization in workers.
-_WORKER_FONT_CACHE: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
-
-
-def _get_worker_font(path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Retrieves a font instance from the process-local cache."""
-    key = (path, size)
-    if key not in _WORKER_FONT_CACHE:
-        _WORKER_FONT_CACHE[key] = ImageFont.truetype(path, size)
-    return _WORKER_FONT_CACHE[key]
-
-
 def _render_verse_worker(
     verse_data: list[tuple[int, list[str]]],
     surah: int,
@@ -237,11 +225,12 @@ def _render_verse_worker(
     ayahs = [v[0] for v in verse_data]
     start_ayah, end_ayah = min(ayahs), max(ayahs)
 
-    # Fetch data once for the batch range
-    arabic_verses = db.get_verses_from_range(surah, start_ayah, end_ayah)
-    # Re-index to handle non-contiguous ranges
-    arabic_map = {ayah: txt for ayah, txt in zip(range(start_ayah, end_ayah + 1), arabic_verses)}
-    all_wbw = db.get_wbw_grouped_by_verse_range(surah, start_ayah, end_ayah) if annotate else {}
+    # Fetch surah-level data once (cached in the manager instance)
+    arabic_verses = db.get_verses_from_surah(surah)
+    all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
+
+    # Re-index to ayah number (1-based)
+    arabic_map = {i + 1: txt for i, txt in enumerate(arabic_verses)}
 
     batch_results = []
     flush_trigger = DEFAULT_PROCESS_LIMIT_MB * MEMORY_FLUSH_THRESHOLD_RATIO
