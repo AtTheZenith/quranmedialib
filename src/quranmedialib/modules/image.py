@@ -30,41 +30,32 @@ def _compute_downscaled_size(image: Image.Image, scale: int) -> tuple[int, int]:
 def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Image:
     """Multiplies the luminance of each pixel with the specified color.
 
-    This function colorizes the image efficiently by treating the input's alpha
-    channel as a mask for the new solid color.
+    Treats the input's alpha channel (or luminance if L) as a mask for the new solid color.
 
     Args:
         image: The input PIL Image to colorize.
-        color: The RGB or RGBA color to multiply with. If RGB, alpha defaults
-            to 255. Values should be in range 0-255.
+        color: The RGB or RGBA color to multiply with. If RGB, alpha defaults to 255.
 
     Returns:
         The colorized PIL Image as a new object.
-
-    Raises:
-        ValueError: If color tuple length is not 3 or 4.
     """
     if len(color) not in (3, 4):
-        raise ValueError(f"Color must be RGB or RGBA tuple (3 or 4 values), got {len(color)} values: {color}")
+        raise ValueError(f"Color must be RGB or RGBA tuple (3 or 4 values), got {len(color)}")
 
     # Ensure color is RGBA
-    if len(color) == 3:
-        color = (*color, 255)
+    rgba_color = color if len(color) == 4 else (*color, 255)
 
-    # Fast path for mask-like images (already have alpha or are grayscale)
-    # PERF: use putalpha directly on a new color-filled canvas
+    # Fast path for mask-like images or alpha images
     if image.mode in ("RGBA", "LA", "L"):
-        # getchannel is faster than split()
         mask = image.getchannel("A") if "A" in image.mode else image
-        result = Image.new("RGBA", image.size, color)
+        result = Image.new("RGBA", image.size, rgba_color)
         result.putalpha(mask)
         return result
 
-    # Fallback for complex images: convert directly to RGBA via L
-    # converting to L preserves luminance weights (R*299 + G*587 + B*114)
-    l_mask = image.convert("L")
-    result = Image.new("RGBA", image.size, color)
-    result.putalpha(l_mask)
+    # Fallback for RGB/etc: use luminance as mask
+    mask = image.convert("L")
+    result = Image.new("RGBA", image.size, rgba_color)
+    result.putalpha(mask)
     return result
 
 
@@ -115,36 +106,22 @@ def _glow_rgba(
 ) -> Image.Image:
     """Composite glow layer behind original content for RGBA images."""
     if strength != 1.0:
-        # Optimized alpha multiplication
         glow_alpha = ImageEnhance.Brightness(glow_alpha).enhance(strength)
 
     glow_layer = glow_color.convert("RGBA")
     glow_layer.putalpha(glow_alpha)
 
-    # Build stack: Transparent Base -> Glow Layer -> Original Content
+    # Build stack: Glow Layer -> Original Content
     result = Image.new("RGBA", img_rgba.size, (0, 0, 0, 0))
     result.alpha_composite(glow_layer)
     result.alpha_composite(img_rgba)
-
     return result
 
 
 def _prepare_color_base(
     img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]
 ) -> Image.Image:
-    """Prepares the color base for the glow effect by bleeding colors into transparent areas.
-
-    This prevents grey/dark edges when blurring RGBA images.
-
-    Args:
-        img_rgba: The RGBA source image.
-        img_rgb: The RGB version of the image.
-        alpha: The alpha channel.
-        small_size: Pre-computed downscaled size (avoid redundant calculation).
-
-    Returns:
-        The color base image ready for blurring.
-    """
+    """Prepares the color base for the glow effect by bleeding colors into transparent areas."""
     small = img_rgba.resize(small_size, resample=Image.Resampling.BOX)
     color_base = small.resize(img_rgba.size, resample=Image.Resampling.NEAREST).convert("RGB")
     color_base.paste(img_rgb, mask=alpha)

@@ -41,7 +41,15 @@ def test_api_exports_completeness() -> None:
         # Text rendering types
         "StyledWord",
         "Line",
+        # Exceptions
+        "QuranMediaLibError",
+        "ResourceError",
+        "DatabaseError",
+        "WorkflowError",
+        "ValidationError",
+        "LayoutError",
         # Presets
+
         "FONT_HAFS",
         "FONT_INTER",
         "FONT_INTER_ITALIC",

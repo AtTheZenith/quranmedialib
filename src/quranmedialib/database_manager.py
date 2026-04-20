@@ -20,10 +20,12 @@ import re
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from types import TracebackType
 from typing import Any, Optional, Self
 
 from quranmedialib.config import SQLITE_MMAP_SIZE
+from quranmedialib.exceptions import DatabaseError, ValidationError
 from quranmedialib.types import (
     AyahNumber,
     DatabaseConfig,
@@ -81,24 +83,24 @@ def _validate_sql_identifier(name: str, context: str = "identifier") -> str:
         The validated identifier.
 
     Raises:
-        ValueError: If the identifier contains invalid characters.
+        ValidationError: If the identifier contains invalid characters.
     """
     if not _SQL_IDENTIFIER.match(name):
-        raise ValueError(f"Invalid SQL {context}: {name!r}. Must be alphanumeric with underscores only.")
+        raise ValidationError(f"Invalid SQL {context}: {name!r}. Must be alphanumeric with underscores only.")
     return name
 
 
 def _validate_surah(surah: int) -> int:
     """Validate surah number is within valid range."""
     if not MIN_SURAH <= surah <= MAX_SURAH:
-        raise ValueError(f"Surah number must be between {MIN_SURAH} and {MAX_SURAH}, got {surah}")
+        raise ValidationError(f"Surah number must be between {MIN_SURAH} and {MAX_SURAH}, got {surah}")
     return surah
 
 
 def _validate_ayah(ayah: int) -> int:
     """Validate ayah number is within valid range."""
     if not MIN_AYAH <= ayah <= MAX_AYAH:
-        raise ValueError(f"Ayah number must be between {MIN_AYAH} and {MAX_AYAH}, got {ayah}")
+        raise ValidationError(f"Ayah number must be between {MIN_AYAH} and {MAX_AYAH}, got {ayah}")
     return ayah
 
 
@@ -136,58 +138,44 @@ class DatabaseManager:
     Translation methods use the active translation database (configurable via set_active_translation).
     """
 
-    _instance: Optional[Self] = None
-    _init_lock = threading.Lock()
-    _state_lock = threading.RLock()
+    _instance: Optional[DatabaseManager] = None
+    _lock = threading.RLock()
 
     # Default connection names
     DEFAULT_QURAN_NAME = "quran"
     DEFAULT_WBW_NAME = "wbw"
     DEFAULT_TRANSLATION_NAME = "translation"
 
-    def __new__(cls) -> Self:
-        if cls._instance is not None:
-            return cls._instance
-        with cls._init_lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
-                cls._instance._initialized = False
-            return cls._instance
+    def __new__(cls) -> DatabaseManager:
+        """Standard thread-safe singleton pattern."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self) -> None:
         """Initializes database connections and registers packaged databases.
 
-        Automatically registers:
-        - "quran": Default Quran text database
-        - "wbw": Default word-by-word translation database
-        - "translation": Default English translation (Sahih International)
-
-        Raises:
-            sqlite3.Error: If database initialization fails.
+        Automatically registers packaged databases on first initialization.
         """
-        # Thread-safe check-and-init using dedicated init lock
-        with type(self)._init_lock:
+        if getattr(self, "_initialized", False):
+            return
+
+        with self._lock:
             if getattr(self, "_initialized", False):
                 return
 
-            with self._state_lock:
-                # Auto-close orphaned connections before re-initialization
-                if hasattr(self, "_connections") and self._connections:
-                    logger.warning(
-                        "DatabaseManager re-initialized without calling .close() first. "
-                        "Automatically closing orphaned connections."
-                    )
-                    self.close()
+            self._registry: dict[str, dict[str, Any]] = {}
+            self._connections: dict[str, sqlite3.Connection] = {}
+            self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
+            self._active_wbw: Optional[str] = None
+            self._active_translation: Optional[str] = None
 
-                self._registry: dict[str, dict[str, Any]] = {}
-                self._connections: dict[str, sqlite3.Connection] = {}
-                self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
-                self._active_wbw: Optional[str] = None
-                self._active_translation: Optional[str] = None
-
-                # Performance caches
-                self._schema_cache: dict[str, dict[str, str]] = {}
-                self._query_cache: dict[str, str] = {}
+            # Performance caches
+            self._schema_cache: dict[str, dict[str, str]] = {}
+            self._query_cache: dict[str, str] = {}
 
             try:
                 # Import presets lazily to avoid circular import issues
@@ -252,7 +240,7 @@ class DatabaseManager:
 
         conn.row_factory = sqlite3.Row
 
-        with self._state_lock:
+        with self._lock:
             self._connections[name] = conn
             self._configs[name] = config
             self._registry[name] = {
@@ -261,7 +249,7 @@ class DatabaseManager:
             }
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
-        """Internal method to add a connection without validation (used during initialization)."""
+        """Internal method to add a connection without validation."""
         try:
             self._register_connection(name, config)
             logger.debug("Added internal database connection '%s' -> %s", name, config.filepath)
@@ -288,16 +276,14 @@ class DatabaseManager:
     def set_active_translation(self, name: str) -> None:
         """Set the active translation database for subsequent translation fetch operations.
 
-        Does not affect Quran or WBW methods.
-
         Args:
-            name: Name of a registered translation database (e.g., "translation", "ur_jalandhry").
+            name: Name of a registered translation database.
 
         Raises:
             KeyError: If the name is not a registered connection.
         """
         self._validate_state()
-        with self._state_lock:
+        with self._lock:
             if name not in self._registry:
                 raise KeyError(f"Unknown translation: {name}. Available: {list(self._registry.keys())}")
             self._active_translation = name
@@ -310,16 +296,14 @@ class DatabaseManager:
     def set_active_wbw(self, name: str) -> None:
         """Set the active WBW database for subsequent WBW fetch operations.
 
-        Does not affect Quran or Translation methods.
-
         Args:
-            name: Name of a registered WBW database (e.g., "wbw", "wbw_urdu").
+            name: Name of a registered WBW database.
 
         Raises:
             KeyError: If the name is not a registered connection.
         """
         self._validate_state()
-        with self._state_lock:
+        with self._lock:
             if name not in self._registry:
                 raise KeyError(f"Unknown WBW database: {name}. Available: {list(self._registry.keys())}")
             self._active_wbw = name
@@ -338,52 +322,39 @@ class DatabaseManager:
     ) -> list[Any]:
         """Execute a query on a named database and return all rows.
 
-        Creates a fresh cursor per call to avoid thread-safety issues
-        with shared cursor objects.
-
         Args:
             name: Registered connection name.
             query: SQL query string.
             params: Parameters to bind to the query.
-            row_factory: Row factory to use for this fetch. Defaults to sqlite3.Row.
-                Use None for fastest raw tuple access.
+            row_factory: Row factory to use for this fetch.
 
         Returns:
-            List of result rows. Returns empty list on sqlite3 errors after logging
-            at WARNING level with caller context for debugging.
+            List of result rows.
         """
-        with self._state_lock:
+        with self._lock:
             conn = self._get_connection(name)
             old_factory = conn.row_factory
             conn.row_factory = row_factory
-            
-            cursor = conn.cursor()
+
             try:
-                start_time = time.perf_counter()
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-                end_time = time.perf_counter()
+                with closing(conn.cursor()) as cursor:
+                    start_time = time.perf_counter()
+                    cursor.execute(query, params)
+                    rows = cursor.fetchall()
+                    end_time = time.perf_counter()
 
-                # Log slow queries or all queries at DEBUG level
-                duration = end_time - start_time
-                query_log = _truncate_for_log(query, 100)
-                logger.debug("SQL EXECUTE: %.4f seconds | DB: %s | Query: %s", duration, name, query_log)
+                    duration = end_time - start_time
+                    logger.debug("SQL EXECUTE: %.4fs | DB: %s | Query: %s", duration, name, _truncate_for_log(query))
 
-                return rows
+                    return rows
             except sqlite3.Error as e:
-                params_repr = _truncate_for_log(params)
-                query_repr = _truncate_for_log(query, 200)
                 logger.warning(
                     "Database query failed on '%s': %s | Query: %s | Params: %s",
-                    name,
-                    e,
-                    query_repr,
-                    params_repr,
+                    name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
                     exc_info=True,
                 )
                 return []
             finally:
-                cursor.close()
                 conn.row_factory = old_factory
 
     def _aggregate_verses(
@@ -392,9 +363,6 @@ class DatabaseManager:
         config: DatabaseConfig | WbwDatabaseConfig,
     ) -> list[str]:
         """Helper to aggregate verses by ayah number.
-
-        Rows are already ORDER BY ayah_col from SQL, so this processes
-        them in a single streaming pass without dict allocation or sorting.
 
         Args:
             rows: Query results containing ayah and text columns.
@@ -551,8 +519,6 @@ class DatabaseManager:
     def get_wbw_from_surah(self, surah_number: SurahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific surah.
 
-        Uses the active WBW database (set via set_active_wbw, default "wbw").
-
         Returns:
             List of word translations in order.
         """
@@ -572,8 +538,6 @@ class DatabaseManager:
 
     def get_wbw_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific verse.
-
-        Uses the active WBW database (set via set_active_wbw, default "wbw").
 
         Returns:
             List of word translations in order.
@@ -600,8 +564,6 @@ class DatabaseManager:
         word_index: WordIndex,
     ) -> Optional[str]:
         """Fetches the translation for a specific word in a specific verse.
-
-        Uses the active WBW database (set via set_active_wbw, default "wbw").
 
         Args:
             surah_number: The surah number.
@@ -632,7 +594,6 @@ class DatabaseManager:
     ) -> dict[int, list[str]]:
         """Fetches all word-by-word translations for a surah, grouped by ayah.
 
-        Uses the active WBW database (set via set_active_wbw, default "wbw").
         Caches full surah WBW results.
 
         Args:
@@ -686,8 +647,6 @@ class DatabaseManager:
         end_ayah: AyahNumber,
     ) -> dict[int, list[str]]:
         """Fetches word-by-word translations for a range of verses, grouped by ayah.
-
-        Uses the active WBW database.
 
         Args:
             surah_number: The surah number (1-114).
@@ -786,7 +745,6 @@ class DatabaseManager:
             surah_number: The surah number.
             ayah_number: The ayah (verse) number.
             translation_name: Optional name of the translation database to use.
-                If None, uses the active translation (set via set_active_translation).
 
         Returns:
             The verse translation string or None if not found.
@@ -819,7 +777,6 @@ class DatabaseManager:
             start_ayah: Starting ayah number (1-indexed, inclusive).
             end_ayah: Ending ayah number (inclusive).
             translation_name: Optional name of the translation database to use.
-                If None, uses the active translation (set via set_active_translation).
 
         Returns:
             List of verse translations in order by ayah number.
@@ -851,7 +808,7 @@ class DatabaseManager:
         # Check for missing ayahs and raise error if any are missing
         missing_ayah = [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]
         if missing_ayah:
-            raise ValueError(
+            raise ValidationError(
                 f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. "
                 "Database may be corrupted or incomplete."
             )
@@ -867,7 +824,7 @@ class DatabaseManager:
         if not getattr(self, "_initialized", False):
             return
 
-        with self._state_lock:
+        with self._lock:
             for name, conn in self._connections.items():
                 if conn:
                     conn.close()
@@ -883,16 +840,11 @@ class DatabaseManager:
             self._initialized = False
 
             # Reset singleton instance under init lock for complete cleanup
-            with type(self)._init_lock:
-                type(self)._instance = None
+            DatabaseManager._instance = None
 
     def minimize_caches(self) -> None:
-        """Clears performance caches to minimize memory footprint.
-
-        Useful in multi-process/multi-thread workers to free up RAM used by
-        pre-fetched metadata and cached query plans.
-        """
-        with self._state_lock:
+        """Clears performance caches to minimize memory footprint."""
+        with self._lock:
             self._schema_cache.clear()
             self._query_cache.clear()
 
@@ -905,6 +857,6 @@ class DatabaseManager:
         logger.debug("DatabaseManager caches minimized.")
 
         # Reset singleton instance so next DatabaseManager() creates a fresh instance
-        type(self)._instance = None
+        DatabaseManager._instance = None
 
         logger.info("DatabaseManager closed. All connections closed.")

@@ -6,6 +6,7 @@ from typing import Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import (
@@ -55,10 +56,14 @@ class IsolateWordsWorkflow(BaseWorkflow):
             list[Image.Image]: A list of pages for each isolated state.
 
         Raises:
-            ValueError: If verse_words is empty.
+            ValidationError: If verse_words is empty or surah/ayah out of range.
         """
+        surah = self._validate_surah(surah)
+        if ayah is not None:
+            self._validate_ayah(ayah)
+
         if not verse_words:
-            raise ValueError("verse_words must be a non-empty list")
+            raise ValidationError("verse_words must be a non-empty list")
 
         annotate = kwargs.get("annotate", True)
         highlight_style = kwargs.get("highlight_style", "#b#")

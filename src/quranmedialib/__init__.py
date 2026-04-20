@@ -58,6 +58,15 @@ from quranmedialib.presets import (
     SQUARE_PRESET,
     STORY_PRESET,
 )
+from quranmedialib.exceptions import (
+    DatabaseError,
+    LayoutError,
+    QuranMediaLibError,
+    ResourceError,
+    ValidationError,
+    WorkflowError,
+)
+from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.types import (
     MAX_FONT_SIZE,
     AyahNumber,
@@ -66,9 +75,7 @@ from quranmedialib.types import (
     FontResource,
     HorizontalAlignment,
     LayoutConfig,
-    Line,
     Padding,
-    StyledWord,
     SurahNumber,
     TextConfig,
     VerticalAlignment,
@@ -108,6 +115,13 @@ __all__ = [
     # Text rendering types
     "StyledWord",
     "Line",
+    # Exceptions
+    "QuranMediaLibError",
+    "ResourceError",
+    "DatabaseError",
+    "WorkflowError",
+    "ValidationError",
+    "LayoutError",
     # Presets
     "FONT_HAFS",
     "FONT_INTER",

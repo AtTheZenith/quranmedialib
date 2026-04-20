@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
+from quranmedialib import LANDSCAPE_PRESET, WorkflowError, DatabaseManager
 from quranmedialib.workflows.verse import VerseWorkflow
 
 
@@ -199,19 +199,20 @@ def test_verse_empty_text() -> None:
 
     # Surah 114 has only 6 verses, so ayah=7 returns empty text
     # (ayah is within 1-286 global range but doesn't exist in this surah)
-    with pytest.raises(ValueError, match="No verse text found"):
+    with pytest.raises(WorkflowError, match="No verse text found"):
         list(workflow.get_iterator(surah=114, ayah=7, translations=["test"], annotate=False))
 
 
 def test_base_workflow_none_configs_rejected() -> None:
-    """Test that BaseWorkflow raises ValueError when any config is None."""
+    """Test that BaseWorkflow raises ValidationError when any config is None."""
+    from quranmedialib import ValidationError
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
-    with pytest.raises(ValueError, match="must not be None"):
+    with pytest.raises(ValidationError, match="must not be None"):
         VerseWorkflow(None, text_config, word_config)  # type: ignore
 
-    with pytest.raises(ValueError, match="must not be None"):
+    with pytest.raises(ValidationError, match="must not be None"):
         VerseWorkflow(layout_config, None, word_config)  # type: ignore
 
-    with pytest.raises(ValueError, match="must not be None"):
+    with pytest.raises(ValidationError, match="must not be None"):
         VerseWorkflow(layout_config, text_config, None)  # type: ignore

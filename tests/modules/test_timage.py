@@ -8,9 +8,9 @@ import pytest
 from PIL import Image, ImageDraw, ImageOps
 
 from quranmedialib import LANDSCAPE_PRESET
+from quranmedialib.modules.text_layout import wrap_rich_text_balanced, wrap_rich_text_greedy
 from quranmedialib.modules.timage import (
     _parse_rich_text,
-    _wrap_rich_text_balanced,
     format_isolation_text,
     get_timage,
     normalize_highlight_style,
@@ -27,7 +27,7 @@ def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
 
     styled_words = _parse_rich_text(text, config, draw)
 
-    lines = _wrap_rich_text_balanced(styled_words, config.max_width)
+    lines = wrap_rich_text_balanced(styled_words, config.max_width)
     widths = [line.width for line in lines]
 
     assert len(lines) > 0, "Expected at least one line."

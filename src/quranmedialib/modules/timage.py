@@ -8,10 +8,18 @@ from typing import TYPE_CHECKING, Any, Sequence
 from PIL import Image, ImageDraw
 
 from quranmedialib.modules.font_cache import _load_font_base, get_font
-from quranmedialib.types import Line, StyledWord, TextConfig, balance_lines_pyramid
+from quranmedialib.modules.text_layout import (
+    Line,
+    StyledWord,
+    balance_lines_pyramid,
+    wrap_rich_text_balanced,
+    wrap_rich_text_greedy,
+)
+from quranmedialib.types import TextConfig
 
 if TYPE_CHECKING:
-    from quranmedialib.types import Line, StyledWord, TextConfig
+    from quranmedialib.modules.text_layout import Line, StyledWord
+    from quranmedialib.types import TextConfig
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +83,6 @@ def format_isolation_text(verse_text: Any, target_word_index: int = -1, *args: A
 
     result = " ".join(words)
     if style not in result:
-        # Legacy tests expect style string somewhere?
-        # Actually, test_format_isolation_text_target_index_bounds expects "#b#" in result.
-        # Original likely prefixed the whole thing or wrapped the word.
-        # If I wrap the whole string, it's safe.
         return f"{style}{result}"
     return result
 
@@ -108,9 +112,9 @@ def get_timage(
     styled_words = _parse_rich_text(s_text, config, None)
 
     if config.balanced_wrapping:
-        lines = _wrap_rich_text_balanced(styled_words, config.max_width)
+        lines = wrap_rich_text_balanced(styled_words, config.max_width)
     else:
-        lines = _wrap_rich_text_greedy(styled_words, config.max_width)
+        lines = wrap_rich_text_greedy(styled_words, config.max_width)
 
     if not lines:
         return None
@@ -311,145 +315,6 @@ def _parse_rich_text(
             styled_words.append(_StyledWord(token, font_norm, c_norm, w, h_norm))
 
     return styled_words
-
-
-def _wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
-    """Simple greedy line wrapping. Optimized for performance."""
-    if not styled_words:
-        return []
-
-    if max_width is None:
-        line = Line()
-        for w in styled_words:
-            line.add_word(w)
-        return [line]
-
-    lines = []
-    curr_line = Line()
-    curr_words = curr_line.words
-    curr_w = 0
-    curr_h = 0
-
-    for word in styled_words:
-        w_width = word.width
-        w_height = word.height
-        w_text = word.text
-
-        if curr_w + w_width > max_width:
-            if curr_words:
-                if curr_words[-1].text.isspace():
-                    last_space = curr_words.pop()
-                    curr_w -= last_space.width
-
-                curr_line.width = curr_w
-                curr_line.height = curr_h
-                lines.append(curr_line)
-
-            curr_line = Line()
-            curr_words = curr_line.words
-            curr_w = 0
-            curr_h = 0
-
-            if w_text.isspace():
-                continue
-
-        curr_words.append(word)
-        curr_w += w_width
-        if w_height > curr_h:
-            curr_h = w_height
-
-    if curr_words:
-        if curr_words[-1].text.isspace():
-            last_space = curr_words.pop()
-            curr_w -= last_space.width
-        curr_line.width = curr_w
-        curr_line.height = curr_h
-        lines.append(curr_line)
-
-    return lines
-
-
-def _wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
-    """Inverted pyramid line balancing (IPL-B).
-
-    Strictly enforces W_i >= W_{i+1} to create an inverted pyramid shape.
-    Delegates to the centralized balance_lines_pyramid utility.
-    """
-    if not styled_words or max_width is None:
-        return _wrap_rich_text_greedy(styled_words, max_width)
-
-    # Use space-stripped content as base
-    content = [w for w in styled_words if w.text.strip() or w.text == " "]
-    if not content:
-        return []
-
-    # Get baseline line count from greedy packing (Zero-allocation pass)
-    _widths = [w.width for w in content]
-
-    k_target = 0
-    if _widths:
-        k_target = 1
-        curr_w = 0
-        for w in _widths:
-            if curr_w + w > max_width:
-                k_target += 1
-                curr_w = w
-            else:
-                curr_w += w
-
-    if k_target <= 1:
-        return _wrap_rich_text_greedy(content, max_width)
-
-    # Pre-extract widths for performance
-    best_breaks = balance_lines_pyramid(
-        widths=_widths,
-        spacing=0,  # spacing already baked into StyledWord widths
-        target_k=k_target,
-        max_width=max_width,
-    )
-
-    # Reconstruct final Line objects only once using the optimal breaks
-    if best_breaks is None:
-        return _wrap_rich_text_greedy(content, max_width)
-
-    final_lines = []
-    current_line = Line()
-    break_set = set(best_breaks)
-    for i, word in enumerate(content):
-        if i in break_set:
-            final_lines.append(current_line)
-            current_line = Line()
-
-        # Manually update to avoid add_word() overhead while staying correct
-        current_line.words.append(word)
-        current_line.width += word.width
-        if word.height > current_line.height:
-            current_line.height = word.height
-
-    if current_line.words:
-        final_lines.append(current_line)
-
-    # Post-process: Strip trailing spaces from each line
-    for line in final_lines:
-        words = line.words
-        while words and words[-1].text.isspace():
-            last_word = words.pop()
-            line.width -= last_word.width
-
-    return final_lines
-
-
-def _draw_styled_word(
-    draw: ImageDraw.ImageDraw,
-    word: StyledWord,
-    pos: tuple[int, int],
-    ascent: int,
-) -> None:
-    """Draws a single word segment using baseline alignment."""
-    font = get_font(word.font_path, word.font_size)
-    curr_ascent, _ = font.getmetrics()
-    y_offset = ascent - curr_ascent
-    draw.text((pos[0], pos[1] + y_offset), word.text, font=font, fill=word.color)
 
 
 class _NotRendered:
