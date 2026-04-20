@@ -16,6 +16,7 @@ from typing import Any, Iterator
 from PIL import Image, ImageFont
 
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages
@@ -105,20 +106,17 @@ class VerseRangeWorkflow(BaseWorkflow):
             list[Image.Image]: List of page images for each verse in the range.
 
         Raises:
-            ValueError: If start_ayah > end_ayah (reversed range) or surah/ayah out of range.
+            ValidationError: If range is invalid.
         """
-        if not (1 <= surah <= 114):
-            raise ValueError(f"Surah must be between 1 and 114, got {surah}")
+        surah = self._validate_surah(surah)
         if end_ayah is None:
             end_ayah = start_ayah
 
-        if not (1 <= start_ayah <= 286):
-            raise ValueError(f"Ayah must be between 1 and 286, got start_ayah={start_ayah}")
-        if not (1 <= end_ayah <= 286):
-            raise ValueError(f"Ayah must be between 1 and 286, got end_ayah={end_ayah}")
+        self._validate_ayah(start_ayah)
+        self._validate_ayah(end_ayah)
 
         if start_ayah > end_ayah:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
             )
 
@@ -129,6 +127,7 @@ class VerseRangeWorkflow(BaseWorkflow):
             translations=translations,
             annotate=kwargs.get("annotate", True),
             separate_translations=kwargs.get("separate_translations", False),
+            parallel=kwargs.get("parallel", True),
         )
 
     def _process_range(
@@ -144,25 +143,16 @@ class VerseRangeWorkflow(BaseWorkflow):
     ) -> Iterator[list[Image.Image] | list[str]]:
         """Internal iterator implementation for processing a verse range.
 
-        Logic:
-        - If parallel=True, divides the range into N batches based on CPU count.
-        - Each batch is processed by a worker that fetches its own data from the DB.
-        - This minimizes IPC overhead (serialization) by orders of magnitude.
+        If output_dir is provided, yields lists of paths. Otherwise yields lists of images.
         """
         output_dir = kwargs.get("output_dir")
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
-
         total_verses = end_verse - start_verse + 1
 
         if parallel and total_verses > 1:
             renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
+            tasks = [(ayah, translations[i]) for i, ayah in enumerate(range(start_verse, end_verse + 1))]
 
-            # Prepare flat list of tasks (ayah, translations)
-            tasks = []
-            for i, ayah in enumerate(range(start_verse, end_verse + 1)):
-                tasks.append((ayah, translations[i]))
-
-            # Inject static configurations into worker
             worker_fn = functools.partial(
                 _render_verse_worker,
                 surah=surah,
@@ -175,19 +165,15 @@ class VerseRangeWorkflow(BaseWorkflow):
                 filename_prefix=filename_prefix,
             )
 
-            # Map in optimal batches based on hardware
-            for verse_pages in renderer.map_batches(worker_fn, tasks):
+            for result in renderer.map_batches(worker_fn, tasks):
                 if output_dir:
-                    yield verse_pages
+                    yield result
                 else:
-                    yield [Image.frombytes(m, s, d) for m, s, d in verse_pages]
+                    # result is list of byte-data tuples
+                    yield [Image.frombytes(m, s, d) for m, s, d in result]
         else:
-            # Serial execution (uses the worker function for code reuse)
-            task_list = []
-            for i, ayah in enumerate(range(start_verse, end_verse + 1)):
-                task_list.append((ayah, translations[i]))
-
-            for verse_pages in _render_verse_worker(
+            task_list = [(ayah, translations[i]) for i, ayah in enumerate(range(start_verse, end_verse + 1))]
+            for result in _render_verse_worker(
                 task_list,
                 surah,
                 self.layout_config,
@@ -199,9 +185,9 @@ class VerseRangeWorkflow(BaseWorkflow):
                 filename_prefix,
             ):
                 if output_dir:
-                    yield verse_pages
+                    yield result
                 else:
-                    yield [Image.frombytes(m, s, d) for m, s, d in verse_pages]
+                    yield [Image.frombytes(m, s, d) for m, s, d in result]
 
 
 # process-local cache for fonts to avoid redundant re-initialization in workers.
@@ -227,21 +213,19 @@ def _render_verse_worker(
     output_dir: str | None,
     filename_prefix: str,
 ) -> list[list[Any]]:
-    """Worker function for rendering a batch of verses.
+    """Worker function for rendering a batch of verses. Returns pickle-safe data.
 
     Args:
         verse_data: List of (ayah_number, translation_list) tuples.
         surah: Surah number.
-        layout_cfg: Layout configuration.
-        text_cfg: Text configuration.
-        word_cfg: Word configuration.
+        layout_cfg, text_cfg, word_cfg: Configurations.
         annotate: Whether to annotate words.
-        separate_translations: Whether to use separate pages for translations.
+        separate_translations: Separate translation pages.
         output_dir: Optional directory to save images.
         filename_prefix: Prefix for output filenames.
 
     Returns:
-        list[list[Any]]: List of pages (paths or byte data) for each verse.
+        list[list[Any]]: List of pages (paths or byte data tuples) for each verse.
     """
     if not verse_data:
         return []
@@ -251,33 +235,31 @@ def _render_verse_worker(
 
     # Determine range for fetching
     ayahs = [v[0] for v in verse_data]
-    start_ayah = min(ayahs)
-    end_ayah = max(ayahs)
+    start_ayah, end_ayah = min(ayahs), max(ayahs)
 
     # Fetch data once for the batch range
     arabic_verses = db.get_verses_from_range(surah, start_ayah, end_ayah)
-    # Re-index to handle non-contiguous ranges (though usually they are contiguous)
+    # Re-index to handle non-contiguous ranges
     arabic_map = {ayah: txt for ayah, txt in zip(range(start_ayah, end_ayah + 1), arabic_verses)}
-
     all_wbw = db.get_wbw_grouped_by_verse_range(surah, start_ayah, end_ayah) if annotate else {}
 
     batch_results = []
-
-    # Pre-calculate flush trigger
     flush_trigger = DEFAULT_PROCESS_LIMIT_MB * MEMORY_FLUSH_THRESHOLD_RATIO
 
-    # Overlap I/O and Rendering
     with async_image_saver() as save:
         for i, (ayah, verse_translations) in enumerate(verse_data):
-            if get_current_rss_mb() > flush_trigger:
-                clear_rendering_caches()
-                gc.collect()
-
-            worker_heartbeat()
+            # Throttled memory check and heartbeat (every 10 verses)
+            if i % 10 == 0:
+                if get_current_rss_mb() > flush_trigger:
+                    clear_rendering_caches()
+                    gc.collect()
+                worker_heartbeat()
 
             verse_text = arabic_map.get(ayah, "")
-            wbw_translations = all_wbw.get(ayah, [])
+            if not verse_text:
+                continue
 
+            wbw_translations = all_wbw.get(ayah, [])
             verse_words = verse_text.split()
             word_images = [get_wimage(word, word_cfg) for word in verse_words]
 
@@ -292,8 +274,7 @@ def _render_verse_worker(
                     texts=verse_words,
                 )
             else:
-                annotated_images = word_images
-                annotated_text = verse_words
+                annotated_images, annotated_text = word_images, verse_words
 
             # Add verse number marker
             vn_img = verse_number(ayah, word_cfg)
@@ -315,7 +296,6 @@ def _render_verse_worker(
                     ) - t_img.height // 2
                     tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
                     
-                    # Manual composite for separate pages (L mode handled)
                     if t_img.mode == "L":
                         canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
                     else:
@@ -324,7 +304,6 @@ def _render_verse_worker(
             else:
                 pages = list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
 
-            # Result handling
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
                 paths = []
@@ -334,12 +313,7 @@ def _render_verse_worker(
                     paths.append(path)
                 batch_results.append(paths)
             else:
+                # Convert PIL images to picklable byte data for IPC
                 batch_results.append([(p.mode, p.size, p.tobytes()) for p in pages])
-                for p in pages:
-                    del p
-
-            del word_items, trans_images, pages
-            if i % 10 == 0:
-                gc.collect()
 
     return batch_results

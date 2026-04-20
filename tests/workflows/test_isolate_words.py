@@ -10,7 +10,7 @@ import warnings
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
+from quranmedialib import LANDSCAPE_PRESET, ValidationError, DatabaseManager
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
 
@@ -84,8 +84,8 @@ def test_isolate_words_invalid_surah() -> None:
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
     workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
 
-    # Surah 0 is invalid — should raise ValueError
-    with pytest.raises(ValueError, match="Surah number must be between"):
+    # Surah 0 is invalid — should raise ValidationError
+    with pytest.raises(ValidationError, match="Surah must be between 1 and 114"):
         workflow.get_iterator(
             surah=0,
             verse_words=["test"],

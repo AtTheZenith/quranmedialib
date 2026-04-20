@@ -23,6 +23,7 @@ from typing import Annotated, NamedTuple
 
 from PIL import Image, ImageFont
 
+from quranmedialib.exceptions import ResourceError, ValidationError
 from quranmedialib.resources import get_font_path
 
 # === Exceptions ===
@@ -126,6 +127,7 @@ type Color = tuple[int, int, int] | tuple[int, int, int, int]
 type SurahNumber = Annotated[int, range(1, 115)]
 type AyahNumber = Annotated[int, range(1, 287)]
 type WordIndex = int
+type FontSize = Annotated[int, range(1, MAX_FONT_SIZE + 1)]
 
 
 # === Font Resource ===
@@ -415,7 +417,7 @@ class LayoutConfig:
 
     max_width: int
     image_height: int
-    padding: Padding = Padding(0, 0, 0, 0)
+    padding: Padding = field(default_factory=Padding)
     wimage_x_offset: int = 0
     wimage_y_offset: int = 0
     timage_x_offset: int = 0
@@ -440,23 +442,21 @@ class LayoutConfig:
                 self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower())
             )
         if not isinstance(self.padding, Padding):
-            object.__setattr__(self, "padding", Padding(*self.padding))
+            try:
+                object.__setattr__(self, "padding", Padding(*self.padding))
+            except (TypeError, ValueError):
+                object.__setattr__(self, "padding", Padding())
 
-        # Validate dimensions (PERF-009: catch issues at config creation, not per frame() call)
+        # Validate dimensions
+        if self.max_width <= 0:
+            raise ValidationError(f"max_width must be positive, got {self.max_width}")
+        if self.image_height <= 0:
+            raise ValidationError(f"image_height must be positive, got {self.image_height}")
+
         if self.content_width <= 0:
-            raise ValueError(
+            raise ValidationError(
                 f"LayoutConfig content_width must be positive, got {self.content_width}. "
                 f"(max_width={self.max_width}, padding.left={self.padding.left}, padding.right={self.padding.right})"
-            )
-        if self.max_width <= 0:
-            raise ValueError(
-                f"LayoutConfig max_width must be positive, got {self.max_width}. "
-                f"Canvas width cannot be zero or negative."
-            )
-        if self.image_height <= 0:
-            raise ValueError(
-                f"LayoutConfig image_height must be positive, got {self.image_height}. "
-                f"Canvas height cannot be zero or negative."
             )
 
     @property
@@ -470,304 +470,118 @@ class LayoutConfig:
         return self.image_height - self.padding.top - self.padding.bottom
 
 
-@dataclass(frozen=True, init=False, slots=True)
+@dataclass(frozen=True, slots=True)
 class WordConfig:
     """Configuration for word and verse rendering behavior.
 
     Controls font sizes, spacing, colors, and specific verse-number styles.
     """
 
-    font_size: int
-    max_rows_per_page: int
-    row_spacing: int
-    word_spacing: int
-    word_padding: Padding
-    verse_v_offset: int
-    balanced_wrapping: bool
-    verse_number_size: int
-    verse_number_padding: Padding
-    verse_number_color: Color
-    annotation_font_size: int
-    word_color: Color
-    annotation_color: Color
-    annotation_font_path: Path
-    background_color: Color
-    font: FontResource
+    font_size: FontSize
+    max_rows_per_page: int = 5
+    row_spacing: int = 20
+    word_spacing: int = 10
+    word_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(10, 10, 10, 10))
+    verse_v_offset: int = 0
+    balanced_wrapping: bool = False
+    verse_number_size: int = 110
+    verse_number_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(1, 41, 1, 1))
+    verse_number_color: Color = (255, 255, 255, 255)
+    annotation_font_size: int = 28
+    word_color: Color = (255, 255, 255, 255)
+    annotation_color: Color = (255, 255, 255, 255)
+    annotation_font_path: Path | str | FontResource | None = None
+    background_color: Color = (0, 0, 0, 0)
+    font: FontResource | None = None
 
-    def __init__(
-        self,
-        font_size: int,
-        max_rows_per_page: int = 5,
-        row_spacing: int = 20,
-        word_spacing: int = 10,
-        word_padding: Padding | tuple[int, int, int, int] = (10, 10, 10, 10),
-        verse_v_offset: int = 0,
-        balanced_wrapping: bool = False,
-        verse_number_size: int = 110,
-        verse_number_padding: Padding | tuple[int, int, int, int] = (1, 41, 1, 1),
-        verse_number_color: Color = (255, 255, 255, 255),
-        annotation_font_size: int = 28,
-        word_color: Color = (255, 255, 255, 255),
-        annotation_color: Color = (255, 255, 255, 255),
-        annotation_font_path: Path | str | FontResource | None = None,
-        background_color: Color = (0, 0, 0, 0),
-        font: FontResource | None = None,
-    ):
-        """Initialize WordConfig with resolved paths and type-safe layout primitives.
-
-        Raises:
-            ValueError: If font_size, annotation_font_size, or verse_number_size is not in range (1, MAX_FONT_SIZE),
-                or if max_rows_per_page <= 0.
-        """
+    def __post_init__(self):
+        """Validate parameters and resolve defaults."""
         from quranmedialib.presets import FONT_HAFS
 
-        # Validate critical parameters
-        if font_size <= 0:
-            raise ValueError(f"font_size must be positive, got {font_size}")
-        if font_size > MAX_FONT_SIZE:
-            raise ValueError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {font_size}")
-        if max_rows_per_page <= 0:
-            raise ValueError(f"max_rows_per_page must be positive, got {max_rows_per_page}")
-        if annotation_font_size <= 0:
-            raise ValueError(f"annotation_font_size must be positive, got {annotation_font_size}")
-        if annotation_font_size > MAX_FONT_SIZE:
-            raise ValueError(
-                f"annotation_font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {annotation_font_size}"
-            )
-        if verse_number_size <= 0:
-            raise ValueError(f"verse_number_size must be positive, got {verse_number_size}")
-        if verse_number_size > MAX_FONT_SIZE:
-            raise ValueError(f"verse_number_size exceeds maximum limit of {MAX_FONT_SIZE}, got {verse_number_size}")
+        # Validate font sizes
+        for name, size in [
+            ("font_size", self.font_size),
+            ("annotation_font_size", self.annotation_font_size),
+            ("verse_number_size", self.verse_number_size),
+        ]:
+            if size <= 0:
+                raise ValidationError(f"{name} must be positive, got {size}")
+            if size > MAX_FONT_SIZE:
+                raise ValidationError(f"{name} exceeds maximum limit of {MAX_FONT_SIZE}, got {size}")
 
-        # Resolve font - default to FONT_HAFS if not provided
-        if font is None:
-            resolved_font = FONT_HAFS
-        else:
-            resolved_font = font
+        if self.max_rows_per_page <= 0:
+            raise ValidationError(f"max_rows_per_page must be positive, got {self.max_rows_per_page}")
 
-        # Resolve annotation_font_path
-        if annotation_font_path is None:
-            resolved_font_path = get_font_path("inter.ttf")
-        elif isinstance(annotation_font_path, FontResource):
-            resolved_font_path = annotation_font_path.path
-        elif isinstance(annotation_font_path, str):
-            resolved_font_path = Path(annotation_font_path)
-        else:
-            resolved_font_path = annotation_font_path
+        # Resolve defaults
+        if self.font is None:
+            object.__setattr__(self, "font", FONT_HAFS)
 
-        # Resolve paddings
-        word_padding = word_padding if isinstance(word_padding, Padding) else Padding(*word_padding)
-        verse_number_padding = (
-            verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
-        )
+        # Resolve annotation font path
+        if self.annotation_font_path is None:
+            object.__setattr__(self, "annotation_font_path", get_font_path("inter.ttf"))
+        elif isinstance(self.annotation_font_path, FontResource):
+            object.__setattr__(self, "annotation_font_path", self.annotation_font_path.path)
+        elif isinstance(self.annotation_font_path, str):
+            object.__setattr__(self, "annotation_font_path", Path(self.annotation_font_path))
 
-        object.__setattr__(self, "font_size", font_size)
-        object.__setattr__(self, "max_rows_per_page", max_rows_per_page)
-        object.__setattr__(self, "row_spacing", row_spacing)
-        object.__setattr__(self, "word_spacing", word_spacing)
-        object.__setattr__(self, "word_padding", word_padding)
-        object.__setattr__(self, "verse_v_offset", verse_v_offset)
-        object.__setattr__(self, "balanced_wrapping", balanced_wrapping)
-        object.__setattr__(self, "verse_number_size", verse_number_size)
-        object.__setattr__(self, "verse_number_padding", verse_number_padding)
-        object.__setattr__(self, "verse_number_color", verse_number_color)
-        object.__setattr__(self, "annotation_font_size", annotation_font_size)
-        object.__setattr__(self, "word_color", word_color)
-        object.__setattr__(self, "annotation_color", annotation_color)
-        object.__setattr__(self, "annotation_font_path", resolved_font_path)
-        object.__setattr__(self, "background_color", background_color)
-        object.__setattr__(self, "font", resolved_font)
+        # Coerce paddings
+        if not isinstance(self.word_padding, Padding):
+            object.__setattr__(self, "word_padding", Padding(*self.word_padding))
+        if not isinstance(self.verse_number_padding, Padding):
+            object.__setattr__(self, "verse_number_padding", Padding(*self.verse_number_padding))
 
 
-@dataclass(frozen=True, init=False, slots=True)
+@dataclass(frozen=True, slots=True)
 class TextConfig:
     """Configuration for translation/rich text rendering.
 
     Bold weight is applied via font variations (wght axis) during rendering.
     """
 
-    font_size: int
-    color: Color
-    font_path: Path
-    italic_font_path: Path
-    line_spacing: int
-    height: int | None
-    max_width: int | None
-    alignment: HorizontalAlignment
-    balanced_wrapping: bool
-    highlight_font_path: Path
-    highlight_font_size: int
-    highlight_color: Color
+    font_size: FontSize = 36
+    color: Color = (255, 255, 255, 255)
+    font_path: Path | str | FontResource | None = None
+    italic_font_path: Path | str | FontResource | None = None
+    line_spacing: int = 10
+    height: int | None = None
+    max_width: int | None = None
+    alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER
+    balanced_wrapping: bool = True
+    highlight_font_path: Path | str | FontResource | None = None
+    highlight_font_size: int | None = None
+    highlight_color: Color | None = None
 
-    def __init__(
-        self,
-        font_size: int = 36,
-        color: Color = (255, 255, 255, 255),
-        font_path: Path | str | FontResource | None = None,
-        italic_font_path: Path | str | FontResource | None = None,
-        line_spacing: int = 10,
-        height: int | None = None,
-        max_width: int | None = None,
-        alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER,
-        balanced_wrapping: bool = True,
-        highlight_font_path: Path | str | FontResource | None = None,
-        highlight_font_size: int | None = None,
-        highlight_color: Color | None = None,
-    ):
-        """Initialize TextConfig with resolved font paths.
-
-        Raises:
-            ValueError: If font_size is not in range (1, MAX_FONT_SIZE) or max_width is provided and <= 0.
-        """
+    def __post_init__(self):
+        """Validate parameters and resolve defaults."""
 
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
                 return get_font_path(default_filename)
-            return path.path if isinstance(path, FontResource) else Path(path)
+            if isinstance(path, FontResource):
+                return path.path
+            return Path(path)
 
-        # Resolve alignment
-        if isinstance(alignment, str):
-            alignment = HorizontalAlignment(alignment.lower())
+        # Coerce alignment
+        if isinstance(self.alignment, str):
+            object.__setattr__(self, "alignment", HorizontalAlignment(self.alignment.lower()))
 
         # Validate font_size
-        if font_size <= 0:
-            raise ValueError(f"font_size must be positive, got {font_size}")
-        if font_size > MAX_FONT_SIZE:
-            raise ValueError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {font_size}")
+        if self.font_size <= 0:
+            raise ValidationError(f"font_size must be positive, got {self.font_size}")
+        if self.font_size > MAX_FONT_SIZE:
+            raise ValidationError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {self.font_size}")
 
-        # Validate max_width if provided
-        if max_width is not None and max_width <= 0:
-            raise ValueError(f"max_width must be positive when provided, got {max_width}")
+        # Validate max_width
+        if self.max_width is not None and self.max_width <= 0:
+            raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
 
-        object.__setattr__(self, "font_size", font_size)
-        object.__setattr__(self, "color", color)
-        object.__setattr__(self, "font_path", _resolve_path(font_path, "inter.ttf"))
-        object.__setattr__(self, "italic_font_path", _resolve_path(italic_font_path, "inter_italic.ttf"))
-        object.__setattr__(self, "line_spacing", line_spacing)
-        object.__setattr__(self, "height", height)
-        object.__setattr__(self, "max_width", max_width)
-        object.__setattr__(self, "alignment", alignment)
-        object.__setattr__(self, "balanced_wrapping", balanced_wrapping)
-        object.__setattr__(self, "highlight_font_path", _resolve_path(highlight_font_path, "inter.ttf"))
-        object.__setattr__(self, "highlight_font_size", highlight_font_size if highlight_font_size else font_size)
-        object.__setattr__(self, "highlight_color", highlight_color if highlight_color else (255, 215, 0, 255))
+        # Resolve paths
+        object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))
+        object.__setattr__(self, "italic_font_path", _resolve_path(self.italic_font_path, "inter_italic.ttf"))
+        object.__setattr__(self, "highlight_font_path", _resolve_path(self.highlight_font_path, "inter.ttf"))
 
-
-# === Text Rendering Types ===
-
-
-@dataclass(frozen=True, slots=True)
-class StyledWord:
-    """A word with specific styling applied, ready for rendering."""
-
-    text: str
-    font: ImageFont.ImageFont
-    color: Color
-    width: int
-    height: int = 0
-    is_transparent: bool = False
-    simulate_bold: bool = False
-
-
-class Line:
-    """A collection of styled words representing a single line of text."""
-
-    __slots__ = ("words", "width", "height")
-
-    def __init__(self):
-        self.words: list[StyledWord] = []
-        self.width: int = 0
-        self.height: int = 0
-
-    def add_word(self, word: StyledWord, space_width: int = 0):
-        """Adds a word to the line, accounting for word spacing."""
-        if self.words:
-            self.width += space_width
-        self.words.append(word)
-        self.width += word.width
-        self.height = max(self.height, word.height)
-
-
-def balance_lines_pyramid(
-    widths: list[int],
-    spacing: int,
-    target_k: int,
-    max_width: int,
-) -> list[int] | None:
-    """Core IPL-B algorithm: finds line break indices for a top-heavy layout.
-
-    Uses Prefix Sums + Bisection (O(K log N log W)) for high-performance partitioning.
-    """
-    if not widths:
-        return []
-
-    # Pre-calculate prefix sums for O(log N) line break lookups
-    n = len(widths)
-    # sums[i] = width of first i items + (i-1) spacings
-    sums = [0] * (n + 1)
-    for i, w in enumerate(widths):
-        sums[i + 1] = sums[i] + w + spacing
-
-    _spacing = spacing
-    _target_k = target_k
-    _n = n
-
-    def check_feasibility(w1_limit: int) -> int:
-        """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
-        curr_idx = 0
-        prev_limit = w1_limit
-        count = 0
-
-        while curr_idx < _n:
-            count += 1
-            if count > _target_k:
-                return 9999
-
-            # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
-            # Target = prev_limit + spacing + sums[curr_idx]
-            target = prev_limit + _spacing + sums[curr_idx]
-            next_idx = bisect.bisect_right(sums, target) - 1
-
-            if next_idx <= curr_idx:
-                return 9999
-
-            # Update limit for next line (Inverted Pyramid constraint)
-            prev_limit = (sums[next_idx] - sums[curr_idx]) - _spacing
-            curr_idx = next_idx
-
-        return count
-
-    # Bounds
-    max_w = max(widths)
-    total_w = sums[n] - spacing
-
-    low = max(max_w, total_w // target_k)
-    high = max_width
-    best_w1 = -1
-
-    while low <= high:
-        mid = (low + high) // 2
-        if check_feasibility(mid) <= target_k:
-            best_w1 = mid
-            high = mid - 1
-        else:
-            low = mid + 1
-
-    if best_w1 == -1:
-        return None
-
-    # Final pass: Reconstruct breaks
-    breaks = []
-    curr_idx = 0
-    prev_limit = best_w1
-    while curr_idx < n:
-        target = prev_limit + spacing + sums[curr_idx]
-        next_idx = bisect.bisect_right(sums, target) - 1
-        if next_idx < n:
-            breaks.append(next_idx)
-            prev_limit = (sums[next_idx] - sums[curr_idx]) - spacing
-            curr_idx = next_idx
-        else:
-            break
-
-    return breaks
+        # Resolve highlight defaults
+        if self.highlight_font_size is None:
+            object.__setattr__(self, "highlight_font_size", self.font_size)
+        if self.highlight_color is None:
+            object.__setattr__(self, "highlight_color", (255, 215, 0, 255))

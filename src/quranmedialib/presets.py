@@ -11,6 +11,7 @@ The builder uses 1080p as the reference resolution. All sizing parameters
 Users can call build_preset() directly to generate configs for custom resolutions.
 """
 
+from quranmedialib.exceptions import ValidationError
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
@@ -292,29 +293,24 @@ def build_preset(
 ) -> tuple[LayoutConfig, TextConfig, WordConfig]:
     """Builds a complete preset configuration for any resolution.
 
-    All sizing parameters (font sizes, spacing, padding, offsets) scale linearly
-    with the canvas height relative to the 1080p reference. Change the base
-    values in this module to microadjust all presets at once.
-
     Args:
         aspect_ratio: One of "landscape" (16:9), "story" (9:16), or "square" (1:1).
-            Used to select the preset profile. The actual dimensions come from
-            width/height parameters.
-        mode: One of "default" (annotated + translation), "arabic" (annotated only),
-            or "translation" (translation only).
-        width: Canvas width in pixels.
-        height: Canvas height in pixels.
+        mode: One of "default", "arabic", or "translation".
+        width, height: Canvas dimensions in pixels.
 
     Returns:
-        Tuple of (LayoutConfig, TextConfig, WordConfig) ready for rendering.
+        tuple[LayoutConfig, TextConfig, WordConfig]
 
     Raises:
-        ValueError: If aspect_ratio or mode is not recognized.
+        ValidationError: If aspect_ratio or mode is not recognized.
     """
-    if aspect_ratio not in ("landscape", "story", "square"):
-        raise ValueError(f"aspect_ratio must be 'landscape', 'story', or 'square', got '{aspect_ratio}'")
-    if mode not in ("default", "arabic", "translation"):
-        raise ValueError(f"mode must be 'default', 'arabic', or 'translation', got '{mode}'")
+    valid_aspects = ("landscape", "story", "square")
+    valid_modes = ("default", "arabic", "translation")
+
+    if aspect_ratio not in valid_aspects:
+        raise ValidationError(f"Invalid aspect_ratio: '{aspect_ratio}'. Must be {valid_aspects}.")
+    if mode not in valid_modes:
+        raise ValidationError(f"Invalid mode: '{mode}'. Must be {valid_modes}.")
 
     # Select base config
     bases = {"landscape": _LANDSCAPE_BASE, "story": _STORY_BASE, "square": _SQUARE_BASE}

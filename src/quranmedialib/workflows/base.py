@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError
+
 if TYPE_CHECKING:
     from quranmedialib.types import LayoutConfig, TextConfig, WordConfig
 
@@ -34,16 +36,28 @@ class BaseWorkflow(ABC):
         """Initializes the workflow with shared configurations.
 
         Raises:
-            ValueError: If any config object is None.
+            ValidationError: If any config object is None.
         """
         if layout_config is None or text_config is None or word_config is None:
-            raise ValueError(
+            raise ValidationError(
                 f"Configuration objects must not be None. "
                 f"Got layout_config={layout_config}, text_config={text_config}, word_config={word_config}"
             )
         self.layout_config = layout_config
         self.text_config = text_config
         self.word_config = word_config
+
+    def _validate_surah(self, surah: int) -> int:
+        """Validates surah number (1-114)."""
+        if not (1 <= surah <= 114):
+            raise ValidationError(f"Surah must be between 1 and 114, got {surah}")
+        return surah
+
+    def _validate_ayah(self, ayah: int) -> int:
+        """Validates ayah number (1-286)."""
+        if not (1 <= ayah <= 286):
+            raise ValidationError(f"Ayah must be between 1 and 286, got {ayah}")
+        return ayah
 
     def __repr__(self) -> str:
         return (

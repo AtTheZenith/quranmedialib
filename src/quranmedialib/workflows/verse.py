@@ -11,6 +11,7 @@ from typing import Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
@@ -84,19 +85,18 @@ class VerseWorkflow(BaseWorkflow):
             list[Image.Image]: A list of rendered page images for the verse.
 
         Raises:
-            ValueError: If surah/ayah are out of range or no verse text found.
+            ValidationError: If surah/ayah are out of range.
+            WorkflowError: If no verse text found.
         """
-        if not (1 <= surah <= 114):
-            raise ValueError(f"Surah must be between 1 and 114, got {surah}")
-        if not (1 <= ayah <= 286):
-            raise ValueError(f"Ayah must be between 1 and 286, got {ayah}")
+        surah = self._validate_surah(surah)
+        ayah = self._validate_ayah(ayah)
 
         db = DatabaseManager()
 
         # 1. Data Retrieval
         verse_text = db.get_verse(surah, ayah)
         if not verse_text.strip():
-            raise ValueError(f"No verse text found for surah {surah}, ayah {ayah}")
+            raise WorkflowError(f"No verse text found for surah {surah}, ayah {ayah}")
         verse_words = verse_text.split()
         wbw_translations = db.get_wbw_from_verse(surah, ayah) if annotate else []
 

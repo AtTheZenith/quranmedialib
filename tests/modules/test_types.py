@@ -11,15 +11,14 @@ This module contains tests for verifying configuration validation including:
 
 import pytest
 
+from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
     HorizontalAlignment,
     LayoutConfig,
-    Line,
     Padding,
     ResourceError,
-    StyledWord,
     TextConfig,
     VerticalAlignment,
     WbwDatabaseConfig,
@@ -162,13 +161,13 @@ def test_layout_config_available_height() -> None:
 
 def test_layout_config_negative_dimensions() -> None:
     """Test that LayoutConfig raises ValueError for negative dimensions."""
-    with pytest.raises(ValueError, match="content_width must be positive"):
+    with pytest.raises(ValueError, match="max_width must be positive"):
         LayoutConfig(max_width=-100, image_height=-100)
 
 
 def test_layout_config_zero_dimensions() -> None:
     """Test that LayoutConfig raises ValueError for zero dimensions."""
-    with pytest.raises(ValueError, match="content_width must be positive"):
+    with pytest.raises(ValueError, match="max_width must be positive"):
         LayoutConfig(max_width=0, image_height=0)
 
 

@@ -12,6 +12,7 @@ from typing import Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
@@ -49,10 +50,10 @@ class SurahWorkflow(VerseRangeWorkflow):
             list[Image.Image]: List of page images for each verse in the surah.
 
         Raises:
-            ValueError: If no verses are found for the given surah.
+            ValidationError: If surah number is invalid.
+            WorkflowError: If no verses are found for the given surah.
         """
-        if not (1 <= surah <= 114):
-            raise ValueError(f"Surah must be between 1 and 114, got {surah}")
+        surah = self._validate_surah(surah)
 
         # Warn about unrecognized kwargs to catch typos early
         known_kwargs = {"annotate", "separate_translations", "parallel", "output_dir", "filename_prefix"}
@@ -69,7 +70,7 @@ class SurahWorkflow(VerseRangeWorkflow):
         # Retrieve Arabic verses and translations
         arabic_verses = db.get_verses_from_surah(surah)
         if not arabic_verses:
-            raise ValueError(f"No verses found for Surah {surah}")
+            raise WorkflowError(f"No verses found for Surah {surah}")
 
         raw_translations = db.get_translation_from_surah(surah)
 
