@@ -24,7 +24,7 @@ _SUPPORTED_FONT_EXTENSIONS = {".ttf", ".otf", ".ttc", ".pfb", ".pcf", ".bdf", ".
 _MAX_FONT_FILE_SIZE = 50 * 1024 * 1024
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=512)
 def _load_font_base(font_path: str, font_size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Loads and caches the base font instance (internal use only)."""
     # Validate file extension
