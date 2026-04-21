@@ -155,9 +155,9 @@ def get_timage(
         # 1. Find max ascent for baseline alignment
         max_ascent = 0
         for word in line.words:
-            ascent, _ = word.font.getmetrics()
-            if ascent > max_ascent:
-                max_ascent = ascent
+            wa = word.ascent
+            if wa > max_ascent:
+                max_ascent = wa
 
         # 2. Render words in batches of same style
         curr_x = line_x
@@ -173,7 +173,7 @@ def get_timage(
                 # Flush batch
                 txt = "".join(w.text for w in batch_words)
                 sf = last_style[0]
-                sa, _ = sf.getmetrics()
+                sa = batch_words[0].ascent
                 _draw_text(
                     (curr_x, current_y + (max_ascent - sa)),
                     txt,
@@ -189,7 +189,7 @@ def get_timage(
         if batch_words and last_style:
             txt = "".join(w.text for w in batch_words)
             sf = last_style[0]
-            sa, _ = sf.getmetrics()
+            sa = batch_words[0].ascent
             _draw_text(
                 (curr_x, current_y + (max_ascent - sa)),
                 txt,
@@ -202,12 +202,12 @@ def get_timage(
     return img
 
 
-# Cache for font baseline metrics (ascent + descent) to avoid redundant getmetrics() calls
-_font_height_cache: dict[tuple[str, int], int] = {}
+# Cache for font baseline metrics (ascent + descent) and ascent
+_font_metrics_cache: dict[tuple[str, int], tuple[int, int]] = {}
 
 
 @lru_cache(maxsize=4096)
-def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[int, int]:
+def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[int, int, int]:
     """Cached wrapper for text dimension measurement.
 
     Uses font.getlength() for performance on word width measurements.
@@ -217,16 +217,16 @@ def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[int, 
     # getlength is significantly faster than textbbox for width
     w = int(font.getlength(token))
 
-    # Use cached font height if available
+    # Use cached font height/ascent if available
     key = (font_path, font_size)
-    if key in _font_height_cache:
-        h = _font_height_cache[key]
+    if key in _font_metrics_cache:
+        h, ascent = _font_metrics_cache[key]
     else:
         ascent, descent = font.getmetrics()
         h = ascent + descent
-        _font_height_cache[key] = h
+        _font_metrics_cache[key] = (h, ascent)
 
-    return w, h
+    return w, h, ascent
 
 
 # Pre-compiled regex for tag stripping to avoid repeated compilation in hot path
@@ -247,13 +247,14 @@ def _parse_rich_text(
         f = _load_font_base(str(config.font_path), config.font_size)
         color = config.color
 
-        # Get height once (baseline)
-        if (key := (str(config.font_path), config.font_size)) in _font_height_cache:
-            h = _font_height_cache[key]
+        # Get metrics once (baseline)
+        key = (str(config.font_path), config.font_size)
+        if key in _font_metrics_cache:
+            h, ascent = _font_metrics_cache[key]
         else:
             ascent, descent = f.getmetrics()
             h = ascent + descent
-            _font_height_cache[key] = h
+            _font_metrics_cache[key] = (h, ascent)
 
         # Local cache for word widths in this call
         _get_len = f.getlength
@@ -267,7 +268,7 @@ def _parse_rich_text(
             else:
                 w = int(_get_len(s))
                 w_cache[s] = w
-            res.append(_StyledWord(s, f, color, w, h))
+            res.append(_StyledWord(s, f, color, w, h, ascent))
         return res
 
     # 2. Rich-text path (Style switching)
@@ -281,8 +282,8 @@ def _parse_rich_text(
     f_norm_size = config.font_size
     f_high_size = config.highlight_font_size
 
-    _, h_norm = _metrics("", f_norm_path, f_norm_size)
-    _, h_high = _metrics("", f_high_path, f_high_size)
+    _, h_norm, a_norm = _metrics("", f_norm_path, f_norm_size)
+    _, h_high, a_high = _metrics("", f_high_path, f_high_size)
 
     c_norm = config.color
     c_high = config.highlight_color
@@ -303,16 +304,16 @@ def _parse_rich_text(
             if token in w_cache_high:
                 w = w_cache_high[token]
             else:
-                w, _ = _metrics(token, f_high_path, f_high_size)
+                w, _, _ = _metrics(token, f_high_path, f_high_size)
                 w_cache_high[token] = w
-            styled_words.append(_StyledWord(token, font_high, c_high, w, h_high))
+            styled_words.append(_StyledWord(token, font_high, c_high, w, h_high, a_high))
         else:
             if token in w_cache_norm:
                 w = w_cache_norm[token]
             else:
-                w, _ = _metrics(token, f_norm_path, f_norm_size)
+                w, _, _ = _metrics(token, f_norm_path, f_norm_size)
                 w_cache_norm[token] = w
-            styled_words.append(_StyledWord(token, font_norm, c_norm, w, h_norm))
+            styled_words.append(_StyledWord(token, font_norm, c_norm, w, h_norm, a_norm))
 
     return styled_words
 

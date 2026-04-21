@@ -301,7 +301,7 @@ def _render_page(
 
         # OPTIM: Merge row into a single mask if colors are uniform and all use L mode
         first_color = row[0].color if row else None
-        can_merge = all(item.image.mode == "L" and item.color == first_color for item in row)
+        can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)
 
         if can_merge:
             row_mask = Image.new("L", (row_width, max_row_height), 0)

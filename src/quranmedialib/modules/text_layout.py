@@ -37,11 +37,11 @@ class StyledWord:
         color: RGBA or RGB color for the text.
         width: Measured width of the word in pixels.
         height: Measured height of the word in pixels (usually ascent + descent).
-        is_transparent: Whether the word should be rendered with transparency.
+        ascent: Measured ascent of the font in pixels.
         simulate_bold: Whether to simulate bold weight if not supported by font.
     """
 
-    __slots__ = ("text", "font", "color", "width", "height", "is_transparent", "simulate_bold")
+    __slots__ = ("text", "font", "color", "width", "height", "ascent", "is_transparent", "simulate_bold")
 
     def __init__(
         self,
@@ -50,6 +50,7 @@ class StyledWord:
         color: Color,
         width: int,
         height: int = 0,
+        ascent: int = 0,
         is_transparent: bool = False,
         simulate_bold: bool = False,
     ):
@@ -58,6 +59,7 @@ class StyledWord:
         self.color = color
         self.width = width
         self.height = height
+        self.ascent = ascent
         self.is_transparent = is_transparent
         self.simulate_bold = simulate_bold
 
