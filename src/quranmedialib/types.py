@@ -13,14 +13,82 @@ structures used throughout the library. It includes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import bisect
+import os
+import os.path
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, NamedTuple
 
 from PIL import Image, ImageFont
 
+from quranmedialib.exceptions import ResourceError, ValidationError
 from quranmedialib.resources import get_font_path
+
+# === Exceptions ===
+
+
+class QuranMediaLibError(Exception):
+    """Base class for all QuranMediaLib exceptions."""
+
+
+class LayoutError(QuranMediaLibError):
+    """Raised when rendering dimensions or layouts are invalid."""
+
+
+class DatabaseError(QuranMediaLibError):
+    """Raised when database operations fail or schema is invalid."""
+
+
+class ResourceError(QuranMediaLibError):
+    """Raised when external assets (fonts, DBs) cannot be loaded."""
+
+
+# Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
+MAX_FONT_SIZE = 2000
+
+# Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
+_working_dir_cache: Path | None = None
+
+
+def _get_working_dir() -> Path:
+    """Return the working directory, caching on first call."""
+    global _working_dir_cache
+    if _working_dir_cache is None:
+        _working_dir_cache = Path(os.getcwd()).resolve()
+    return _working_dir_cache
+
+
+def _ensure_within_working_dir(path: Path) -> None:
+    """Validate that a path is within the working directory tree.
+
+    Uses realpath to prevent prefix-matching bypasses and symlink traversal.
+
+    Args:
+        path: The path to validate.
+
+    Raises:
+        ResourceError: If the path is outside the working directory.
+    """
+    try:
+        # resolve() is more robust on Windows/Python 3.10+
+        resolved = path.resolve()
+        working = _get_working_dir()
+
+        # Check if resolved path is actually under the working directory
+        if not str(resolved).startswith(str(working) + os.sep) and str(resolved) != str(working):
+            raise ResourceError(f"Path {path!r} (resolved: {resolved!r}) is outside the working directory {working}.")
+    except (OSError, ValueError) as e:
+        raise ResourceError(f"Failed to validate path {path}: {e}")
+
+
+# Surah and ayah range constants for runtime validation
+MIN_SURAH = 1
+MAX_SURAH = 114
+MIN_AYAH = 1
+MAX_AYAH = 286
+
 
 # === Layout Primitives ===
 
@@ -66,12 +134,13 @@ type Color = tuple[int, int, int] | tuple[int, int, int, int]
 type SurahNumber = Annotated[int, range(1, 115)]
 type AyahNumber = Annotated[int, range(1, 287)]
 type WordIndex = int
+type FontSize = Annotated[int, range(1, MAX_FONT_SIZE + 1)]
 
 
 # === Font Resource ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FontResource:
     """Reference to a font file with metadata.
 
@@ -99,11 +168,43 @@ class FontResource:
             display_name = Path(font_name).stem
         return cls(name=display_name, path=get_font_path(font_name))
 
+    @classmethod
+    def from_path(
+        cls,
+        font_path: str | Path,
+        display_name: str | None = None,
+        unsafe_paths: bool = False,
+    ) -> FontResource:
+        """Create a FontResource from a custom font file path.
+
+        Args:
+            font_path: Path to the font file.
+            display_name: Optional display name. Defaults to filename stem.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+
+        Returns:
+            FontResource with the specified path.
+
+        Raises:
+            ValueError: If font_path is outside the working directory and
+                unsafe_paths is False.
+        """
+        font_path_obj = Path(font_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(font_path_obj)
+
+        if display_name is None:
+            display_name = font_path_obj.stem
+
+        return cls(name=display_name, path=font_path_obj)
+
 
 # === Database Configuration ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DatabaseConfig:
     """Configuration for a verse-by-verse database table.
 
@@ -163,6 +264,8 @@ class DatabaseConfig:
         surah_col: str = "sura",
         ayah_col: str = "ayah",
         text_col: str = "text",
+        unsafe_paths: bool = False,
+        trust_config: bool = False,
     ) -> DatabaseConfig:
         """Create a DatabaseConfig from an external database file path.
 
@@ -172,9 +275,23 @@ class DatabaseConfig:
             surah_col: Surah column name.
             ayah_col: Ayah column name.
             text_col: Text column name.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+            trust_config: If True, accept custom table/column names without
+                additional schema validation. When False (default), the
+                DatabaseManager validates identifiers against SQL injection.
+
+        Raises:
+            ValueError: If db_path is outside the working directory and
+                unsafe_paths is False.
         """
+        db_path_obj = Path(db_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(db_path_obj)
+
         return cls(
-            filepath=Path(db_path),
+            filepath=db_path_obj,
             tablename=tablename,
             surah_col=surah_col,
             ayah_col=ayah_col,
@@ -182,7 +299,7 @@ class DatabaseConfig:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WbwDatabaseConfig(DatabaseConfig):
     """Extended configuration for word-by-word databases.
 
@@ -223,10 +340,35 @@ class WbwDatabaseConfig(DatabaseConfig):
         ayah_col: str = "ayah",
         text_col: str = "translation",
         word_id_col: str = "word",
+        unsafe_paths: bool = False,
+        trust_config: bool = False,
     ) -> WbwDatabaseConfig:
-        """Create a WbwDatabaseConfig from an external database file path."""
+        """Create a WbwDatabaseConfig from an external database file path.
+
+        Args:
+            db_path: Path to the SQLite database file.
+            tablename: Name of the table.
+            surah_col: Surah column name.
+            ayah_col: Ayah column name.
+            text_col: Text column name.
+            word_id_col: Word ID column name.
+            unsafe_paths: If True, bypass working directory validation.
+                **Warning**: Setting this to True allows access to files
+                outside the working directory. Only use with trusted paths.
+            trust_config: If True, accept custom table/column names without
+                additional schema validation. When False (default), the
+                DatabaseManager validates identifiers against SQL injection.
+
+        Raises:
+            ValueError: If db_path is outside the working directory and
+                unsafe_paths is False.
+        """
+        db_path_obj = Path(db_path)
+        if not unsafe_paths:
+            _ensure_within_working_dir(db_path_obj)
+
         return cls(
-            filepath=Path(db_path),
+            filepath=db_path_obj,
             tablename=tablename,
             surah_col=surah_col,
             ayah_col=ayah_col,
@@ -238,7 +380,7 @@ class WbwDatabaseConfig(DatabaseConfig):
 # === Data Transmission Types ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WordItem:
     """Combines a word image with its text metadata for layout processing.
 
@@ -247,22 +389,22 @@ class WordItem:
 
     image: Image.Image
     text: str | None = None
+    color: Color | None = None
+    width: int = field(init=False)
+    height: int = field(init=False)
 
-    @property
-    def width(self) -> int:
-        """Width of the word image in pixels."""
-        return self.image.width
-
-    @property
-    def height(self) -> int:
-        """Height of the word image in pixels."""
-        return self.image.height
+    def __post_init__(self):
+        """Pre-calculate image dimensions to speed up layout loops."""
+        if self.image is not None:
+            # Use object.__setattr__ because the dataclass is frozen
+            object.__setattr__(self, "width", self.image.width)
+            object.__setattr__(self, "height", self.image.height)
 
 
 # === Configuration Types ===
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LayoutConfig:
     """Stores canvas sizing and top-level layout offsets.
 
@@ -282,7 +424,7 @@ class LayoutConfig:
 
     max_width: int
     image_height: int
-    padding: Padding = Padding(0, 0, 0, 0)
+    padding: Padding = field(default_factory=Padding)
     wimage_x_offset: int = 0
     wimage_y_offset: int = 0
     timage_x_offset: int = 0
@@ -293,7 +435,7 @@ class LayoutConfig:
     wimage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
 
     def __post_init__(self):
-        """Ensure string literals are converted to Enums where applicable."""
+        """Ensure string literals are converted to Enums, validate dimensions."""
         if isinstance(self.timage_vertical_align, str):
             object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
         if isinstance(self.timage_horizontal_align, str):
@@ -307,7 +449,22 @@ class LayoutConfig:
                 self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower())
             )
         if not isinstance(self.padding, Padding):
-            object.__setattr__(self, "padding", Padding(*self.padding))
+            try:
+                object.__setattr__(self, "padding", Padding(*self.padding))
+            except (TypeError, ValueError):
+                object.__setattr__(self, "padding", Padding())
+
+        # Validate dimensions
+        if self.max_width <= 0:
+            raise ValidationError(f"max_width must be positive, got {self.max_width}")
+        if self.image_height <= 0:
+            raise ValidationError(f"image_height must be positive, got {self.image_height}")
+
+        if self.content_width <= 0:
+            raise ValidationError(
+                f"LayoutConfig content_width must be positive, got {self.content_width}. "
+                f"(max_width={self.max_width}, padding.left={self.padding.left}, padding.right={self.padding.right})"
+            )
 
     @property
     def content_width(self) -> int:
@@ -320,165 +477,118 @@ class LayoutConfig:
         return self.image_height - self.padding.top - self.padding.bottom
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, slots=True)
 class WordConfig:
     """Configuration for word and verse rendering behavior.
 
     Controls font sizes, spacing, colors, and specific verse-number styles.
     """
 
-    font_size: int
-    max_rows_per_page: int
-    row_spacing: int
-    word_spacing: int
-    word_padding: Padding
-    verse_v_offset: int
-    balanced_wrapping: bool
-    verse_number_size: int
-    verse_number_padding: Padding
-    verse_number_color: Color
-    annotation_font_size: int
-    word_color: Color
-    annotation_color: Color
-    annotation_font_path: Path
-    background_color: Color
-    font: FontResource
+    font_size: FontSize
+    max_rows_per_page: int = 5
+    row_spacing: int = 20
+    word_spacing: int = 10
+    word_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(10, 10, 10, 10))
+    verse_v_offset: int = 0
+    balanced_wrapping: bool = False
+    verse_number_size: int = 110
+    verse_number_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(1, 41, 1, 1))
+    verse_number_color: Color = (255, 255, 255, 255)
+    annotation_font_size: int = 28
+    word_color: Color = (255, 255, 255, 255)
+    annotation_color: Color = (255, 255, 255, 255)
+    annotation_font_path: Path | str | FontResource | None = None
+    background_color: Color = (0, 0, 0, 0)
+    font: FontResource | None = None
 
-    def __init__(
-        self,
-        font_size: int,
-        max_rows_per_page: int,
-        row_spacing: int,
-        word_spacing: int,
-        word_padding: Padding | tuple[int, int, int, int] = (10, 10, 10, 10),
-        verse_v_offset: int = 0,
-        balanced_wrapping: bool = False,
-        verse_number_size: int = 110,
-        verse_number_padding: Padding | tuple[int, int, int, int] = (1, 41, 1, 1),
-        verse_number_color: Color = (255, 255, 255, 255),
-        annotation_font_size: int = 28,
-        word_color: Color = (255, 255, 255, 255),
-        annotation_color: Color = (255, 255, 255, 255),
-        annotation_font_path: Path | str | FontResource | None = None,
-        background_color: Color = (0, 0, 0, 0),
-        font: FontResource | None = None,
-    ):
-        """Initialize WordConfig with resolved paths and type-safe layout primitives."""
+    def __post_init__(self):
+        """Validate parameters and resolve defaults."""
         from quranmedialib.presets import FONT_HAFS
 
-        # Resolve font - default to FONT_HAFS if not provided
-        if font is None:
-            resolved_font = FONT_HAFS
-        else:
-            resolved_font = font
+        # Validate font sizes
+        for name, size in [
+            ("font_size", self.font_size),
+            ("annotation_font_size", self.annotation_font_size),
+            ("verse_number_size", self.verse_number_size),
+        ]:
+            if size <= 0:
+                raise ValidationError(f"{name} must be positive, got {size}")
+            if size > MAX_FONT_SIZE:
+                raise ValidationError(f"{name} exceeds maximum limit of {MAX_FONT_SIZE}, got {size}")
 
-        # Resolve annotation_font_path
-        if annotation_font_path is None:
-            resolved_font_path = get_font_path("inter.ttf")
-        elif isinstance(annotation_font_path, FontResource):
-            resolved_font_path = annotation_font_path.path
-        elif isinstance(annotation_font_path, str):
-            resolved_font_path = Path(annotation_font_path)
-        else:
-            resolved_font_path = annotation_font_path
+        if self.max_rows_per_page <= 0:
+            raise ValidationError(f"max_rows_per_page must be positive, got {self.max_rows_per_page}")
 
-        # Resolve paddings
-        word_padding = word_padding if isinstance(word_padding, Padding) else Padding(*word_padding)
-        verse_number_padding = (
-            verse_number_padding if isinstance(verse_number_padding, Padding) else Padding(*verse_number_padding)
-        )
+        # Resolve defaults
+        if self.font is None:
+            object.__setattr__(self, "font", FONT_HAFS)
 
-        object.__setattr__(self, "font_size", font_size)
-        object.__setattr__(self, "max_rows_per_page", max_rows_per_page)
-        object.__setattr__(self, "row_spacing", row_spacing)
-        object.__setattr__(self, "word_spacing", word_spacing)
-        object.__setattr__(self, "word_padding", word_padding)
-        object.__setattr__(self, "verse_v_offset", verse_v_offset)
-        object.__setattr__(self, "balanced_wrapping", balanced_wrapping)
-        object.__setattr__(self, "verse_number_size", verse_number_size)
-        object.__setattr__(self, "verse_number_padding", verse_number_padding)
-        object.__setattr__(self, "verse_number_color", verse_number_color)
-        object.__setattr__(self, "annotation_font_size", annotation_font_size)
-        object.__setattr__(self, "word_color", word_color)
-        object.__setattr__(self, "annotation_color", annotation_color)
-        object.__setattr__(self, "annotation_font_path", resolved_font_path)
-        object.__setattr__(self, "background_color", background_color)
-        object.__setattr__(self, "font", resolved_font)
+        # Resolve annotation font path
+        if self.annotation_font_path is None:
+            object.__setattr__(self, "annotation_font_path", get_font_path("inter.ttf"))
+        elif isinstance(self.annotation_font_path, FontResource):
+            object.__setattr__(self, "annotation_font_path", self.annotation_font_path.path)
+        elif isinstance(self.annotation_font_path, str):
+            object.__setattr__(self, "annotation_font_path", Path(self.annotation_font_path))
+
+        # Coerce paddings
+        if not isinstance(self.word_padding, Padding):
+            object.__setattr__(self, "word_padding", Padding(*self.word_padding))
+        if not isinstance(self.verse_number_padding, Padding):
+            object.__setattr__(self, "verse_number_padding", Padding(*self.verse_number_padding))
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, slots=True)
 class TextConfig:
     """Configuration for translation/rich text rendering.
 
     Bold weight is applied via font variations (wght axis) during rendering.
     """
 
-    font_size: int
-    color: Color
-    font_path: Path
-    italic_font_path: Path
-    line_spacing: int
-    height: int | None
-    max_width: int | None
-    alignment: HorizontalAlignment
+    font_size: FontSize = 36
+    color: Color = (255, 255, 255, 255)
+    font_path: Path | str | FontResource | None = None
+    italic_font_path: Path | str | FontResource | None = None
+    line_spacing: int = 10
+    height: int | None = None
+    max_width: int | None = None
+    alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER
+    balanced_wrapping: bool = True
+    highlight_font_path: Path | str | FontResource | None = None
+    highlight_font_size: int | None = None
+    highlight_color: Color | None = None
 
-    def __init__(
-        self,
-        font_size: int = 36,
-        color: Color = (255, 255, 255, 255),
-        font_path: Path | str | FontResource | None = None,
-        italic_font_path: Path | str | FontResource | None = None,
-        line_spacing: int = 10,
-        height: int | None = None,
-        max_width: int | None = None,
-        alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER,
-    ):
-        """Initialize TextConfig with resolved font paths."""
+    def __post_init__(self):
+        """Validate parameters and resolve defaults."""
 
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
                 return get_font_path(default_filename)
-            return path.path if isinstance(path, FontResource) else Path(path)
+            if isinstance(path, FontResource):
+                return path.path
+            return Path(path)
 
-        # Resolve alignment
-        if isinstance(alignment, str):
-            alignment = HorizontalAlignment(alignment.lower())
+        # Coerce alignment
+        if isinstance(self.alignment, str):
+            object.__setattr__(self, "alignment", HorizontalAlignment(self.alignment.lower()))
 
-        object.__setattr__(self, "font_size", font_size)
-        object.__setattr__(self, "color", color)
-        object.__setattr__(self, "font_path", _resolve_path(font_path, "inter.ttf"))
-        object.__setattr__(self, "italic_font_path", _resolve_path(italic_font_path, "inter_italic.ttf"))
-        object.__setattr__(self, "line_spacing", line_spacing)
-        object.__setattr__(self, "height", height)
-        object.__setattr__(self, "max_width", max_width)
-        object.__setattr__(self, "alignment", alignment)
+        # Validate font_size
+        if self.font_size <= 0:
+            raise ValidationError(f"font_size must be positive, got {self.font_size}")
+        if self.font_size > MAX_FONT_SIZE:
+            raise ValidationError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {self.font_size}")
 
+        # Validate max_width
+        if self.max_width is not None and self.max_width <= 0:
+            raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
 
-# === Text Rendering Types ===
+        # Resolve paths
+        object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))
+        object.__setattr__(self, "italic_font_path", _resolve_path(self.italic_font_path, "inter_italic.ttf"))
+        object.__setattr__(self, "highlight_font_path", _resolve_path(self.highlight_font_path, "inter.ttf"))
 
-
-@dataclass(frozen=True)
-class StyledWord:
-    """A word with specific styling applied, ready for rendering."""
-
-    text: str
-    font: ImageFont.ImageFont
-    color: Color
-    width: int
-    is_transparent: bool = False
-    simulate_bold: bool = False
-
-
-class Line:
-    """A collection of styled words representing a single line of text."""
-
-    def __init__(self):
-        self.words: list[StyledWord] = []
-        self.width: int = 0
-
-    def add_word(self, word: StyledWord, space_width: int):
-        """Adds a word to the line, accounting for word spacing."""
-        if self.words:
-            self.width += space_width
-        self.words.append(word)
-        self.width += word.width
+        # Resolve highlight defaults
+        if self.highlight_font_size is None:
+            object.__setattr__(self, "highlight_font_size", self.font_size)
+        if self.highlight_color is None:
+            object.__setattr__(self, "highlight_color", (255, 215, 0, 255))

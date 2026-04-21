@@ -6,8 +6,11 @@ as transparent placeholders.
 """
 
 import os
+import warnings
 
-from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
+import pytest
+
+from quranmedialib import LANDSCAPE_PRESET, ValidationError, DatabaseManager
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
 
@@ -74,3 +77,82 @@ def test_isolate_words() -> None:
 
 if __name__ == "__main__":
     test_isolate_words()
+
+
+def test_isolate_words_invalid_surah() -> None:
+    """Test that IsolateWordsWorkflow raises ValueError for invalid surah."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    # Surah 0 is invalid — should raise ValidationError
+    with pytest.raises(ValidationError, match="Surah must be between 1 and 114"):
+        workflow.get_iterator(
+            surah=0,
+            verse_words=["test"],
+            translations=["test translation"],
+            ayah=1,
+        ).__next__()
+
+
+def test_isolate_words_empty_verse_words() -> None:
+    """Test that IsolateWordsWorkflow raises ValueError for empty verse_words list."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    # Empty verse_words should now raise ValueError (security fix)
+    with pytest.raises(ValueError, match="verse_words must be a non-empty list"):
+        list(
+            workflow.get_iterator(
+                surah=1,
+                verse_words=[],
+                translations=["test translation"],
+                ayah=1,
+            )
+        )
+
+
+def test_isolate_words_none_ayah() -> None:
+    """Test that IsolateWordsWorkflow works when ayah is None."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    verse_words = ["word1", "word2", "word3"]
+
+    results = list(
+        workflow.get_iterator(
+            surah=1,
+            verse_words=verse_words,
+            translations=["translation"],
+            ayah=None,
+        )
+    )
+
+    # With 3 words and no ayah, we should get 3 results (one per word)
+    assert len(results) == len(verse_words), f"Expected {len(verse_words)} results, got {len(results)}"
+
+    # Verify each result is a non-empty list of images
+    for i, pages in enumerate(results):
+        assert isinstance(pages, list), f"Word {i + 1}: Expected list, got {type(pages)}"
+        assert len(pages) > 0, f"Word {i + 1}: Expected at least one page"
+
+
+def test_isolate_mismatched_wbw_length() -> None:
+    """Test that IsolateWordsWorkflow warns when wbw_translations length mismatches."""
+    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+
+    # 3 words but only 1 wbw_translation -- should work with warning
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        results = list(
+            workflow.get_iterator(
+                surah=1,
+                verse_words=["word1", "word2", "word3"],
+                translations=["translation"],
+                ayah=1,
+                wbw_translations=["only_one"],
+                annotate=True,
+            )
+        )
+        # Should produce results (warning is informational)
+        assert len(results) >= 1

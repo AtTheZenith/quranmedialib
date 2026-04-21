@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING, Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError
+from quranmedialib.types import MAX_AYAH, MAX_SURAH, MIN_AYAH, MIN_SURAH
+
 if TYPE_CHECKING:
     from quranmedialib.types import LayoutConfig, TextConfig, WordConfig
 
@@ -31,10 +34,31 @@ class BaseWorkflow(ABC):
         text_config: TextConfig,
         word_config: WordConfig,
     ):
-        """Initializes the workflow with shared configurations."""
+        """Initializes the workflow with shared configurations.
+
+        Raises:
+            ValidationError: If any config object is None.
+        """
+        if layout_config is None or text_config is None or word_config is None:
+            raise ValidationError(
+                f"Configuration objects must not be None. "
+                f"Got layout_config={layout_config}, text_config={text_config}, word_config={word_config}"
+            )
         self.layout_config = layout_config
         self.text_config = text_config
         self.word_config = word_config
+
+    def _validate_surah(self, surah: int) -> int:
+        """Validates surah number (1-114)."""
+        if not (MIN_SURAH <= surah <= MAX_SURAH):
+            raise ValidationError(f"Surah must be between {MIN_SURAH} and {MAX_SURAH}, got {surah}")
+        return surah
+
+    def _validate_ayah(self, ayah: int) -> int:
+        """Validates ayah number (1-286)."""
+        if not (MIN_AYAH <= ayah <= MAX_AYAH):
+            raise ValidationError(f"Ayah must be between {MIN_AYAH} and {MAX_AYAH}, got {ayah}")
+        return ayah
 
     def __repr__(self) -> str:
         return (

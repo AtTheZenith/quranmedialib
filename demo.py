@@ -10,6 +10,7 @@ Run this script to generate sample images for all preset configurations.
 """
 
 import os
+from pathlib import Path
 from typing import Literal
 
 from PIL import Image
@@ -31,6 +32,7 @@ from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 
 
 def run_workflow_demo(
@@ -114,7 +116,6 @@ def create_square_demo(
 
     elif mode == "translation":
         # In translation mode, we use a dummy item as per original code
-        # "all_items = [WordItem(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), "a")]"
         all_word_images.append(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
         all_words_text.append("a")
 
@@ -138,19 +139,42 @@ def create_square_demo(
     )
 
 
+def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
+    """Worker function to apply glow and save image in a separate process."""
+    img, index, output_path = args
+
+    # Genius optimization: Resource safety heartbeat for post-processing
+    worker_heartbeat(process_limit_mb=192.0)
+
+    final_img = glow(img)
+    filename = f"{(index + 1):02d}.png"
+    final_img.save(output_path / filename)
+    print(f"Saved {filename}")
+
+    # Explicit cleanup to stay within 192MB target
+    del final_img
+    del img
+
+
 def save_images(images: list[Image.Image], output_dir: str) -> None:
-    """Applies glow and saves images to the output directory."""
-    os.makedirs(output_dir, exist_ok=True)
-    for i, img in enumerate(images):
-        # Apply glow before saving as per original main()
-        final_img = glow(img)
-        filename = f"{(i + 1):02d}.png"
-        path = os.path.join(output_dir, filename)
-        final_img.save(path)
-        print(f"Saved {filename}")
+    """Applies glow and saves images to the output directory in parallel."""
+    output_path = Path(output_dir).resolve()
+    output_path.mkdir(parents=True, exist_ok=True)
+    # Use ParallelRenderer for parallel glow processing
+    # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
+    renderer = ParallelRenderer(
+        mode=ExecutionMode.PROCESS,
+        process_limit_mb=192.0,
+    )
+
+    tasks = [(img, i, output_path) for i, img in enumerate(images)]
+    # Map tasks to worker function.
+    # iterator consumption ensures all images are processed.
+    list(renderer.map(_glow_and_save, tasks))
 
 
 def main() -> None:
+    """Runs all preset combinations sequentially with parallel image post-processing."""
     db = DatabaseManager()
     surah_id = 108
     data = {"surah": surah_id}
@@ -190,7 +214,7 @@ def main() -> None:
             create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation")
         )
 
-        # Save all results
+        # Save all results (glow is applied here in parallel)
         save_images(all_results, "output/demo")
 
     finally:

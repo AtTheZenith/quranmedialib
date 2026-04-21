@@ -7,10 +7,12 @@ to process all verses of a given surah with their default translations.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Iterator
 
 from PIL import Image
 
+from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
@@ -40,26 +42,44 @@ class SurahWorkflow(VerseRangeWorkflow):
             surah: Surah number (1-114).
             annotate: Whether to annotate words with word-by-word translations.
             separate_translations: If True, render translations on separate pages.
-            **kwargs: Additional keyword arguments (currently unused).
+            **kwargs:
+                - parallel: bool (default: True for |verses| > 10)
+                - output_dir: Optional path to save images directly.
 
         Yields:
             list[Image.Image]: List of page images for each verse in the surah.
 
         Raises:
-            ValueError: If no verses are found for the given surah.
+            ValidationError: If surah number is invalid.
+            WorkflowError: If no verses are found for the given surah.
         """
+        surah = self._validate_surah(surah)
+
+        # Warn about unrecognized kwargs to catch typos early
+        known_kwargs = {"annotate", "separate_translations", "parallel", "output_dir", "filename_prefix"}
+        unrecognized = set(kwargs.keys()) - known_kwargs
+        if unrecognized:
+            warnings.warn(
+                f"Unknown kwargs ignored by SurahWorkflow.get_iterator: {unrecognized}",
+                UserWarning,
+                stacklevel=2,
+            )
+
         db = DatabaseManager()
 
         # Retrieve Arabic verses and translations
         arabic_verses = db.get_verses_from_surah(surah)
         if not arabic_verses:
-            raise ValueError(f"No verses found for Surah {surah}")
+            raise WorkflowError(f"No verses found for Surah {surah}")
 
         raw_translations = db.get_translation_from_surah(surah)
 
         # Wrap each translation in a list to match VerseRangeWorkflow's expectation
         # (One page of translation per verse by default).
         translations = [[t] for t in raw_translations]
+
+        # Enable parallel processing by default for surahs with more than 10 verses
+        parallel = kwargs.get("parallel", len(arabic_verses) > 10)
 
         return self._process_range(
             surah=surah,
@@ -68,4 +88,6 @@ class SurahWorkflow(VerseRangeWorkflow):
             translations=translations,
             annotate=annotate,
             separate_translations=separate_translations,
+            parallel=parallel,
+            **kwargs,
         )

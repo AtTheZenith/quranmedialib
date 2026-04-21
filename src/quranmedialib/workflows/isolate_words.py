@@ -1,10 +1,13 @@
 """Workflow for isolating individual words within a verse."""
 
+import logging
+import warnings
 from typing import Iterator
 
 from PIL import Image
 
-from quranmedialib.modules.annotation import annotate_word
+from quranmedialib.exceptions import ValidationError
+from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import (
     format_isolation_text,
@@ -16,6 +19,8 @@ from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["IsolateWordsWorkflow"]
 
@@ -49,25 +54,42 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
         Yields:
             list[Image.Image]: A list of pages for each isolated state.
+
+        Raises:
+            ValidationError: If verse_words is empty or surah/ayah out of range.
         """
+        surah = self._validate_surah(surah)
+        if ayah is not None:
+            self._validate_ayah(ayah)
+
+        if not verse_words:
+            raise ValidationError("verse_words must be a non-empty list")
+
         annotate = kwargs.get("annotate", True)
         highlight_style = kwargs.get("highlight_style", "#b#")
+
+        # Warn about wbw_translations length mismatch
+        if wbw_translations and len(wbw_translations) != len(verse_words):
+            warnings.warn(
+                f"wbw_translations length ({len(wbw_translations)}) does not match "
+                f"verse_words length ({len(verse_words)}). Mismatched indices will be skipped.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # 1. Prepare base images and transparent placeholders
         word_images = [get_wimage(word, self.word_config) for word in verse_words]
 
         if annotate:
-            annotated_images = [
-                annotate_word(
-                    img,
-                    surah,
-                    ayah or 1,
-                    i + 1,
-                    translation=wbw_translations[i] if wbw_translations else None,
-                    word_config=self.word_config,
-                )
-                for i, img in enumerate(word_images)
-            ]
+            # Standardize: use the plural version which supports batching and caching
+            annotated_images = annotate_words(
+                images=word_images,
+                surah=surah,
+                ayah=ayah or 1,
+                start=1,
+                word_config=self.word_config,
+                wbw_translations=wbw_translations,
+            )
         else:
             annotated_images = word_images
 
@@ -87,7 +109,15 @@ class IsolateWordsWorkflow(BaseWorkflow):
         norm_highlight = normalize_highlight_style(highlight_style)
 
         # Pre-compute all formatted translation strings
-        formatted_translations = [format_isolation_text(parsed_trans, i, norm_highlight) for i in range(total_items)]
+        # Handle case where there are more words than translation segments
+        num_segments = len(parsed_trans)
+        formatted_translations = []
+        for i in range(total_items):
+            if i < num_segments:
+                formatted_translations.append(format_isolation_text(parsed_trans, i, norm_highlight))
+            else:
+                # No matching segment - create transparent placeholder text
+                formatted_translations.append("##00000000#(no translation)#")
 
         for i in range(total_items):
             # Create image list efficiently: use list comprehension with index check

@@ -1,0 +1,200 @@
+"""General-purpose parallel processing engine for QuranMediaLib.
+
+This module provides the ParallelRenderer, a robust utility that manages
+worker pools with hardware-aware scaling, optimal chunking, and memory
+resource safety.
+"""
+
+from __future__ import annotations
+
+import atexit
+import logging
+import os
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from enum import Enum, auto
+from typing import Callable, Iterable, Iterator, TypeVar
+
+from quranmedialib.config import (
+    CPU_COUNT,
+    DEFAULT_AGGREGATE_LIMIT_MB,
+    DEFAULT_PROCESS_LIMIT_MB,
+)
+from quranmedialib.utils.memory import (
+    MemoryMonitor,
+    check_process_memory,
+)
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+R = TypeVar("R")
+
+
+class ExecutionMode(Enum):
+    """Supported hardware execution strategies."""
+
+    PROCESS = auto()
+    THREAD = auto()
+
+
+class _PoolManager:
+    """Internal manager for persistent worker pools.
+
+    This prevents the overhead of repeatedly spawning and destroying
+    process pools during a single application lifecycle.
+    """
+
+    _executors: dict[tuple[ExecutionMode, int], ProcessPoolExecutor | ThreadPoolExecutor] = {}
+
+    @classmethod
+    def get_executor(cls, mode: ExecutionMode, max_workers: int) -> ProcessPoolExecutor | ThreadPoolExecutor:
+        """Returns a cached executor for the given mode and worker count."""
+        key = (mode, max_workers)
+        if key not in cls._executors:
+            logger.debug("Initializing persistent %s pool with %d workers", mode.name, max_workers)
+            if mode == ExecutionMode.PROCESS:
+                cls._executors[key] = ProcessPoolExecutor(max_workers=max_workers)
+            else:
+                cls._executors[key] = ThreadPoolExecutor(max_workers=max_workers)
+        return cls._executors[key]
+
+    @classmethod
+    def shutdown_all(cls) -> None:
+        """Shuts down all cached executors."""
+        for key, executor in cls._executors.items():
+            logger.debug("Shutting down persistent %s pool", key[0].name)
+            executor.shutdown(wait=True)
+        cls._executors.clear()
+
+
+# Register cleanup on exit
+atexit.register(_PoolManager.shutdown_all)
+
+
+class ParallelRenderer:
+    """Orchestrates parallel task execution with memory and hardware awareness.
+
+    Features:
+    - Automatic thread/process count detection.
+    - Optimal chunking (batches aligned to thread count).
+    - Aggregate memory monitoring.
+    - Support for both ProcessPool (CPU speed) and ThreadPool (Memory efficiency).
+    """
+
+    def __init__(
+        self,
+        max_workers: int | None = None,
+        mode: ExecutionMode = ExecutionMode.PROCESS,
+        memory_limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB,
+        process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB,
+    ):
+        """Initializes the parallel engine.
+
+        Args:
+            max_workers: Number of workers. Defaults to CPU_COUNT.
+            mode: PROCESS or THREAD pool.
+            memory_limit_mb: Aggregate RAM limit for the entire pool.
+            process_limit_mb: Individual RAM limit for each process.
+        """
+        self.max_workers = max_workers or CPU_COUNT
+        self.mode = mode
+        self.memory_limit_mb = memory_limit_mb
+        self.process_limit_mb = process_limit_mb
+
+    def _get_executor(self) -> ProcessPoolExecutor | ThreadPoolExecutor:
+        """Retrieves a persistent executor from the PoolManager."""
+        return _PoolManager.get_executor(self.mode, self.max_workers)
+
+    def map_batches(
+        self,
+        func: Callable[[list[T]], Iterator[R]],
+        tasks: Iterable[T],
+        use_monitor: bool = True,
+    ) -> Iterator[R]:
+        """Groups tasks into optimal batches and maps a function over them.
+
+        Each worker will receive a list of tasks instead of individual items.
+        This is ideal for operations with high setup overhead (e.g., DB connections,
+        context managers) that should be shared across multiple items.
+
+        Args:
+            func: Function that accepts a list of tasks and yields results.
+            tasks: Iterable of task arguments.
+            use_monitor: Whether to enable aggregate memory monitoring.
+
+        Yields:
+            The results yielded by the worker function.
+        """
+        task_list = list(tasks)
+        if not task_list:
+            return
+
+        # Calculate chunksize to have exactly one task-list per worker
+        chunk_size = max(1, (len(task_list) + self.max_workers - 1) // self.max_workers)
+        
+        # Create the batches
+        batches = [task_list[i : i + chunk_size] for i in range(0, len(task_list), chunk_size)]
+
+        # Map over batches with chunksize=1 (each batch is one IPC message)
+        for batch_results in self.map(func, batches, chunksize=1, use_monitor=use_monitor):
+            yield from batch_results
+
+    def map(
+        self,
+        func: Callable[..., R],
+        tasks: Iterable[T],
+        chunksize: int | None = None,
+        use_monitor: bool = True,
+    ) -> Iterator[R]:
+        """Maps a function over tasks in parallel.
+
+        Args:
+            func: The function to execute in workers.
+            tasks: Iterable of task arguments.
+            chunksize: Number of items per batch. If None, it is calculated
+                to ensure the number of batches matches the worker count.
+            use_monitor: Whether to enable aggregate memory monitoring.
+
+        Returns:
+            Iterator of results.
+        """
+        task_list = list(tasks)
+        if not task_list:
+            return iter([])
+
+        # Calculate chunksize to align with hardware threads if not provided
+        # Formula: total_tasks // workers ensures 'workers' batches.
+        if chunksize is None:
+            chunksize = max(1, len(task_list) // self.max_workers)
+            logger.debug(
+                "Dynamic chunking: %d tasks / %d workers = chunksize %d",
+                len(task_list),
+                self.max_workers,
+                chunksize,
+            )
+
+        monitor = MemoryMonitor(limit_mb=self.memory_limit_mb) if use_monitor else None
+
+        try:
+            if monitor:
+                monitor.__enter__()
+
+            executor = self._get_executor()
+            yield from executor.map(func, task_list, chunksize=chunksize)
+        finally:
+            if monitor:
+                monitor.__exit__(None, None, None)
+
+
+def worker_heartbeat(process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
+    """Utility for workers to check their own memory budget.
+
+    Should be called inside the worker function at significant milestones.
+    """
+    try:
+        check_process_memory(process_limit_mb)
+    except Exception as e:
+        logger.warning("Worker heartbeat detected memory issue: %s", e)
+        # We don't necessarily want to kill the process immediately if it can finish,
+        # but we should log it.
+        raise

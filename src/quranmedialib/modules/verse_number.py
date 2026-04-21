@@ -16,8 +16,16 @@ __all__ = ["verse_number"]
 # Translation table for Arabic-Indic numerals
 ARABIC_INDIC_TRANS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
-# Module-level singleton for text measurement
-_MEASURE_DRAW = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+# Lazy-initialized singleton for text measurement
+_measure_draw: ImageDraw.ImageDraw | None = None
+
+
+def _get_measure_draw() -> ImageDraw.ImageDraw:
+    """Returns measure draw singleton, initialized on first use."""
+    global _measure_draw
+    if _measure_draw is None:
+        _measure_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    return _measure_draw
 
 
 def verse_number(
@@ -55,17 +63,17 @@ def verse_number(
     # Convert number to Arabic-Indic numerals
     number_str = str(number).translate(ARABIC_INDIC_TRANS)
 
-    # Measure text bounding box using module-level singleton
-    bbox = _MEASURE_DRAW.textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
+    # Measure text bounding box using lazy-initialized module singleton
+    bbox = _get_measure_draw().textbbox((0, 0), number_str, font=symbol_font, anchor="mm")
 
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
 
     padding = word_config.verse_number_padding
 
-    # Create image fitting text plus padding
-    img_w = int(text_w + padding.horizontal)
-    img_h = int(text_h + padding.vertical)
+    # Create image fitting text plus padding (clamp to minimum 1x1)
+    img_w = max(1, int(text_w + padding.horizontal))
+    img_h = max(1, int(text_h + padding.vertical))
 
     img = Image.new("RGBA", (img_w, img_h), color=word_config.background_color)
     draw = ImageDraw.Draw(img)
