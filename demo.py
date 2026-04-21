@@ -159,12 +159,7 @@ def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
 def save_images(images: list[Image.Image], output_dir: str) -> None:
     """Applies glow and saves images to the output directory in parallel."""
     output_path = Path(output_dir).resolve()
-    # Ensure output directory is within the project tree
-    project_root = Path(__file__).parent.resolve()
-    if os.path.commonpath([output_path, project_root]) != str(project_root):
-        raise ValueError(f"Output directory must be within project root: {project_root}")
     output_path.mkdir(parents=True, exist_ok=True)
-
     # Use ParallelRenderer for parallel glow processing
     # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
     renderer = ParallelRenderer(

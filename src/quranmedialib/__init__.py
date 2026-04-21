@@ -69,6 +69,10 @@ from quranmedialib.exceptions import (
 from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.types import (
     MAX_FONT_SIZE,
+    MIN_AYAH,
+    MIN_SURAH,
+    MAX_AYAH,
+    MAX_SURAH,
     AyahNumber,
     Color,
     DatabaseConfig,
@@ -112,6 +116,10 @@ __all__ = [
     "HorizontalAlignment",
     "VerticalAlignment",
     "MAX_FONT_SIZE",
+    "MIN_SURAH",
+    "MAX_SURAH",
+    "MIN_AYAH",
+    "MAX_AYAH",
     # Text rendering types
     "StyledWord",
     "Line",

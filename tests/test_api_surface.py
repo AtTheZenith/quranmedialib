@@ -38,7 +38,12 @@ def test_api_exports_completeness() -> None:
         "HorizontalAlignment",
         "VerticalAlignment",
         "MAX_FONT_SIZE",
+        "MIN_SURAH",
+        "MAX_SURAH",
+        "MIN_AYAH",
+        "MAX_AYAH",
         # Text rendering types
+
         "StyledWord",
         "Line",
         # Exceptions

@@ -27,6 +27,10 @@ from typing import Any, Optional, Self
 from quranmedialib.config import SQLITE_MMAP_SIZE
 from quranmedialib.exceptions import DatabaseError, ValidationError
 from quranmedialib.types import (
+    MAX_AYAH,
+    MAX_SURAH,
+    MIN_AYAH,
+    MIN_SURAH,
     AyahNumber,
     DatabaseConfig,
     SurahNumber,
@@ -51,12 +55,6 @@ _SQLITE_PRAGMAS = [
 
 # Maximum glow radius to prevent resource exhaustion
 MAX_GLOW_RADIUS = 200
-
-# Surah and ayah range constants for runtime validation
-MIN_SURAH = 1
-MAX_SURAH = 114
-MIN_AYAH = 1
-MAX_AYAH = 286
 
 # Trusted packaged database table/column names — hardcoded to prevent SQL injection
 _PACKAGED_DB_SCHEMAS = {

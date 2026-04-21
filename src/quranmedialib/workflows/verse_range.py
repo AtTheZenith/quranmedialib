@@ -11,6 +11,7 @@ import functools
 import gc
 import logging
 import os
+from pathlib import Path
 from typing import Any, Iterator
 
 from PIL import Image, ImageFont
@@ -22,7 +23,7 @@ from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.types import WordItem
+from quranmedialib.types import WordItem, _ensure_within_working_dir
 from quranmedialib.utils.io import async_image_saver
 from quranmedialib.utils.memory import (
     DEFAULT_PROCESS_LIMIT_MB,
@@ -146,6 +147,9 @@ class VerseRangeWorkflow(BaseWorkflow):
         If output_dir is provided, yields lists of paths. Otherwise yields lists of images.
         """
         output_dir = kwargs.get("output_dir")
+        if output_dir:
+            _ensure_within_working_dir(Path(output_dir))
+
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
         total_verses = end_verse - start_verse + 1
 
@@ -172,6 +176,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                     # result is list of byte-data tuples
                     yield [Image.frombytes(m, s, d) for m, s, d in result]
         else:
+            # OPTIM: Direct rendering without IPC byte overhead
             task_list = [(ayah, translations[i]) for i, ayah in enumerate(range(start_verse, end_verse + 1))]
             for result in _render_verse_worker(
                 task_list,
@@ -183,11 +188,9 @@ class VerseRangeWorkflow(BaseWorkflow):
                 separate_translations,
                 output_dir,
                 filename_prefix,
+                use_bytes=False,
             ):
-                if output_dir:
-                    yield result
-                else:
-                    yield [Image.frombytes(m, s, d) for m, s, d in result]
+                yield result
 
 
 def _render_verse_worker(
@@ -200,6 +203,7 @@ def _render_verse_worker(
     separate_translations: bool,
     output_dir: str | None,
     filename_prefix: str,
+    use_bytes: bool = True,
 ) -> list[list[Any]]:
     """Worker function for rendering a batch of verses. Returns pickle-safe data.
 
@@ -211,12 +215,16 @@ def _render_verse_worker(
         separate_translations: Separate translation pages.
         output_dir: Optional directory to save images.
         filename_prefix: Prefix for output filenames.
+        use_bytes: If True, convert images to bytes for IPC.
 
     Returns:
         list[list[Any]]: List of pages (paths or byte data tuples) for each verse.
     """
     if not verse_data:
         return []
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     # Initialize process-local database manager
     db = DatabaseManager()
@@ -288,21 +296,26 @@ def _render_verse_worker(
                     if t_img.mode == "L":
                         canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
                     else:
-                        canvas.alpha_composite(t_img, (tx, ty))
+                        # Ensure RGBA for alpha_composite
+                        if canvas.mode != "RGBA":
+                            canvas = canvas.convert("RGBA")
+                        canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
                     pages.append(canvas)
             else:
                 pages = list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
 
             if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
                 paths = []
                 for j, p in enumerate(pages):
                     path = os.path.join(output_dir, f"{filename_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
                     save(p, path, format="PNG", compress_level=1)
                     paths.append(path)
                 batch_results.append(paths)
-            else:
+            elif use_bytes:
                 # Convert PIL images to picklable byte data for IPC
                 batch_results.append([(p.mode, p.size, p.tobytes()) for p in pages])
+            else:
+                # Direct Image objects (for serial execution)
+                batch_results.append(pages)
 
     return batch_results

@@ -83,6 +83,13 @@ def _ensure_within_working_dir(path: Path) -> None:
         raise ResourceError(f"Failed to validate path {path}: {e}")
 
 
+# Surah and ayah range constants for runtime validation
+MIN_SURAH = 1
+MAX_SURAH = 114
+MIN_AYAH = 1
+MAX_AYAH = 286
+
+
 # === Layout Primitives ===
 
 
