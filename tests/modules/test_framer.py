@@ -9,6 +9,7 @@ This module contains tests for verifying the multi-page layout engine including:
 import os
 from dataclasses import replace
 
+import pytest
 from PIL import Image
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, LayoutConfig, WordConfig, WordItem
@@ -19,7 +20,7 @@ from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 
 
-def test_framer() -> None:
+def test_framer(request: pytest.FixtureRequest) -> None:
     print("\nRunning test_framer...")
     database_manager = DatabaseManager()
 
@@ -68,11 +69,11 @@ def test_framer() -> None:
     images[0].save(f"{output_dir}/framer_1.png")
     images[1].save(f"{output_dir}/framer_2.png")
     images[2].save(f"{output_dir}/framer_3.png")
-
+    request.node.benchmark_data = ["verse=2:255", f"pages={len(images)}"]
     print("test_framer completed successfully.")
 
 
-def test_framer_alignment() -> None:
+def test_framer_alignment(request: pytest.FixtureRequest) -> None:
     print("\nRunning test_framer_alignment...")
     database_manager = DatabaseManager()
 
@@ -129,6 +130,7 @@ def test_framer_alignment() -> None:
     images = frame(items, translation_images=t_imgs_cr, config=config_cr, word_config=word_config_cr)
     images[0].save(f"{output_dir}/framer_alignment_center_right.png")
 
+    request.node.benchmark_data = ["surah=108", "alignments=4"]
     print("test_framer_alignment completed successfully.")
 
 
@@ -219,3 +221,76 @@ if __name__ == "__main__":
     test_framer()
     test_framer_alignment()
     test_framer_offsets()
+
+
+# === Validation Tests ===
+
+
+def test_frame_empty_words() -> None:
+    """Test that frame returns empty list for empty words."""
+    result = frame([], translation_images=None, config=None, word_config=None)
+    assert result == []
+
+
+def test_frame_none_word_item_image() -> None:
+    """Test that frame raises ValueError when WordItem has None image."""
+    word_config = WordConfig(font_size=10)
+    # Create WordItem with None image
+    bad_item = WordItem(None)  # type: ignore
+
+    with pytest.raises(ValueError, match="One or more WordItems are missing their image content"):
+        frame([bad_item], word_config=word_config)
+
+
+def test_frame_none_config_creates_defaults() -> None:
+    """Test that frame works with None config (should create defaults)."""
+    word_config = WordConfig(font_size=10)
+    dummy_img = Image.new("RGBA", (50, 50))
+    items = [WordItem(dummy_img)]
+
+    # Should not raise, creates default config
+    result = frame(items, word_config=word_config)
+    assert len(result) > 0
+
+
+def test_frame_invalid_alignment_value() -> None:
+    """Test that frame handles invalid alignment values gracefully."""
+    # Invalid alignment should either raise error or be handled by LayoutConfig
+    with pytest.raises(Exception):
+        LayoutConfig(
+            max_width=500,
+            image_height=500,
+            padding=(0, 0, 0, 0),
+            wimage_vertical_align="invalid_value",
+        )
+
+
+@pytest.mark.parametrize("negative_strength", [-1.0, -0.5, 0.0])
+def test_frame_negative_word_spacing(negative_strength: float) -> None:
+    """Test that frame handles negative word spacing."""
+    word_config = WordConfig(font_size=10, word_spacing=-10)
+    dummy_img = Image.new("RGBA", (50, 50))
+    items = [WordItem(dummy_img), WordItem(dummy_img)]
+
+    # Should handle gracefully (may produce overlapping images)
+    result = frame(items, word_config=word_config)
+    assert len(result) > 0
+
+
+# === Zero Content Width Validation Tests ===
+
+
+def test_frame_zero_content_width_raises_error() -> None:
+    """Test that LayoutConfig raises ValueError when content_width is zero."""
+    # content_width = max_width - padding.left - padding.right = 100 - 50 - 50 = 0
+    # Validation now happens at config creation, not in frame()
+    with pytest.raises(ValueError, match="content_width must be positive"):
+        LayoutConfig(max_width=100, image_height=1080, padding=(50, 50, 50, 50))
+
+
+def test_frame_negative_content_width_raises_error() -> None:
+    """Test that LayoutConfig raises ValueError when content_width is negative."""
+    # content_width = max_width - padding.left - padding.right = 50 - 50 - 50 = -50
+    # Validation now happens at config creation, not in frame()
+    with pytest.raises(ValueError, match="content_width must be positive"):
+        LayoutConfig(max_width=50, image_height=1080, padding=(50, 50, 50, 50))

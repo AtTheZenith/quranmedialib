@@ -1,6 +1,6 @@
 [project]
 name = "quranmedialib"
-version = "1.2.0"
+version = "2.0.0"
 description = "A media generation library for Quranic Arabic text and translations with customizable layouts."
 readme = "README.md"
 requires-python = ">=3.13, <3.14"
@@ -13,11 +13,22 @@ dependencies = [
 dev = [
     "ruff>=0.5.0",
     "pytest>=8.0.0",
+    "psutil>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "benchmark: performance benchmarks (skipped by default)",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "psutil>=7.2.2",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quranmedialib"]

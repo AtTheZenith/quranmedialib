@@ -10,6 +10,7 @@ This module contains tests for verifying image processing functions including:
 import os
 import statistics
 
+import pytest
 from PIL import Image, ImageDraw
 
 from quranmedialib.modules.image import color, glow, pad
@@ -88,9 +89,14 @@ def _analyze_image_brightness(filepath: str) -> dict[str, float]:
 
 def _print_stats(label: str, stats: dict[str, float]) -> None:
     """Print brightness statistics in a formatted way."""
-    print(
-        f"  {label:10s}: mean={stats['mean']:6.2f}, median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, stdev={stats['stdev']:6.2f}"
+    fmt = (
+        f"  {label:10s}: mean={stats['mean']:6.2f}, "
+        f"median={stats['median']:6.2f}, q1={stats['q1']:6.2f}, "
+        f"q3={stats['q3']:6.2f}, IQR={stats['iqr']:6.2f}, "
+        f"p10={stats['p10']:6.2f}, p90={stats['p90']:6.2f}, "
+        f"stdev={stats['stdev']:6.2f}"
     )
+    print(fmt)
 
 
 def test_color() -> None:
@@ -307,3 +313,138 @@ if __name__ == "__main__":
     test_glow_wimage_comparison()
     test_glow_brightness_analysis()
     print("All image tests completed successfully.")
+
+
+# === Validation Tests ===
+
+
+def test_color_none_image() -> None:
+    """Test that color raises error for None image."""
+    with pytest.raises(AttributeError):
+        color(None, color=(255, 0, 0, 255))  # type: ignore
+
+
+def test_color_invalid_color_tuple() -> None:
+    """Test that color raises ValueError for invalid color tuples."""
+    test_image = Image.new("RGBA", (10, 10))
+
+    # Too short color tuple (2 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        color(test_image, color=(255, 0))  # type: ignore
+
+    # Too long color tuple (5 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        color(test_image, color=(255, 0, 0, 255, 0))  # type: ignore
+
+
+def test_pad_invalid_color_tuple() -> None:
+    """Test that pad raises ValueError for invalid color tuples."""
+    test_image = Image.new("RGBA", (10, 10))
+
+    # Too short color tuple (1 element)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        pad(test_image, color=(255,))  # type: ignore
+
+    # Too long color tuple (5 elements)
+    with pytest.raises(ValueError, match="Color must be RGB or RGBA tuple"):
+        pad(test_image, color=(255, 0, 0, 255, 0))  # type: ignore
+
+
+def test_pad_none_image() -> None:
+    """Test that pad raises error for None image."""
+    with pytest.raises(AttributeError):
+        pad(None, padding=Padding(10, 10, 10, 10))  # type: ignore
+
+
+def test_pad_negative_padding() -> None:
+    """Test that pad handles negative padding by producing smaller image."""
+    test_image = Image.new("RGBA", (100, 100))
+    negative_padding = Padding(-10, -10, -10, -10)
+
+    # Negative padding creates a smaller image (80x80 instead of 100x100)
+    result = pad(test_image, padding=negative_padding)
+    assert result.size == (80, 80)  # 100 - 2*10 = 80
+
+
+def test_glow_none_image() -> None:
+    """Test that glow raises error for None image."""
+    with pytest.raises(AttributeError):
+        glow(None, strength=1.0, radius=50)  # type: ignore
+
+
+def test_glow_negative_strength() -> None:
+    """Test that glow returns copy for negative strength."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=-1.0, radius=50)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_negative_radius() -> None:
+    """Test that glow returns copy for negative radius."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=1.0, radius=-10)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_zero_radius() -> None:
+    """Test that glow returns copy for zero radius."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=1.0, radius=0)
+    # Should return a copy, not raise error
+    assert result is not test_image
+    assert result.size == test_image.size
+
+
+def test_glow_invalid_quality_mode() -> None:
+    """Test that glow raises error for invalid quality mode."""
+    test_image = Image.new("RGBA", (100, 100))
+
+    with pytest.raises(Exception):
+        glow(test_image, strength=1.0, radius=50, quality="invalid_mode")  # type: ignore
+
+
+# === Round 2: Additional Validation Tests ===
+
+
+def test_pad_negative_padding_produces_minimal_image() -> None:
+    """Test that pad with extreme negative padding produces at least a 1x1 image."""
+    test_image = Image.new("RGBA", (100, 100))
+    negative_padding = Padding(-1000, -1000, -1000, -1000)
+    result = pad(test_image, padding=negative_padding)
+    assert result.size[0] >= 1
+    assert result.size[1] >= 1
+
+
+def test_color_color_values_out_of_range() -> None:
+    """Test that color() handles out-of-range color values."""
+    test_image = Image.new("RGBA", (10, 10))
+    result = color(test_image, color=(300, 300, 300))
+    assert result is not None
+    assert result.size == test_image.size
+
+
+def test_pad_zero_padding() -> None:
+    """Test that pad with zero padding returns same-size image."""
+    test_image = Image.new("RGBA", (100, 100))
+    zero_padding = Padding(0, 0, 0, 0)
+    result = pad(test_image, padding=zero_padding)
+    assert result.size == (100, 100)
+
+
+def test_pad_negative_color_values() -> None:
+    """Test that pad handles negative color values."""
+    test_image = Image.new("RGBA", (10, 10))
+    result = pad(test_image, color=(-1, -1, -1))
+    assert result is not None
+
+
+def test_glow_strength_zero() -> None:
+    """Test that glow with strength=0 returns a copy."""
+    test_image = Image.new("RGBA", (100, 100))
+    result = glow(test_image, strength=0.0, radius=10)
+    assert result is not test_image
+    assert result.size == test_image.size
