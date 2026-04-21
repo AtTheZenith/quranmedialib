@@ -60,16 +60,16 @@ def _combine_images_rtl(
     """
     # Quranic layout is RTL, so the first word in the list (start of verse range)
     # should be on the RIGHT side of the combined image.
-    rtl_images = list(reversed(images))
-    batch_count = len(rtl_images)
-    mode = rtl_images[0].mode if rtl_images else "RGBA"
+    batch_count = len(images)
+    mode = images[0].mode if images else "RGBA"
 
-    total_w = sum(img.width for img in rtl_images) + word_spacing * (batch_count - 1)
-    max_h = max(img.height for img in rtl_images)
+    total_w = sum(img.width for img in images) + word_spacing * (batch_count - 1)
+    max_h = max(img.height for img in images)
 
     combined_canvas = Image.new(mode, (total_w, max_h), color=background_color if mode == "RGBA" else 0)
     current_x = 0
-    for img in rtl_images:
+    for i in range(batch_count - 1, -1, -1):
+        img = images[i]
         # Vertical alignment: center each word within the maximum height of the batch.
         y_offset = (max_h - img.height) // 2
         if mode == "RGBA":
