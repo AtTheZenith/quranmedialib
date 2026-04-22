@@ -1,6 +1,10 @@
+<div align="center">
+
 # QuranMediaLib
 
-Media producing library for Quranic texts. Generates properly formatted images of Quranic verses along with translations.
+</div>
+
+A media producing library for Quranic content. Written in Python. It can generate properly formatted images of Quranic verses along with translations.
 
 ## Installation
 
@@ -27,10 +31,8 @@ pip install quranmedialib
 ## Quick Start
 
 ```python
-from quranmedialib import DatabaseManager, LayoutConfig, TextConfig, WordConfig
+from quranmedialib import DatabaseManager, LANDSCAPE_PRESET
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.modules.framer import frame
-from quranmedialib.presets import LANDSCAPE_PRESET
 
 # Initialize database manager (auto-loads packaged databases)
 db = DatabaseManager()
@@ -45,43 +47,104 @@ word_img = get_wimage("الله", word_config)
 verses = db.get_verses_from_surah(1)  # Al-Fatiha
 print(f"Surah 1 has {len(verses)} verses")
 
-# Get word-by-word translation
-wbw = db.get_wbw_from_verse(1, 1)  # First verse, word-by-word
-print(f"First verse has {len(wbw)} words")
-
-# Don't forget to close the database when done
 db.close()
 ```
 
-## Usage with Workflows
+# Workflows
+
+Workflows are high-level orchestrators that handle data retrieval, image generation, and layout. All workflows inherit from `BaseWorkflow` and provide a `get_iterator()` method.
+
+## Using Built-in Workflows
+
+### SurahWorkflow
+
+Processes an entire surah page by page.
 
 ```python
-from quranmedialib import DatabaseManager, SurahWorkflow, LANDSCAPE_PRESET
-from quranmedialib.modules.image import glow
+from quranmedialib import SurahWorkflow, LANDSCAPE_PRESET
 
-db = DatabaseManager()
+layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = SurahWorkflow(layout, text, word)
 
-# Create workflow with preset configuration
-layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+# Process Surah Al-Ikhlas (112)
+for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
+    for img, suffix in page_images:
+        img.save(f"output/surah112_p{page_num}_{suffix}.png")
+```
 
-workflow = SurahWorkflow(
-    layout_config=layout_config,
-    text_config=text_config,
-    word_config=word_config,
-)
+### VerseWorkflow
 
-# Process Surah Al-Fatiha (surah 1)
-data = {"surah": 1}
-iterator = workflow.get_iterator(data, annotate=True)
+Renders a single verse with custom translations.
 
-# Save generated pages
+```python
+from quranmedialib import VerseWorkflow, STORY_PRESET
+
+layout, text, word = STORY_PRESET["default"]["1080p"]
+workflow = VerseWorkflow(layout, text, word)
+
+# Render Surah 1, Ayah 1 with custom translation strings
+translations = ["In the name of Allah,", "the Entirely Merciful, the Especially Merciful."]
+iterator = workflow.get_iterator(surah=1, ayah=1, translations=translations)
+
 for page_num, page_images in enumerate(iterator, 1):
     for img, suffix in page_images:
-        # Apply glow effect
-        final_img = glow(img)
-        final_img.save(f"output/surah1_page{page_num}_{suffix}.png")
+        img.save(f"verse1_1_p{page_num}_{suffix}.png")
+```
 
-db.close()
+### VerseRangeWorkflow
+
+Processes a range of verses, supporting parallel rendering.
+
+```python
+from quranmedialib import VerseRangeWorkflow, SQUARE_PRESET
+
+layout, text, word = SQUARE_PRESET["default"]["1080p"]
+workflow = VerseRangeWorkflow(layout, text, word)
+
+# Process verses 1-5 of Surah 1
+# translations[verse_index][page_index]
+translations = [["Trans for V1"], ["Trans for V2"], ["Trans for V3"], ["Trans for V4"], ["Trans for V5"]]
+iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=5, translations=translations)
+
+for page_images in iterator:
+    # Handle results
+    pass
+```
+
+## Creating Custom Workflows
+
+Inherit from `BaseWorkflow` to create custom rendering pipelines.
+
+```python
+from typing import Iterator
+from PIL import Image
+from quranmedialib.workflows.base import BaseWorkflow
+
+class MyCustomWorkflow(BaseWorkflow):
+    def get_iterator(self, **kwargs) -> Iterator[list[Image.Image]]:
+        # 1. Access configs via self.layout_config, self.text_config, self.word_config
+        # 2. Retrieve data (e.g., from DatabaseManager)
+        # 3. Generate images (e.g., via get_wimage, get_timage)
+        # 4. Yield lists of images representing pages
+        yield [Image.new("RGBA", (self.layout_config.max_width, self.layout_config.image_height))]
+```
+
+## Parallel Processing
+
+QuranMediaLib provides a `ParallelRenderer` for CPU-intensive tasks (like applying blurs/glows) and bulk rendering.
+
+```python
+from quranmedialib.utils.parallel import ParallelRenderer, ExecutionMode
+from quranmedialib.modules.image import glow
+
+def apply_glow_worker(img):
+    return glow(img)
+
+images = [...] # List of PIL Images
+renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
+
+# Process images in parallel across CPU cores
+glowed_images = list(renderer.map(apply_glow_worker, images))
 ```
 
 ## Package Structure
@@ -91,7 +154,6 @@ quranmedialib/
 ├── types.py           # Configuration dataclasses (LayoutConfig, WordConfig, etc.)
 ├── presets.py         # Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
 ├── database_manager.py # Stateful database connection manager
-├── resources.py       # Asset path resolution
 ├── modules/
 │   ├── wimage.py      # Arabic word rendering
 │   ├── timage.py      # Translation text rendering
@@ -107,70 +169,11 @@ quranmedialib/
 
 ## Presets
 
-The library includes pre-configured presets for common formats:
+- **LANDSCAPE_PRESET**: 16:9 aspect ratio
+- **STORY_PRESET**: 9:16 aspect ratio
+- **SQUARE_PRESET**: 1:1 aspect ratio
 
-- **LANDSCAPE_PRESET**: 16:9 aspect ratio (1280x720, 1920x1080, etc.)
-- **STORY_PRESET**: 9:16 aspect ratio (720x1280, 1080x1920, etc.)
-- **SQUARE_PRESET**: 1:1 aspect ratio (720x720, 1080x1080, etc.)
-
-Each preset supports multiple resolutions: `720p`, `1080p`, `1440p`, `2160p`
-
-And three modes per format:
-
-- `default`: Arabic text with annotations + translation
-- `arabic`: Arabic text only (no translation)
-- `translation`: Translation only (no Arabic)
-
-```python
-from quranmedialib.presets import LANDSCAPE_PRESET
-
-# Access preset by mode and resolution
-config = LANDSCAPE_PRESET["default"]["1080p"]
-layout_config, text_config, word_config = config
-```
-
-## Included Data
-
-The library includes default databases for immediate use:
-
-- **Arabic Text**: `quran.db` using sequential tanween.
-- **English WBW**: Word-by-word translation for word-level annotation.
-- **Sahih International**: English translation of the meanings.
-
-## Custom Database Configuration
-
-Add your own translation databases:
-
-```python
-from quranmedialib import DatabaseManager, DatabaseConfig, WbwDatabaseConfig
-
-db = DatabaseManager()
-
-# Add a custom translation database
-custom_config = DatabaseConfig(
-    filepath="/path/to/custom_translation.db",
-    tablename="verses",
-    surah_col="sura",
-    ayah_col="ayah",
-    text_col="text",
-)
-db.add_connection("my_translation", custom_config)
-
-# Switch to custom translation
-db.set_active_translation("my_translation")
-verses = db.get_verses_from_surah(1)
-
-# Add custom word-by-word database
-wbw_config = WbwDatabaseConfig(
-    filepath="/path/to/custom_wbw.db",
-    tablename="wbw",
-    surah_col="surah",
-    ayah_col="ayah",
-    text_col="translation",
-    word_id_col="word",
-)
-db.add_connection("my_wbw", wbw_config)
-```
+Each preset supports resolutions `720p`, `1080p`, `1440p`, `2160p` and modes `default`, `arabic`, `translation`.
 
 ## Development
 
@@ -179,10 +182,14 @@ db.add_connection("my_wbw", wbw_config)
 uv pip install -e ".[dev]"
 
 # Run tests
-pytest tests/
+uv run -m pytest -v
 
-# Lint with ruff
-ruff check .
+# Run benchmarks
+uv run -m pytest -v --run-benchmarks
+
+# Lint and format
+uv run -m ruff check .
+uv run -m ruff format .
 ```
 
 ## License
