@@ -73,65 +73,54 @@ def test_framer(request: pytest.FixtureRequest) -> None:
     print("test_framer completed successfully.")
 
 
-def test_framer_alignment(request: pytest.FixtureRequest) -> None:
-    print("\nRunning test_framer_alignment...")
+@pytest.fixture
+def framer_alignment_data():
+    """Fixture to provide common data for framer alignment tests."""
     database_manager = DatabaseManager()
-
-    # Using a short verse for clear centering visibility (e.g., 108:1)
     surah = 108
     verse = 1
-
-    # Get Arabic text (always uses "quran" database)
     words_text = database_manager.get_verse(surah, verse).split()
-
-    # Get English translation (uses "translation" database by default)
     verse_translation = [database_manager.get_translation_from_verse(surah, verse)]
     config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-
-    print(f"Converting {len(words_text)} words to images...")
+    
     word_images = [get_wimage(word_text, word_config) for word_text in words_text]
-
-    print("Annotating words...")
     word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=word_config)
     word_wbw_images.append(verse_number(verse, word_config=word_config))
-
+    
+    items = [WordItem(img, text) for img, text in zip(word_wbw_images, words_text + [str(verse)])]
+    
+    return {
+        "items": items,
+        "verse_translation": verse_translation,
+        "config": config,
+        "text_config": text_config,
+        "word_config": word_config,
+    }
+ 
+ 
+@pytest.mark.parametrize("v_align", ["top", "center", "bottom"])
+@pytest.mark.parametrize("h_align", ["left", "center", "right"])
+def test_framer_alignment(framer_alignment_data, v_align, h_align) -> None:
+    """Tests all combinations of vertical and horizontal alignment."""
+    data = framer_alignment_data
+    items = data["items"]
+    config = data["config"]
+    text_config = data["text_config"]
+    word_config = data["word_config"]
+    verse_translation = data["verse_translation"]
+ 
     output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
+ 
+    # Modify LayoutConfig for alignment and WordConfig for max_rows
+    word_config_dyn = replace(word_config, max_rows_per_page=3)
+    config_dyn = replace(config, wimage_vertical_align=v_align, wimage_horizontal_align=h_align)
+ 
+    t_imgs_dyn = [get_timage(t, config=text_config) for t in verse_translation]
+    images = frame(items, translation_images=t_imgs_dyn, config=config_dyn, word_config=word_config_dyn)
+ 
+    images[0].save(f"{output_dir}/framer_alignment_{v_align}_{h_align}.png")
 
-    # Bundle into WordItems
-    items = [WordItem(img, text) for img, text in zip(word_wbw_images, words_text + [str(verse)])]
-
-    # Test cases for alignment - modify LayoutConfig for alignment, WordConfig for max_rows
-    print("Testing top_right (Vertical: top, Horizontal: right)...")
-    word_config_tr = replace(word_config, max_rows_per_page=3)
-    config_tr = replace(config, wimage_vertical_align="top", wimage_horizontal_align="right")
-    t_imgs_tr = [get_timage(t, config=text_config) for t in verse_translation]
-    images = frame(items, translation_images=t_imgs_tr, config=config_tr, word_config=word_config_tr)
-    images[0].save(f"{output_dir}/framer_alignment_top_right.png")
-
-    print("Testing center_center (Vertical: center, Horizontal: center)...")
-    word_config_cc = replace(word_config, max_rows_per_page=3)
-    config_cc = replace(config, wimage_vertical_align="center", wimage_horizontal_align="center")
-    t_imgs_cc = [get_timage(t, config=text_config) for t in verse_translation]
-    images = frame(items, translation_images=t_imgs_cc, config=config_cc, word_config=word_config_cc)
-    images[0].save(f"{output_dir}/framer_alignment_center_center.png")
-
-    print("Testing top_center (Vertical: top, Horizontal: center)...")
-    word_config_tc = replace(word_config, max_rows_per_page=3)
-    config_tc = replace(config, wimage_vertical_align="top", wimage_horizontal_align="center")
-    t_imgs_tc = [get_timage(t, config=text_config) for t in verse_translation]
-    images = frame(items, translation_images=t_imgs_tc, config=config_tc, word_config=word_config_tc)
-    images[0].save(f"{output_dir}/framer_alignment_top_center.png")
-
-    print("Testing center_right (Vertical: center, Horizontal: right)...")
-    word_config_cr = replace(word_config, max_rows_per_page=3)
-    config_cr = replace(config, wimage_vertical_align="center", wimage_horizontal_align="right")
-    t_imgs_cr = [get_timage(t, config=text_config) for t in verse_translation]
-    images = frame(items, translation_images=t_imgs_cr, config=config_cr, word_config=word_config_cr)
-    images[0].save(f"{output_dir}/framer_alignment_center_right.png")
-
-    request.node.benchmark_data = ["surah=108", "alignments=4"]
-    print("test_framer_alignment completed successfully.")
 
 
 def test_framer_offsets() -> None:

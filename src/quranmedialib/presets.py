@@ -71,7 +71,7 @@ _LANDSCAPE_BASE = {
             "wimage_vertical_align": "center",
             "timage_vertical_align": "bottom",
         },
-        "text": {"font_size": 36, "line_spacing": 10},
+        "text": {"font_size": 36, "line_spacing": 10, "max_width_subtract": 100},
         "word": {
             "font_size": 80,
             "word_spacing": 20,
@@ -105,7 +105,7 @@ _LANDSCAPE_BASE = {
             "padding": 50,
             "timage_vertical_align": "center",
         },
-        "text": {"font_size": 36, "line_spacing": 10},
+        "text": {"font_size": 36, "line_spacing": 10, "max_width_subtract": 100},
         "word": {
             "font_size": 80,
             "word_spacing": 20,
@@ -130,7 +130,7 @@ _STORY_BASE = {
             "wimage_vertical_align": "center",
             "timage_vertical_align": "top",
         },
-        "text": {"font_size": 36, "line_spacing": 15},
+        "text": {"font_size": 36, "line_spacing": 15, "max_width_subtract": 120},
         "word": {
             "font_size": 80,
             "word_spacing": 20,
@@ -162,7 +162,7 @@ _STORY_BASE = {
             "padding": 60,
             "timage_vertical_align": "center",
         },
-        "text": {"font_size": 36, "line_spacing": 15},
+        "text": {"font_size": 36, "line_spacing": 15, "max_width_subtract": 120},
         "word": {
             "font_size": 80,
             "word_spacing": 20,

@@ -23,7 +23,12 @@ from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.types import WordItem, _ensure_within_working_dir
+from quranmedialib.types import (
+    HorizontalAlignment,
+    VerticalAlignment,
+    WordItem,
+    _ensure_within_working_dir,
+)
 from quranmedialib.utils.io import async_image_saver
 from quranmedialib.utils.memory import (
     DEFAULT_PROCESS_LIMIT_MB,
@@ -70,12 +75,12 @@ class VerseRangeWorkflow(BaseWorkflow):
                 (0, 0, 0, 0),
             )
 
-            # Calculate Y position: use explicit offset or default to bottom-padding alignment
-            if self.layout_config.timage_y_offset > 0:
-                ty = self.layout_config.timage_y_offset - trans_img.height // 2
-            else:
-                padding_bottom = self.layout_config.padding.bottom
-                ty = self.layout_config.image_height - padding_bottom - trans_img.height // 2
+            # Vertical placement
+            ty = self.layout_config.padding.top + self.layout_config.timage_y_offset
+            if self.layout_config.timage_vertical_align == VerticalAlignment.CENTER:
+                ty = self.layout_config.padding.top + (self.layout_config.available_height - trans_img.height) // 2 + self.layout_config.timage_y_offset
+            elif self.layout_config.timage_vertical_align == VerticalAlignment.BOTTOM:
+                ty = self.layout_config.padding.top + self.layout_config.available_height - trans_img.height + self.layout_config.timage_y_offset
 
             tx = (self.layout_config.max_width - trans_img.width) // 2 + self.layout_config.timage_x_offset
 
@@ -288,9 +293,14 @@ def _render_verse_worker(
                     if not t_img:
                         continue
                     canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
-                    ty = (
-                        layout_cfg.timage_y_offset or layout_cfg.image_height - layout_cfg.padding.bottom
-                    ) - t_img.height // 2
+
+                    # Vertical placement
+                    ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
+                    if layout_cfg.timage_vertical_align == "center" or layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
+                        ty = layout_cfg.padding.top + (layout_cfg.available_height - t_img.height) // 2 + layout_cfg.timage_y_offset
+                    elif layout_cfg.timage_vertical_align == "bottom" or layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
+                        ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
+
                     tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
                     
                     if t_img.mode == "L":

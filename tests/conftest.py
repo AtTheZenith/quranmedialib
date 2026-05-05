@@ -56,7 +56,7 @@ def default_padding() -> Padding:
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add command-line options for running benchmarks and heavy tests."""
     parser.addoption(
-        "--run-benchmarks",
+        "--benchmark", "--b",
         action="store_true",
         default=False,
         help="Run performance benchmarks (skipped by default)",
@@ -66,12 +66,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Physically removes excluded tests from collection for a clean output.
 
-    If --run-benchmarks is provided:
+    If --benchmark is provided:
         - Removes all standard tests (those NOT marked with 'benchmark').
-    If --run-benchmarks is NOT provided:
+    If --benchmark is NOT provided:
         - Removes all benchmark tests (those marked with 'benchmark').
     """
-    run_benchmarks = config.getoption("--run-benchmarks")
+    run_benchmarks = config.getoption("--benchmark")
 
     if run_benchmarks:
         # Exclusive Benchmark Mode: Remove standard tests

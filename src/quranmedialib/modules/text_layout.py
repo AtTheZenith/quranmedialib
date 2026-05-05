@@ -35,7 +35,7 @@ class StyledWord:
         text: The text content of the word.
         font: The PIL font object to use for rendering.
         color: RGBA or RGB color for the text.
-        width: Measured width of the word in pixels.
+        width: Measured width of the word in pixels (float for sub-pixel precision).
         height: Measured height of the word in pixels (usually ascent + descent).
         ascent: Measured ascent of the font in pixels.
         simulate_bold: Whether to simulate bold weight if not supported by font.
@@ -48,7 +48,7 @@ class StyledWord:
         text: str,
         font: FreeTypeFont | ImageFont,
         color: Color,
-        width: int,
+        width: float,
         height: int = 0,
         ascent: int = 0,
         is_transparent: bool = False,
@@ -71,10 +71,10 @@ class Line:
 
     def __init__(self):
         self.words: list[StyledWord] = []
-        self.width: int = 0
+        self.width: float = 0.0
         self.height: int = 0
 
-    def add_word(self, word: StyledWord, space_width: int = 0):
+    def add_word(self, word: StyledWord, space_width: float = 0.0):
         """Adds a word to the line, accounting for word spacing.
 
         Args:
@@ -321,6 +321,6 @@ def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | Non
         words = line.words
         while words and words[-1].text.isspace():
             last_word = words.pop()
-            line.width -= last_word.word_width if hasattr(last_word, "word_width") else last_word.width
+            line.width -= last_word.width
 
     return final_lines

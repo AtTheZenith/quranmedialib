@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Sequence
@@ -119,8 +120,8 @@ def get_timage(
     if not lines:
         return None
 
-    total_width = 0
-    total_height = 0
+    total_width = 0.0
+    total_height = 0.0
     for line in lines:
         if line.width > total_width:
             total_width = line.width
@@ -131,11 +132,12 @@ def get_timage(
 
     # Apply height constraint if provided
     if max_height is not None and max_height > 0 and total_height > max_height:
-        total_height = max_height
+        total_height = float(max_height)
 
-    # Final sanity check to avoid SystemError on 0-dimension images
-    tw = max(total_width, 1)
-    th = max(total_height, 1)
+    # Final sanity check to avoid SystemError on 0-dimension images.
+    # Add a 1px safety margin to total_width to prevent edge glyph clipping.
+    tw = math.ceil(max(total_width + 1.0, 1.0))
+    th = math.ceil(max(total_height, 1.0))
 
     # Detect if we can use an 'L' mask (no color tags in original text)
     use_mask = "#" not in s_text
@@ -143,14 +145,14 @@ def get_timage(
     draw = ImageDraw.Draw(img)
     _draw_text = draw.text
 
-    current_y = 0
+    current_y = 0.0
     for line in lines:
         l_height = line.height
         if max_height is not None and current_y + l_height > max_height:
             break
 
-        # Horizontal centering
-        line_x = (total_width - line.width) // 2
+        # Horizontal centering (using float precision)
+        line_x = (total_width - line.width) / 2.0
 
         # 1. Find max ascent for baseline alignment
         max_ascent = 0
@@ -180,7 +182,8 @@ def get_timage(
                     font=sf,
                     fill=255 if use_mask else last_style[1],
                 )
-                curr_x += sum(w.width for w in batch_words)
+                # Use font.getlength for accurate batch advance
+                curr_x += sf.getlength(txt)
                 batch_words = []
 
             batch_words.append(word)
@@ -198,7 +201,14 @@ def get_timage(
             )
 
         current_y += l_height + l_spacing
-
+ 
+    if use_mask:
+        # Convert 'L' mask to 'RGBA' using the base color to preserve performance
+        # while ensuring the output image is transparent-capable.
+        result = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+        result.paste(config.color, (0, 0), mask=img)
+        return result
+ 
     return img
 
 
@@ -207,7 +217,7 @@ _font_metrics_cache: dict[tuple[str, int], tuple[int, int]] = {}
 
 
 @lru_cache(maxsize=4096)
-def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[int, int, int]:
+def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[float, int, int]:
     """Cached wrapper for text dimension measurement.
 
     Uses font.getlength() for performance on word width measurements.
@@ -215,7 +225,7 @@ def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[int, 
     font = _load_font_base(font_path, font_size)
 
     # getlength is significantly faster than textbbox for width
-    w = int(font.getlength(token))
+    w = font.getlength(token)
 
     # Use cached font height/ascent if available
     key = (font_path, font_size)
@@ -258,7 +268,7 @@ def _parse_rich_text(
 
         # Local cache for word widths in this call
         _get_len = f.getlength
-        w_cache: dict[str, int] = {}
+        w_cache: dict[str, float] = {}
         _StyledWord = StyledWord
 
         res = []
@@ -266,7 +276,7 @@ def _parse_rich_text(
             if s in w_cache:
                 w = w_cache[s]
             else:
-                w = int(_get_len(s))
+                w = _get_len(s)
                 w_cache[s] = w
             res.append(_StyledWord(s, f, color, w, h, ascent))
         return res

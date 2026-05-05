@@ -11,6 +11,22 @@ It complements PEP 8 and Ruff, and is based on existing code.
 Optimize for correctness first, then performance—never sacrifice clarity for cleverness.
 Security is not an afterthought; it is engineered into every layer.
 
+## Workflow Rule: Baseline Performance Check
+
+**Before starting any feature work**, fetch the baseline speed of the existing codebase:
+
+```powershell
+uv run -m pytest; uv run -m pytest -v --b
+```
+
+**Stop immediately if you encounter any errors** before proceeding with feature work.
+
+**Ensure all changes meet these criteria:**
+
+- No regressions in performance (compare against baseline)
+- No regressions in security
+- No regressions in functionality (all tests pass)
+
 ---
 
 ## 0. Engineering Principles
@@ -98,7 +114,7 @@ Security is not an afterthought; it is engineered into every layer.
 ### 3.1 Type Aliases (Current)
 
 - `Color` — RGBA or RGB color tuple
-- `Padding` — NamedTuple with `.top`, `.bottom`, `.left`, `.right`, `.horizontal`, `.vertical` fields
+- `Padding` — NamedTuple with `.top`, `.bottom`, `.left`, `.right` fields (Project Standard Order: top, bottom, left, right)
 - `SurahNumber` — Validated surah number (1–114)
 - `AyahNumber` — Validated ayah number (1–286)
 - `WordIndex` — Word position index (`int`)
@@ -111,7 +127,7 @@ Security is not an afterthought; it is engineered into every layer.
 
 ### 3.3 NamedTuples
 
-- `Padding(top, bottom, left, right)` — 4-directional padding with named fields and `.horizontal`/`.vertical` properties
+- `Padding(top, bottom, left, right)` — 4-directional padding (Project Standard Order: top, bottom, left, right) with named fields and `.horizontal`/`.vertical` properties
 
 ### 3.4 Text Rendering Types (Not Dataclasses)
 
@@ -245,7 +261,7 @@ class LayoutConfig:
 ### 8.1 Image Processing
 
 - **Color**: Colorization is luminance‑based, preserving alpha; returns new image.
-- **Padding**: Use `Padding` NamedTuple with named fields (`.top`, `.bottom`, `.left`, `.right`).
+- **Padding**: Use `Padding` NamedTuple with named fields (`.top`, `.bottom`, `.left`, `.right`) following the Project Standard Order: (top, bottom, left, right).
 - **Glow**:
   - Strength ≤ 0 or radius ≤ 0 returns a copy of the original image.
   - RGBA images: glow composed **behind** content with alpha compositing.
@@ -283,7 +299,7 @@ Workflows are high-level classes that orchestrate complex rendering operations. 
 ### 9.2 Current Workflows
 
 | Class | Inheritance | Purpose |
-|-------|------------|---------|
+| ------- | ------------ | --------- |
 | `BaseWorkflow` | ABC | Abstract base with config init, surah/ayah validation, `__repr__` |
 | `VerseWorkflow` | BaseWorkflow | Single verse with Arabic + translation |
 | `VerseRangeWorkflow` | BaseWorkflow | Range of verses with parallel processing, memory management, async I/O |
@@ -318,11 +334,13 @@ class MyWorkflow(BaseWorkflow):
 ### 9.4 Workflow Signatures
 
 **VerseWorkflow:**
+
 ```python
 def get_iterator(surah: int, ayah: int, translations: list[str], annotate: bool = True) -> Iterator[list[Image.Image]]
 ```
 
 **VerseRangeWorkflow:**
+
 ```python
 def get_iterator(
     surah: int,
@@ -334,6 +352,7 @@ def get_iterator(
 ```
 
 **SurahWorkflow:**
+
 ```python
 def get_iterator(
     surah: int,
@@ -344,6 +363,7 @@ def get_iterator(
 ```
 
 **IsolateWordsWorkflow:**
+
 ```python
 def get_iterator(
     surah: int,
@@ -483,7 +503,7 @@ layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
 All exceptions are defined in `exceptions.py` (canonical source). Duplicate definitions also exist in `types.py` (lines 32-46) for backward compatibility but are not used internally:
 
-```
+```markdown
 QuranMediaLibError (Exception)
 ├── ResourceError
 ├── DatabaseError
@@ -525,7 +545,13 @@ QuranMediaLibError (Exception)
 
 ---
 
-## 15. Development Commands
+## 15. Environment
+ 
+The agent is operating in a Windows environment using PowerShell 7 (`pwsh`) as the primary shell. `sqlite3` is available in the system `PATH`.
+ 
+---
+ 
+## 16. Development Commands
 
 All development commands use `uv` for consistency:
 
@@ -562,7 +588,7 @@ uv run tests/modules/test_framer.py
 
 ---
 
-## 16. Testing Conventions
+## 17. Testing Conventions
 
 ### 16.1 Test Structure
 
@@ -603,7 +629,7 @@ def test_feature() -> None:
 
 ---
 
-## 17. Public API and Exports
+## 18. Public API and Exports
 
 ### 17.1 Package-Level Exports
 
@@ -655,7 +681,7 @@ def test_feature() -> None:
 
 ---
 
-## 18. Script Entrypoints
+## 19. Script Entrypoints
 
 - Use `demo.py` at project root for demonstration scripts.
 - Protect entry with `if __name__ == "__main__":`.
@@ -667,7 +693,7 @@ def test_feature() -> None:
 
 ---
 
-## 19. Do / Do‑Not Summary
+## 20. Do / Do‑Not Summary
 
 ### Do
 

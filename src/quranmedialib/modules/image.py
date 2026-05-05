@@ -122,10 +122,11 @@ def _prepare_color_base(
     img_rgba: Image.Image, img_rgb: Image.Image, alpha: Image.Image, small_size: tuple[int, int]
 ) -> Image.Image:
     """Prepares the color base for the glow effect by bleeding colors into transparent areas."""
-    small = img_rgba.resize(small_size, resample=Image.Resampling.BOX)
-    color_base = small.resize(img_rgba.size, resample=Image.Resampling.NEAREST).convert("RGB")
-    color_base.paste(img_rgb, mask=alpha)
-    return color_base
+    small_rgba = img_rgba.resize(small_size, resample=Image.Resampling.BOX)
+    small_rgb = small_rgba.convert("RGB")
+    alpha_small = alpha.resize(small_size, resample=Image.Resampling.BOX)
+    small_rgb.paste(img_rgb.resize(small_size, resample=Image.Resampling.BOX), mask=alpha_small)
+    return small_rgb
 
 
 def glow(
@@ -146,17 +147,18 @@ def glow(
     vibrancy without flattening highlights.
 
     **Quality Modes:**
-    - ``"fast"``: 1-pass BoxBlur per scale. Fastest but may show boxy artifacts.
-    - ``"balanced"``: BoxBlur at 1.2x radius per scale. Smoother than fast with
-      similar performance. Recommended default.
-    - ``"quality"``: GaussianBlur per scale. True Gaussian distribution,
-      smoothest results but slower for large radii.
+    - ``"fast"``: GaussianBlur downsampled 4x. Fast Gaussian option with
+      good quality-to-speed ratio.
+    - ``"balanced"``: GaussianBlur downsampled 2x. Balance between speed and
+      quality. Recommended default.
+    - ``"quality"``: GaussianBlur at full resolution. True Gaussian distribution,
+      smoothest results but slowest for large radii.
 
     **Performance Note:**
     Large images combined with large radius values (> 100) can be computationally
-    expensive due to multiple blur passes. The "fast" and "balanced" modes use
-    BoxBlur which is O(1) per pixel, while "quality" uses GaussianBlur which is
-    O(radius) per pixel.
+    expensive. The "fast" mode uses 8x downsampling, "balanced" uses 2x,
+    and "quality" uses full resolution Gaussian blur. Larger radii and higher
+    resolutions increase processing time.
 
     Args:
         image: The input PIL Image to process.
@@ -164,9 +166,9 @@ def glow(
             vibrant/opaque, while values < 1.0 fade it out. Defaults to 1.0.
         radius: The base spread of the glow in pixels. Larger values
             create a wider, softer falloff. Defaults to 50.
-        quality: The blur quality mode. "fast" uses BoxBlur at base radius,
-            "balanced" uses BoxBlur at 1.2x radius for smoother results,
-            and "quality" uses GaussianBlur. Defaults to "balanced".
+        quality: The blur quality mode. "fast" uses GaussianBlur downsampled 8x,
+            "balanced" uses GaussianBlur downsampled 2x, and "quality" uses
+            full-resolution GaussianBlur. Defaults to "balanced".
 
     Returns:
         A new PIL Image with the glow effect applied, preserving the
@@ -197,8 +199,9 @@ def glow(
     # Defer RGB conversion until needed
     img_rgb = None if is_opaque else img_rgba.convert("RGB")
 
-    # 1. Prepare the color base for the glow (downscaled for efficient blurring)
-    color_base_scale = 8
+    # 1. Prepare the color base for the glow (downscaled based on quality mode)
+    quality_scale = {"fast": 4, "balanced": 2, "quality": 1}
+    color_base_scale = quality_scale[quality]
     color_base_size = _compute_downscaled_size(img_rgba, color_base_scale)
     if is_opaque:
         # For opaque images, downscale directly from RGB for efficiency
@@ -212,11 +215,14 @@ def glow(
     # 2. Multi-scale blur sequence (downscaled)
     # Scaled radii to match downsampled space for equivalent visual effect
     # Original: [r/4, r/2, r, r*1.5] at full res → now scaled by 1/color_base_scale
+    # After upscaling, effective blur = r_downsampled * color_base_scale ≈ r_original
+    # Use floating point; minimum radius varies by quality mode (fast needs larger minimum)
+    min_radius = 1.0 if quality == "fast" else 0.5
     radii = [
-        max(1, radius // 4 // color_base_scale),
-        max(1, radius // 2 // color_base_scale),
-        max(1, radius // color_base_scale),
-        max(1, int(radius * 1.5) // color_base_scale),
+        max(min_radius, radius / 4 / color_base_scale),
+        max(min_radius, radius / 2 / color_base_scale),
+        max(min_radius, radius / color_base_scale),
+        max(min_radius, radius * 1.5 / color_base_scale),
     ]
 
     # Pre-allocate blur buffers — reuse across radii iterations
@@ -224,23 +230,14 @@ def glow(
     glow_alpha = None if is_opaque else Image.new("L", color_base_size, 0)
     alpha_small = None if is_opaque else alpha.resize(color_base_size, resample=Image.Resampling.BOX)
 
-    # Determine blur strategy based on quality mode
-    radius_multipliers = {"fast": 1.0, "balanced": 1.2, "quality": 1.0}
-    radius_mult = radius_multipliers[quality]
-    use_gaussian = quality == "quality"
-
-    # Determine filter class for faster lookup
-    FilterClass = ImageFilter.GaussianBlur if use_gaussian else ImageFilter.BoxBlur
-
+    # Gaussian blur with radii scaled to downsampled space
     for r in radii:
-        adjusted_r = max(1, int(r * radius_mult))
-
         # PERF: Filter results are processed directly into screen/lighter to avoid buffer copies
-        blur_res = color_base.filter(FilterClass(adjusted_r))
+        blur_res = color_base.filter(ImageFilter.GaussianBlur(r))
         glow_color = ImageChops.screen(glow_color, blur_res)
 
         if glow_alpha is not None:
-            blur_alpha_res = alpha_small.filter(FilterClass(adjusted_r))
+            blur_alpha_res = alpha_small.filter(ImageFilter.GaussianBlur(r))
             glow_alpha = ImageChops.lighter(glow_alpha, blur_alpha_res)
 
     # 3. Upscale glow result to original size
