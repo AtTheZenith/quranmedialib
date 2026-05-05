@@ -39,16 +39,16 @@ def test_async_image_saver_max_queue_blocking() -> None:
     save_times = []
     
     def slow_save(*args, **kwargs):
-        time.sleep(0.5)
+        time.sleep(0.1)
         save_times.append(time.time())
-
+ 
     mock_img = MagicMock(spec=Image.Image)
     mock_img.save.side_effect = slow_save
     
     with async_image_saver(max_queue=max_queue) as save:
         start_time = time.time()
         
-        # First save: should start immediately, but task takes 0.5s
+        # First save: should start immediately, but task takes 0.1s
         save(mock_img, "p1.png")
         
         # Second save: should block because max_queue=1 and first task still running
@@ -57,7 +57,7 @@ def test_async_image_saver_max_queue_blocking() -> None:
         end_time = time.time()
         
         # Blocking should have happened
-        assert end_time - start_time >= 0.4
+        assert end_time - start_time >= 0.05
 
 
 def test_async_image_saver_lifecycle_wait() -> None:

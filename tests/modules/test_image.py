@@ -40,49 +40,57 @@ def _create_default_word_config() -> WordConfig:
 
 def _analyze_image_brightness(filepath: str) -> dict[str, float]:
     """Calculate comprehensive brightness statistics of an image.
-
+ 
     Returns a dict with mean, median, q1, q3, iqr, p10, p90, min, max, range, stdev.
     """
     img = Image.open(filepath).convert("L")  # Convert to grayscale
-    pixels = sorted(list(img.get_flattened_data()))
-    n = len(pixels)
-
-    # Basic stats
-    median_brightness = statistics.median(pixels)
-    mean_brightness = statistics.mean(pixels)
-
-    # Quartiles
-    q1_idx = n // 4
-    q3_idx = (3 * n) // 4
-    q1_brightness = pixels[q1_idx]  # 25th percentile
-    q3_brightness = pixels[q3_idx]  # 75th percentile
-    iqr = q3_brightness - q1_brightness  # Interquartile range
-
-    # Percentiles (10th, 90th)
-    p10_idx = n // 10
-    p90_idx = (9 * n) // 10
-    p10_brightness = pixels[p10_idx]
-    p90_brightness = pixels[p90_idx]
-
-    # Min, max, range
-    min_brightness = pixels[0]
-    max_brightness = pixels[-1]
-    brightness_range = max_brightness - min_brightness
-
-    # Standard deviation
-    stdev_brightness = statistics.stdev(pixels) if n > 1 else 0
-
+    hist = img.histogram()
+    n = sum(hist)
+    if n == 0:
+        return {k: 0.0 for k in ["mean", "median", "q1", "q3", "iqr", "p10", "p90", "min", "max", "range", "stdev"]}
+ 
+    # 1. Mean and Variance for Stdev
+    sum_vals = 0
+    sum_sq_vals = 0
+    for i, count in enumerate(hist):
+        sum_vals += i * count
+        sum_sq_vals += (i * i) * count
+ 
+    mean_brightness = sum_vals / n
+    variance = (sum_sq_vals / n) - (mean_brightness ** 2)
+    stdev_brightness = variance ** 0.5 if variance > 0 else 0.0
+ 
+    # 2. Percentiles using cumulative distribution
+    def get_percentile(p: float) -> int:
+        target = p * n
+        cumulative = 0
+        for i, count in enumerate(hist):
+            cumulative += count
+            if cumulative >= target:
+                return i
+        return 255
+ 
+    median_brightness = get_percentile(0.5)
+    q1_brightness = get_percentile(0.25)
+    q3_brightness = get_percentile(0.75)
+    p10_brightness = get_percentile(0.1)
+    p90_brightness = get_percentile(0.9)
+ 
+    # 3. Min, max, range
+    min_brightness = next((i for i, count in enumerate(hist) if count > 0), 0)
+    max_brightness = next((i for i in range(255, -1, -1) if hist[i] > 0), 255)
+ 
     return {
         "mean": mean_brightness,
-        "median": median_brightness,
-        "q1": q1_brightness,
-        "q3": q3_brightness,
-        "iqr": iqr,
-        "p10": p10_brightness,
-        "p90": p90_brightness,
-        "min": min_brightness,
-        "max": max_brightness,
-        "range": brightness_range,
+        "median": float(median_brightness),
+        "q1": float(q1_brightness),
+        "q3": float(q3_brightness),
+        "iqr": float(q3_brightness - q1_brightness),
+        "p10": float(p10_brightness),
+        "p90": float(p90_brightness),
+        "min": float(min_brightness),
+        "max": float(max_brightness),
+        "range": float(max_brightness - min_brightness),
         "stdev": stdev_brightness,
     }
 
@@ -146,10 +154,13 @@ def test_glow_quality_modes() -> None:
     """Test all three quality modes with both RGB and RGBA images."""
     print("Testing glow quality modes...")
 
+    # Use 500x500 image for realistic testing (glow needs sufficient resolution)
+    img_size = 500
+
     # Create test image with transparency (white circle on transparent)
-    test_image_rgba = Image.new("RGBA", (200, 200), color=(0, 0, 0, 0))
+    test_image_rgba = Image.new("RGBA", (img_size, img_size), color=(0, 0, 0, 0))
     draw = ImageDraw.Draw(test_image_rgba)
-    draw.ellipse([50, 50, 150, 150], fill=(255, 255, 255, 255))
+    draw.ellipse([150, 150, 350, 350], fill=(255, 255, 255, 255))
 
     # Test all quality modes on RGBA
     for quality in ["fast", "balanced", "quality"]:
@@ -157,18 +168,18 @@ def test_glow_quality_modes() -> None:
         _save_test_image(glowed, f"glowed_rgba_{quality}.png")
 
     # Test all quality modes on RGB
-    test_image_rgb = Image.new("RGB", (200, 200), color=(30, 30, 30))
+    test_image_rgb = Image.new("RGB", (img_size, img_size), color=(30, 30, 30))
     draw_rgb = ImageDraw.Draw(test_image_rgb)
-    draw_rgb.ellipse([70, 70, 130, 130], fill=(255, 255, 255))
+    draw_rgb.ellipse([200, 200, 300, 300], fill=(255, 255, 255))
 
     for quality in ["fast", "balanced", "quality"]:
         glowed = glow(test_image_rgb, strength=1.5, radius=30, quality=quality)
         _save_test_image(glowed, f"glowed_rgb_{quality}.png")
 
     # Test opaque RGBA
-    test_image_opaque = Image.new("RGBA", (200, 200), color=(30, 30, 30, 255))
+    test_image_opaque = Image.new("RGBA", (img_size, img_size), color=(30, 30, 30, 255))
     draw_opaque = ImageDraw.Draw(test_image_opaque)
-    draw_opaque.ellipse([70, 70, 130, 130], fill=(0, 255, 0, 255))
+    draw_opaque.ellipse([200, 200, 300, 300], fill=(0, 255, 0, 255))
 
     for quality in ["fast", "balanced", "quality"]:
         glowed = glow(test_image_opaque, strength=1.5, radius=30, quality=quality)
@@ -185,8 +196,13 @@ def test_glow_on_padded_wimage() -> None:
     word_config = _create_default_word_config()
     wimage = get_wimage("الله", word_config)
 
-    # Apply additional padding (simulating layout spacing)
-    padded = pad(wimage, Padding(50, 50, 50, 50), color=(0, 0, 0, 0))
+    # Apply generous padding to simulate realistic 500x500 usage
+    # This ensures downsampled modes have enough pixels to work with
+    target_size = 500
+    w, h = wimage.size
+    pad_h = (target_size - w) // 2
+    pad_v = (target_size - h) // 2
+    padded = pad(wimage, Padding(pad_v, pad_v, pad_h, pad_h), color=(0, 0, 0, 0))
 
     # Test all quality modes
     for quality in ["fast", "balanced", "quality"]:
@@ -205,10 +221,17 @@ def test_glow_wimage_comparison() -> None:
     # Use transliterated names for Windows compatibility
     words = [("الله", "allah"), ("محمد", "mohammed"), ("قرآن", "quran")]
 
+    # Target size for realistic testing (500x500 equivalent)
+    target_size = 500
+
     # Create comparison strip for each word
     for word, word_name in words:
         wimage = get_wimage(word, word_config)
-        padded = pad(wimage, Padding(50, 50, 50, 50), color=(0, 0, 0, 0))
+        # Apply generous padding to reach target size
+        w, h = wimage.size
+        pad_h = (target_size - w) // 2
+        pad_v = (target_size - h) // 2
+        padded = pad(wimage, Padding(pad_v, pad_v, pad_h, pad_h), color=(0, 0, 0, 0))
 
         # Generate all quality modes
         fast_glow = glow(padded, strength=1.0, radius=50, quality="fast")
@@ -231,21 +254,25 @@ def test_glow_wimage_comparison() -> None:
 
 def test_glow_brightness_analysis() -> None:
     """Analyze and print comprehensive brightness statistics for all glow quality modes.
-
+ 
     This test generates the glow images (if not already present) and then analyzes
     their brightness using multiple statistical measures: mean, median, quartiles
     (Q1, Q3), IQR, percentiles (P10, P90), and standard deviation.
-
+ 
     This helps verify that the three quality modes have comparable brightness levels.
     """
     print("\n=== Glow Brightness Analysis ===\n")
-
-    # First ensure the test images exist by running the generation tests
-    test_glow_quality_modes()
-    test_glow_on_padded_wimage()
-    test_glow_wimage_comparison()
-
+ 
     output_dir = "./output/test/image"
+    
+    # Avoid redundant generation: check if at least one required image exists
+    # If not, run the generation tests.
+    if not os.path.exists(os.path.join(output_dir, "glowed_rgba_fast.png")):
+        test_glow_quality_modes()
+        test_glow_on_padded_wimage()
+        test_glow_wimage_comparison()
+ 
+    # Analyze RGBA glow images
 
     # Analyze RGBA glow images
     print("RGBA Glow Images (white circle on transparent):")
@@ -448,3 +475,31 @@ def test_glow_strength_zero() -> None:
     result = glow(test_image, strength=0.0, radius=10)
     assert result is not test_image
     assert result.size == test_image.size
+
+
+@pytest.mark.benchmark
+def test_glow_quality_modes_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark glow quality modes (fast/balanced/quality) on 500x500 RGBA image."""
+    import time
+
+    test_image = Image.new("RGBA", (500, 500), color=(255, 255, 255, 255))
+    draw = ImageDraw.Draw(test_image)
+    draw.rectangle([200, 200, 300, 300], fill=(255, 0, 0, 255))
+
+    modes = ["fast", "balanced", "quality"]
+    timings = {}
+
+    for mode in modes:
+        start = time.perf_counter()
+        for _ in range(10):
+            glow(test_image, strength=0.5, radius=20, quality=mode)
+        elapsed = time.perf_counter() - start
+        avg_ms = (elapsed / 10) * 1000
+        timings[mode] = avg_ms
+
+    parts = [f"{mode}={timings[mode]:.1f}ms" for mode in modes]
+    request.node.benchmark_data = parts
+
+    print(f"\nGlow Benchmark (500x500, 10 iterations):")
+    for mode in modes:
+        print(f"  {mode}: {timings[mode]:.1f}ms")

@@ -94,7 +94,7 @@ MAX_AYAH = 286
 
 
 class Padding(NamedTuple):
-    """Container for 4-directional padding values (CSS/PIL order)."""
+    """Container for 4-directional padding values (top, bottom, left, right)."""
 
     top: int = 0
     bottom: int = 0

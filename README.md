@@ -185,7 +185,7 @@ uv pip install -e ".[dev]"
 uv run -m pytest -v
 
 # Run benchmarks
-uv run -m pytest -v --run-benchmarks
+uv run -m pytest -v --benchmark  # or -b
 
 # Lint and format
 uv run -m ruff check .

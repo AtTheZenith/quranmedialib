@@ -14,6 +14,7 @@ from typing import Sequence
 from PIL import Image
 
 from quranmedialib.types import (
+    Color,
     HorizontalAlignment,
     LayoutConfig,
     VerticalAlignment,
@@ -57,7 +58,7 @@ def _build_row(
     for item in all_items[start_index:]:
         word_width, word_height = item.width, item.height
         spacing = word_config.word_spacing if row_items else 0
-        
+
         if current_row_width + word_width + spacing > config.content_width:
             if not row_items:
                 # Force at least one item to avoid infinite loop
@@ -221,6 +222,7 @@ def _balance_image_rows(
         return []
 
     from quranmedialib.modules.text_layout import balance_lines_pyramid
+
     widths = [it.width for it in items]
     best_breaks = balance_lines_pyramid(
         widths=widths,
@@ -249,15 +251,21 @@ def _balance_image_rows(
 def _get_verse_start_y(content_height: int, config: LayoutConfig, word_config: WordConfig) -> int:
     """Calculates the starting Y coordinate for the entire verse block."""
     y_start = config.padding.top + word_config.verse_v_offset
-
+ 
     if config.wimage_vertical_align == VerticalAlignment.CENTER:
         if content_height < config.available_height:
             y_start += (config.available_height - content_height) // 2
     elif config.wimage_vertical_align == VerticalAlignment.BOTTOM:
         if content_height < config.available_height:
             y_start += config.available_height - content_height
-
-    return y_start + config.wimage_y_offset
+ 
+    final_y = y_start + config.wimage_y_offset
+    
+    # Prevent clipping when aligned to TOP: ensure we don't go above the top padding.
+    if config.wimage_vertical_align == VerticalAlignment.TOP:
+        return max(config.padding.top, final_y)
+        
+    return final_y
 
 
 def _get_row_start_x(row_width: int, config: LayoutConfig) -> int:
@@ -287,7 +295,7 @@ def _render_page(
     total_verse_height = sum(row_heights) + (len(rows) - 1) * word_config.row_spacing if rows else 0
 
     draw_y = _get_verse_start_y(total_verse_height, config, word_config)
-    
+
     # Local references for performance
     word_spacing = word_config.word_spacing
     row_spacing = word_config.row_spacing
@@ -305,12 +313,13 @@ def _render_page(
 
         if can_merge:
             row_mask = Image.new("L", (row_width, max_row_height), 0)
-            rx = 0
+            rx = row_width
             for item in row:
                 w_img = item.image
                 ry = (max_row_height - w_img.height) // 2
+                rx -= w_img.width
                 row_mask.paste(w_img, (rx, ry))
-                rx += w_img.width + word_spacing
+                rx -= word_spacing
 
             color_to_use = first_color if first_color is not None else global_word_color
             page_image.paste(color_to_use, (current_x - row_width, draw_y), mask=row_mask)
@@ -325,7 +334,7 @@ def _render_page(
                     page_image.paste(color_to_use, (current_x - w_img.width, ry), mask=w_img)
                 else:
                     alpha_composite(w_img, dest=(current_x - w_img.width, ry))
-                
+
                 current_x -= w_img.width + word_spacing
 
         draw_y += max_row_height + row_spacing
@@ -346,6 +355,10 @@ def _paste_translation_image(
         trans_y = config.padding.top + (config.available_height - trans_img.height) // 2 + config.timage_y_offset
     elif config.timage_vertical_align == VerticalAlignment.BOTTOM:
         trans_y = config.padding.top + config.available_height - trans_img.height + config.timage_y_offset
+    
+    # Prevent clipping when aligned to TOP: ensure we don't go above the top padding.
+    if config.timage_vertical_align == VerticalAlignment.TOP:
+        trans_y = max(config.padding.top, trans_y)
 
     # Horizontal placement
     trans_x = config.padding.left + config.timage_x_offset
@@ -355,15 +368,9 @@ def _paste_translation_image(
         trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
 
     # Warn if translation image would be clipped off-canvas
-    if (
-        trans_x < 0
-        or trans_y < 0
-        or trans_x + trans_img.width > config.max_width
-        or trans_y + trans_img.height > config.image_height
-    ):
+    if trans_x < 0 or trans_y < 0 or trans_x + trans_img.width > config.max_width or trans_y + trans_img.height > config.image_height:
         logger.warning(
-            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). "
-            "Consider adjusting timage offsets or canvas dimensions.",
+            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). Consider adjusting timage offsets or canvas dimensions.",
             trans_img.width,
             trans_img.height,
             trans_x,
