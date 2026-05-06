@@ -43,7 +43,6 @@ def test_api_exports_completeness() -> None:
         "MIN_AYAH",
         "MAX_AYAH",
         # Text rendering types
-
         "StyledWord",
         "Line",
         # Exceptions
@@ -54,7 +53,6 @@ def test_api_exports_completeness() -> None:
         "ValidationError",
         "LayoutError",
         # Presets
-
         "FONT_HAFS",
         "FONT_INTER",
         "FONT_INTER_ITALIC",

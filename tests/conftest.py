@@ -56,7 +56,8 @@ def default_padding() -> Padding:
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add command-line options for running benchmarks and heavy tests."""
     parser.addoption(
-        "--benchmark", "--b",
+        "--benchmark",
+        "--b",
         action="store_true",
         default=False,
         help="Run performance benchmarks (skipped by default)",

@@ -10,7 +10,7 @@ import warnings
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, ValidationError, DatabaseManager
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, ValidationError
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
 

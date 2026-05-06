@@ -8,18 +8,16 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from PIL import Image, ImageDraw
 
-from quranmedialib.modules.font_cache import _load_font_base, get_font
+from quranmedialib.modules.font_cache import _load_font_base
 from quranmedialib.modules.text_layout import (
-    Line,
     StyledWord,
-    balance_lines_pyramid,
     wrap_rich_text_balanced,
     wrap_rich_text_greedy,
 )
 from quranmedialib.types import TextConfig
 
 if TYPE_CHECKING:
-    from quranmedialib.modules.text_layout import Line, StyledWord
+    from quranmedialib.modules.text_layout import StyledWord
     from quranmedialib.types import TextConfig
 
 logger = logging.getLogger(__name__)
@@ -201,14 +199,14 @@ def get_timage(
             )
 
         current_y += l_height + l_spacing
- 
+
     if use_mask:
         # Convert 'L' mask to 'RGBA' using the base color to preserve performance
         # while ensuring the output image is transparent-capable.
         result = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
         result.paste(config.color, (0, 0), mask=img)
         return result
- 
+
     return img
 
 

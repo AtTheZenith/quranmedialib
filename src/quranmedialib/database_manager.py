@@ -22,10 +22,10 @@ import threading
 import time
 from contextlib import closing
 from types import TracebackType
-from typing import Any, Optional, Self
+from typing import Any, Self
 
 from quranmedialib.config import SQLITE_MMAP_SIZE
-from quranmedialib.exceptions import DatabaseError, ValidationError
+from quranmedialib.exceptions import ValidationError
 from quranmedialib.types import (
     MAX_AYAH,
     MAX_SURAH,
@@ -136,7 +136,7 @@ class DatabaseManager:
     Translation methods use the active translation database (configurable via set_active_translation).
     """
 
-    _instance: Optional[DatabaseManager] = None
+    _instance: DatabaseManager | None = None
     _lock = threading.RLock()
 
     # Default connection names
@@ -168,8 +168,8 @@ class DatabaseManager:
             self._registry: dict[str, dict[str, Any]] = {}
             self._connections: dict[str, sqlite3.Connection] = {}
             self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
-            self._active_wbw: Optional[str] = None
-            self._active_translation: Optional[str] = None
+            self._active_wbw: str | None = None
+            self._active_translation: str | None = None
 
             # Performance caches
             self._schema_cache: dict[str, dict[str, str]] = {}
@@ -287,7 +287,7 @@ class DatabaseManager:
             self._active_translation = name
             logger.debug("Active translation set to: %s", name)
 
-    def get_active_translation_name(self) -> Optional[str]:
+    def get_active_translation_name(self) -> str | None:
         """Get the name of the currently active translation."""
         return self._active_translation
 
@@ -307,7 +307,7 @@ class DatabaseManager:
             self._active_wbw = name
             logger.debug("Active WBW set to: %s", name)
 
-    def get_active_wbw_name(self) -> Optional[str]:
+    def get_active_wbw_name(self) -> str | None:
         """Get the name of the currently active WBW database."""
         return self._active_wbw
 
@@ -348,7 +348,10 @@ class DatabaseManager:
             except sqlite3.Error as e:
                 logger.warning(
                     "Database query failed on '%s': %s | Query: %s | Params: %s",
-                    name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
+                    name,
+                    e,
+                    _truncate_for_log(query, 200),
+                    _truncate_for_log(params),
                     exc_info=True,
                 )
                 return []
@@ -480,7 +483,10 @@ class DatabaseManager:
             """
 
         rows = self._fetch(
-            self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None
+            self.DEFAULT_QURAN_NAME,
+            self._query_cache[query_key],
+            (surah_number, start_ayah, end_ayah),
+            row_factory=None,
         )
         return [" ".join(json.loads(row[0])) for row in rows]
 
@@ -560,7 +566,7 @@ class DatabaseManager:
         surah_number: SurahNumber,
         ayah_number: AyahNumber,
         word_index: WordIndex,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Fetches the translation for a specific word in a specific verse.
 
         Args:
@@ -673,7 +679,9 @@ class DatabaseManager:
             """
 
         try:
-            rows = self._fetch(name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None)
+            rows = self._fetch(
+                name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None
+            )
             if not rows:
                 return {}
             return {row[0]: json.loads(row[1]) for row in rows}
