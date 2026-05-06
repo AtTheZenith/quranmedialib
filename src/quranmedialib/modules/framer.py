@@ -251,20 +251,20 @@ def _balance_image_rows(
 def _get_verse_start_y(content_height: int, config: LayoutConfig, word_config: WordConfig) -> int:
     """Calculates the starting Y coordinate for the entire verse block."""
     y_start = config.padding.top + word_config.verse_v_offset
- 
+
     if config.wimage_vertical_align == VerticalAlignment.CENTER:
         if content_height < config.available_height:
             y_start += (config.available_height - content_height) // 2
     elif config.wimage_vertical_align == VerticalAlignment.BOTTOM:
         if content_height < config.available_height:
             y_start += config.available_height - content_height
- 
+
     final_y = y_start + config.wimage_y_offset
-    
+
     # Prevent clipping when aligned to TOP: ensure we don't go above the top padding.
     if config.wimage_vertical_align == VerticalAlignment.TOP:
         return max(config.padding.top, final_y)
-        
+
     return final_y
 
 
@@ -355,7 +355,7 @@ def _paste_translation_image(
         trans_y = config.padding.top + (config.available_height - trans_img.height) // 2 + config.timage_y_offset
     elif config.timage_vertical_align == VerticalAlignment.BOTTOM:
         trans_y = config.padding.top + config.available_height - trans_img.height + config.timage_y_offset
-    
+
     # Prevent clipping when aligned to TOP: ensure we don't go above the top padding.
     if config.timage_vertical_align == VerticalAlignment.TOP:
         trans_y = max(config.padding.top, trans_y)
@@ -368,9 +368,15 @@ def _paste_translation_image(
         trans_x = config.padding.left + config.content_width - trans_img.width + config.timage_x_offset
 
     # Warn if translation image would be clipped off-canvas
-    if trans_x < 0 or trans_y < 0 or trans_x + trans_img.width > config.max_width or trans_y + trans_img.height > config.image_height:
+    if (
+        trans_x < 0
+        or trans_y < 0
+        or trans_x + trans_img.width > config.max_width
+        or trans_y + trans_img.height > config.image_height
+    ):
         logger.warning(
-            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas (%dx%d). Consider adjusting timage offsets or canvas dimensions.",
+            "Translation image (%dx%d at x=%d, y=%d) will be clipped off canvas "
+            "(%dx%d). Consider adjusting timage offsets or canvas dimensions.",
             trans_img.width,
             trans_img.height,
             trans_x,

@@ -9,7 +9,6 @@ This script demonstrates various usage patterns including:
 Run this script to generate sample images for all preset configurations.
 """
 
-import os
 from pathlib import Path
 from typing import Literal
 

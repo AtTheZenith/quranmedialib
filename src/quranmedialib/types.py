@@ -13,7 +13,6 @@ structures used throughout the library. It includes:
 
 from __future__ import annotations
 
-import bisect
 import os
 import os.path
 from dataclasses import dataclass, field
@@ -21,28 +20,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, NamedTuple
 
-from PIL import Image, ImageFont
+from PIL import Image
 
-from quranmedialib.exceptions import ResourceError, ValidationError
+from quranmedialib.exceptions import (
+    ResourceError,
+    ValidationError,
+)
 from quranmedialib.resources import get_font_path
 
-# === Exceptions ===
-
-
-class QuranMediaLibError(Exception):
-    """Base class for all QuranMediaLib exceptions."""
-
-
-class LayoutError(QuranMediaLibError):
-    """Raised when rendering dimensions or layouts are invalid."""
-
-
-class DatabaseError(QuranMediaLibError):
-    """Raised when database operations fail or schema is invalid."""
-
-
-class ResourceError(QuranMediaLibError):
-    """Raised when external assets (fonts, DBs) cannot be loaded."""
+# === Path Security ===
 
 
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage

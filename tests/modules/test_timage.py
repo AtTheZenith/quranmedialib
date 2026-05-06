@@ -8,7 +8,7 @@ import pytest
 from PIL import Image, ImageDraw, ImageOps
 
 from quranmedialib import LANDSCAPE_PRESET
-from quranmedialib.modules.text_layout import wrap_rich_text_balanced, wrap_rich_text_greedy
+from quranmedialib.modules.text_layout import wrap_rich_text_balanced
 from quranmedialib.modules.timage import (
     _parse_rich_text,
     format_isolation_text,

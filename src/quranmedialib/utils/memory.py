@@ -20,7 +20,6 @@ except ImportError:
 from quranmedialib.config import (
     DEFAULT_AGGREGATE_LIMIT_MB,
     DEFAULT_PROCESS_LIMIT_MB,
-    MEMORY_FLUSH_THRESHOLD_RATIO,
 )
 
 logger = logging.getLogger(__name__)

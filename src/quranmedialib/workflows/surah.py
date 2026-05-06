@@ -12,8 +12,8 @@ from typing import Iterator
 
 from PIL import Image
 
-from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.exceptions import WorkflowError
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
 # Logger setup

@@ -14,18 +14,20 @@ import os
 from pathlib import Path
 from typing import Any, Iterator
 
-from PIL import Image, ImageFont
+from PIL import Image
 
 from quranmedialib.database_manager import DatabaseManager
-from quranmedialib.exceptions import ValidationError, WorkflowError
+from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import (
-    HorizontalAlignment,
+    LayoutConfig,
+    TextConfig,
     VerticalAlignment,
+    WordConfig,
     WordItem,
     _ensure_within_working_dir,
 )
@@ -78,9 +80,18 @@ class VerseRangeWorkflow(BaseWorkflow):
             # Vertical placement
             ty = self.layout_config.padding.top + self.layout_config.timage_y_offset
             if self.layout_config.timage_vertical_align == VerticalAlignment.CENTER:
-                ty = self.layout_config.padding.top + (self.layout_config.available_height - trans_img.height) // 2 + self.layout_config.timage_y_offset
+                ty = (
+                    self.layout_config.padding.top
+                    + (self.layout_config.available_height - trans_img.height) // 2
+                    + self.layout_config.timage_y_offset
+                )
             elif self.layout_config.timage_vertical_align == VerticalAlignment.BOTTOM:
-                ty = self.layout_config.padding.top + self.layout_config.available_height - trans_img.height + self.layout_config.timage_y_offset
+                ty = (
+                    self.layout_config.padding.top
+                    + self.layout_config.available_height
+                    - trans_img.height
+                    + self.layout_config.timage_y_offset
+                )
 
             tx = (self.layout_config.max_width - trans_img.width) // 2 + self.layout_config.timage_x_offset
 
@@ -198,12 +209,119 @@ class VerseRangeWorkflow(BaseWorkflow):
                 yield result
 
 
+def _fetch_worker_data(surah: int, annotate: bool) -> tuple[dict[int, str], dict[int, list[str]]]:
+    """Fetch and map surah data for the worker."""
+    db = DatabaseManager()
+    arabic_verses = db.get_verses_from_surah(surah)
+    all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
+    arabic_map = {i + 1: txt for i, txt in enumerate(arabic_verses)}
+    return arabic_map, all_wbw
+
+
+def _generate_word_items(
+    verse_text: str,
+    ayah: int,
+    surah: int,
+    word_cfg: WordConfig,
+    annotate: bool,
+    all_wbw: dict[int, list[str]],
+) -> list[WordItem]:
+    """Generate the list of WordItems for a verse, including annotations and verse number."""
+    verse_words = verse_text.split()
+    word_images = [get_wimage(word, word_cfg) for word in verse_words]
+
+    if annotate:
+        wbw_translations = all_wbw.get(ayah, [])
+        annotated_images, annotated_text = annotate_words(
+            images=word_images,
+            surah=surah,
+            ayah=ayah,
+            start=1,
+            word_config=word_cfg,
+            wbw_translations=wbw_translations,
+            texts=verse_words,
+        )
+    else:
+        annotated_images, annotated_text = word_images, verse_words
+
+    vn_img = verse_number(ayah, word_cfg)
+    annotated_images.append(vn_img)
+    annotated_text.append("")
+
+    return [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+
+
+def _render_pages(
+    word_items: list[WordItem],
+    verse_translations: list[str],
+    layout_cfg: LayoutConfig,
+    word_cfg: WordConfig,
+    text_cfg: TextConfig,
+    separate_translations: bool,
+) -> list[Image.Image]:
+    """Render the verse pages based on the translation mode."""
+    trans_images = LazyTranslationImages(verse_translations, text_cfg)
+
+    if separate_translations:
+        arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
+        pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
+        for t_img in trans_images:
+            if not t_img:
+                continue
+            canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
+
+            ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
+            if layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
+                ty = (
+                    layout_cfg.padding.top
+                    + (layout_cfg.available_height - t_img.height) // 2
+                    + layout_cfg.timage_y_offset
+                )
+            elif layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
+                ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
+
+            tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
+
+            if t_img.mode == "L":
+                canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
+            else:
+                if canvas.mode != "RGBA":
+                    canvas = canvas.convert("RGBA")
+                canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
+            pages.append(canvas)
+        return pages
+    else:
+        return list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
+
+
+def _handle_output(
+    pages: list[Image.Image],
+    ayah: int,
+    output_dir: str | None,
+    filename_prefix: str,
+    save_fn: Any,
+    use_bytes: bool,
+) -> list[Any]:
+    """Save pages to disk or convert to bytes for IPC."""
+    if output_dir:
+        paths = []
+        for j, p in enumerate(pages):
+            path = os.path.join(output_dir, f"{filename_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
+            save_fn(p, path, format="PNG", compress_level=1)
+            paths.append(path)
+        return paths
+    elif use_bytes:
+        return [(p.mode, p.size, p.tobytes()) for p in pages]
+    else:
+        return pages
+
+
 def _render_verse_worker(
     verse_data: list[tuple[int, list[str]]],
     surah: int,
-    layout_cfg: Any,
-    text_cfg: Any,
-    word_cfg: Any,
+    layout_cfg: LayoutConfig,
+    text_cfg: TextConfig,
+    word_cfg: WordConfig,
     annotate: bool,
     separate_translations: bool,
     output_dir: str | None,
@@ -231,19 +349,8 @@ def _render_verse_worker(
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
-    # Initialize process-local database manager
-    db = DatabaseManager()
-
-    # Determine range for fetching
-    ayahs = [v[0] for v in verse_data]
-    start_ayah, end_ayah = min(ayahs), max(ayahs)
-
-    # Fetch surah-level data once (cached in the manager instance)
-    arabic_verses = db.get_verses_from_surah(surah)
-    all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
-
-    # Re-index to ayah number (1-based)
-    arabic_map = {i + 1: txt for i, txt in enumerate(arabic_verses)}
+    # Initialize data for this batch
+    arabic_map, all_wbw = _fetch_worker_data(surah, annotate)
 
     batch_results = []
     flush_trigger = DEFAULT_PROCESS_LIMIT_MB * MEMORY_FLUSH_THRESHOLD_RATIO
@@ -261,71 +368,10 @@ def _render_verse_worker(
             if not verse_text:
                 continue
 
-            wbw_translations = all_wbw.get(ayah, [])
-            verse_words = verse_text.split()
-            word_images = [get_wimage(word, word_cfg) for word in verse_words]
+            word_items = _generate_word_items(verse_text, ayah, surah, word_cfg, annotate, all_wbw)
+            pages = _render_pages(word_items, verse_translations, layout_cfg, word_cfg, text_cfg, separate_translations)
 
-            if annotate:
-                annotated_images, annotated_text = annotate_words(
-                    images=word_images,
-                    surah=surah,
-                    ayah=ayah,
-                    start=1,
-                    word_config=word_cfg,
-                    wbw_translations=wbw_translations,
-                    texts=verse_words,
-                )
-            else:
-                annotated_images, annotated_text = word_images, verse_words
-
-            # Add verse number marker
-            vn_img = verse_number(ayah, word_cfg)
-            annotated_images.append(vn_img)
-            annotated_text.append("")
-
-            word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
-            trans_images = LazyTranslationImages(verse_translations, text_cfg)
-
-            if separate_translations:
-                arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
-                pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
-                for t_img in trans_images:
-                    if not t_img:
-                        continue
-                    canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
-
-                    # Vertical placement
-                    ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
-                    if layout_cfg.timage_vertical_align == "center" or layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
-                        ty = layout_cfg.padding.top + (layout_cfg.available_height - t_img.height) // 2 + layout_cfg.timage_y_offset
-                    elif layout_cfg.timage_vertical_align == "bottom" or layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
-                        ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
-
-                    tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
-                    
-                    if t_img.mode == "L":
-                        canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
-                    else:
-                        # Ensure RGBA for alpha_composite
-                        if canvas.mode != "RGBA":
-                            canvas = canvas.convert("RGBA")
-                        canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
-                    pages.append(canvas)
-            else:
-                pages = list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
-
-            if output_dir:
-                paths = []
-                for j, p in enumerate(pages):
-                    path = os.path.join(output_dir, f"{filename_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
-                    save(p, path, format="PNG", compress_level=1)
-                    paths.append(path)
-                batch_results.append(paths)
-            elif use_bytes:
-                # Convert PIL images to picklable byte data for IPC
-                batch_results.append([(p.mode, p.size, p.tobytes()) for p in pages])
-            else:
-                # Direct Image objects (for serial execution)
-                batch_results.append(pages)
+            result = _handle_output(pages, ayah, output_dir, filename_prefix, save, use_bytes)
+            batch_results.append(result)
 
     return batch_results

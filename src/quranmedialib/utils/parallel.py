@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import atexit
 import logging
-import os
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from enum import Enum, auto
 from typing import Callable, Iterable, Iterator, TypeVar
@@ -131,7 +130,7 @@ class ParallelRenderer:
 
         # Calculate chunksize to have exactly one task-list per worker
         chunk_size = max(1, (len(task_list) + self.max_workers - 1) // self.max_workers)
-        
+
         # Create the batches
         batches = [task_list[i : i + chunk_size] for i in range(0, len(task_list), chunk_size)]
 
