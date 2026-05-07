@@ -289,6 +289,7 @@ class DatabaseManager:
 
     def get_active_translation_name(self) -> str | None:
         """Get the name of the currently active translation."""
+        self._validate_state()
         return self._active_translation
 
     def set_active_wbw(self, name: str) -> None:
@@ -309,6 +310,7 @@ class DatabaseManager:
 
     def get_active_wbw_name(self) -> str | None:
         """Get the name of the currently active WBW database."""
+        self._validate_state()
         return self._active_wbw
 
     def _fetch(
@@ -430,6 +432,7 @@ class DatabaseManager:
         Returns:
             A list of Arabic verse strings, ordered by ayah number.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         config = self._get_config(self.DEFAULT_QURAN_NAME)
         _, schema = self._resolve_schema(config)
@@ -465,6 +468,7 @@ class DatabaseManager:
         Returns:
             A list of Arabic verse strings, ordered by ayah number.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         start_ayah = _validate_ayah(start_ayah)
         end_ayah = _validate_ayah(end_ayah)
@@ -499,6 +503,7 @@ class DatabaseManager:
         Returns:
             The Arabic verse text as a string.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         ayah_number = _validate_ayah(ayah_number)
         config = self._get_config(self.DEFAULT_QURAN_NAME)
@@ -526,6 +531,7 @@ class DatabaseManager:
         Returns:
             List of word translations in order.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
@@ -546,6 +552,7 @@ class DatabaseManager:
         Returns:
             List of word translations in order.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         ayah_number = _validate_ayah(ayah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
@@ -577,6 +584,7 @@ class DatabaseManager:
         Returns:
             The translation string or None if not found.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         ayah_number = _validate_ayah(ayah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
@@ -606,6 +614,7 @@ class DatabaseManager:
         Returns:
             Dictionary mapping ayah numbers to their lists of word translations.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
@@ -660,6 +669,7 @@ class DatabaseManager:
         Returns:
             Dictionary mapping ayah numbers to their lists of word translations.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         start_ayah = _validate_ayah(start_ayah)
         end_ayah = _validate_ayah(end_ayah)
@@ -722,6 +732,7 @@ class DatabaseManager:
         Returns:
             List of verse translations (one per verse).
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
@@ -755,6 +766,7 @@ class DatabaseManager:
         Returns:
             The verse translation string or None if not found.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         ayah_number = _validate_ayah(ayah_number)
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
@@ -790,6 +802,7 @@ class DatabaseManager:
         Raises:
             ValueError: If any ayah in the requested range is missing from the database.
         """
+        self._validate_state()
         surah_number = _validate_surah(surah_number)
         start_ayah = _validate_ayah(start_ayah)
         end_ayah = _validate_ayah(end_ayah)
@@ -823,6 +836,7 @@ class DatabaseManager:
 
     def list_connections(self) -> list[str]:
         """List all registered connection names."""
+        self._validate_state()
         return list(self._registry.keys())
 
     def close(self) -> None:
@@ -861,8 +875,3 @@ class DatabaseManager:
         self.get_translation_from_surah.cache_clear()
 
         logger.debug("DatabaseManager caches minimized.")
-
-        # Reset singleton instance so next DatabaseManager() creates a fresh instance
-        DatabaseManager._instance = None
-
-        logger.info("DatabaseManager closed. All connections closed.")
