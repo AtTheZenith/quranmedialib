@@ -94,6 +94,37 @@ class Line:
             self.width -= last_word.width
 
 
+def _check_pyramid_feasibility(
+    sums: list[int],
+    spacing: int,
+    target_k: int,
+    w1_limit: int,
+) -> float:
+    """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
+    n = len(sums) - 1
+    curr_idx = 0
+    prev_limit = w1_limit
+    count = 0
+
+    while curr_idx < n:
+        count += 1
+        if count > target_k:
+            return float("inf")
+
+        # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
+        target = prev_limit + spacing + sums[curr_idx]
+        next_idx = bisect.bisect_right(sums, target) - 1
+
+        if next_idx <= curr_idx:
+            return float("inf")
+
+        # Update limit for next line (Inverted Pyramid constraint)
+        prev_limit = (sums[next_idx] - sums[curr_idx]) - spacing
+        curr_idx = next_idx
+
+    return float(count)
+
+
 def balance_lines_pyramid(
     widths: list[int],
     spacing: int,
@@ -124,35 +155,6 @@ def balance_lines_pyramid(
     for i, w in enumerate(widths):
         sums[i + 1] = sums[i] + w + spacing
 
-    _spacing = spacing
-    _target_k = target_k
-    _n = n
-
-    def check_feasibility(w1_limit: int) -> int:
-        """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
-        curr_idx = 0
-        prev_limit = w1_limit
-        count = 0
-
-        while curr_idx < _n:
-            count += 1
-            if count > _target_k:
-                return 9999
-
-            # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
-            # Target = prev_limit + spacing + sums[curr_idx]
-            target = prev_limit + _spacing + sums[curr_idx]
-            next_idx = bisect.bisect_right(sums, target) - 1
-
-            if next_idx <= curr_idx:
-                return 9999
-
-            # Update limit for next line (Inverted Pyramid constraint)
-            prev_limit = (sums[next_idx] - sums[curr_idx]) - _spacing
-            curr_idx = next_idx
-
-        return count
-
     # Bounds
     max_w = max(widths)
     total_w = sums[n] - spacing
@@ -163,7 +165,7 @@ def balance_lines_pyramid(
 
     while low <= high:
         mid = (low + high) // 2
-        if check_feasibility(mid) <= target_k:
+        if _check_pyramid_feasibility(sums, spacing, target_k, mid) <= target_k:
             best_w1 = mid
             high = mid - 1
         else:
@@ -187,6 +189,7 @@ def balance_lines_pyramid(
             break
 
     return breaks
+
 
 
 def wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
