@@ -553,8 +553,16 @@ The agent is operating in a Windows environment using PowerShell 7 (`pwsh`) as t
  
 ## 16. Development Commands
 
-All development commands use `uv` for consistency:
+All development commands use `uv` for consistency.
 
+### 16.1 Project Management
+- **Add dependency**: `uv add <package>`
+- **Sync environment**: `uv sync`
+- **Re-lock dependencies**: `uv lock` (after manual `pyproject.toml` edits)
+- **Manage Python versions**: `uv python install <version>` or `uv python pin <version>`
+- **Run ephemeral tools**: `uvx <tool>`
+
+### 16.2 Common Commands
 ```bash
 # Run all tests
 uv run -m pytest
@@ -590,7 +598,7 @@ uv run tests/modules/test_framer.py
 
 ## 17. Testing Conventions
 
-### 16.1 Test Structure
+### 17.1 Test Structure
 
 - Tests live under `tests/` directory, mirroring source structure:
   - `tests/modules/` — Core module tests
@@ -600,7 +608,7 @@ uv run tests/modules/test_framer.py
 - Test files use `test_*.py` naming.
 - Each test module can run standalone with `uv run tests/modules/test_*.py`.
 
-### 16.2 Test Patterns
+### 17.2 Test Patterns
 
 - Use descriptive test names (`test_color`, `test_glow`, `test_framer`).
 - Use `assert` statements for programmatic verification.
@@ -610,13 +618,13 @@ uv run tests/modules/test_framer.py
 - Use `pytest.mark.parametrize` for data-driven tests.
 - Use `@pytest.mark.benchmark` for performance tests (skipped by default).
 
-### 16.3 Database in Tests
+### 17.3 Database in Tests
 
 - `DatabaseManager` is a singleton; tests share the same instance.
 - Tests rarely call `db.close()` explicitly (rely on process exit).
 - For stress tests, measure performance with `time.perf_counter()`.
 
-### 16.4 Test Organization
+### 17.4 Test Organization
 
 ```python
 def test_feature() -> None:
