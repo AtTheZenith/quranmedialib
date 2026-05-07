@@ -32,9 +32,11 @@ from quranmedialib.types import (
     _ensure_within_working_dir,
 )
 from quranmedialib.utils.io import async_image_saver
-from quranmedialib.utils.memory import (
+from quranmedialib.config import (
     DEFAULT_PROCESS_LIMIT_MB,
     MEMORY_FLUSH_THRESHOLD_RATIO,
+)
+from quranmedialib.utils.memory import (
     clear_rendering_caches,
     get_current_rss_mb,
 )
@@ -53,52 +55,6 @@ class VerseRangeWorkflow(BaseWorkflow):
     Handles data retrieval, image generation, and layout orchestration for multiple
     verses. Supports 'combined' and 'separate' translation rendering modes.
     """
-
-    def _render_separate_translation_pages(
-        self,
-        translation_images: list[Image.Image | None],
-    ) -> list[Image.Image]:
-        """Creates dedicated full-size pages for each translation image.
-
-        Args:
-            translation_images: List of translation images (or None for empty slots).
-
-        Returns:
-            list[Image.Image]: List of canvas images with translations centered.
-        """
-        pages = []
-        for trans_img in translation_images:
-            if not trans_img:
-                continue
-
-            canvas = Image.new(
-                "RGBA",
-                (self.layout_config.max_width, self.layout_config.image_height),
-                (0, 0, 0, 0),
-            )
-
-            # Vertical placement
-            ty = self.layout_config.padding.top + self.layout_config.timage_y_offset
-            if self.layout_config.timage_vertical_align == VerticalAlignment.CENTER:
-                ty = (
-                    self.layout_config.padding.top
-                    + (self.layout_config.available_height - trans_img.height) // 2
-                    + self.layout_config.timage_y_offset
-                )
-            elif self.layout_config.timage_vertical_align == VerticalAlignment.BOTTOM:
-                ty = (
-                    self.layout_config.padding.top
-                    + self.layout_config.available_height
-                    - trans_img.height
-                    + self.layout_config.timage_y_offset
-                )
-
-            tx = (self.layout_config.max_width - trans_img.width) // 2 + self.layout_config.timage_x_offset
-
-            canvas.paste(trans_img, (tx, ty), mask=trans_img if trans_img.mode == "RGBA" else None)
-            pages.append(canvas)
-
-        return pages
 
     def get_iterator(
         self,

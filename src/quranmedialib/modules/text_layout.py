@@ -87,6 +87,12 @@ class Line:
         self.width += word.width
         self.height = max(self.height, word.height)
 
+    def trim_trailing_spaces(self) -> None:
+        """Removes trailing space words and updates line width."""
+        while self.words and self.words[-1].text.isspace():
+            last_word = self.words.pop()
+            self.width -= last_word.width
+
 
 def balance_lines_pyramid(
     widths: list[int],
@@ -204,47 +210,25 @@ def wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None)
 
     lines = []
     curr_line = Line()
-    curr_words = curr_line.words
-    curr_w = 0
-    curr_h = 0
 
     for word in styled_words:
         w_width = word.width
-        w_height = word.height
-        if curr_w + w_width > max_width:
-            if curr_words:
-                # Strip trailing space from previous line
-                if curr_words[-1].text.isspace():
-                    last_space = curr_words.pop()
-                    curr_w -= last_space.width
-
-                curr_line.width = curr_w
-                curr_line.height = curr_h
+        if curr_line.width + w_width > max_width:
+            if curr_line.words:
+                curr_line.trim_trailing_spaces()
                 lines.append(curr_line)
 
             curr_line = Line()
-            curr_words = curr_line.words
-            curr_w = 0
-            curr_h = 0
-
             w_text = word.text
 
             # Don't start a new line with a space
             if w_text.isspace():
                 continue
 
-        curr_words.append(word)
-        curr_w += w_width
-        if w_height > curr_h:
-            curr_h = w_height
+        curr_line.add_word(word)
 
-    if curr_words:
-        # Strip trailing space from last line
-        if curr_words[-1].text.isspace():
-            last_space = curr_words.pop()
-            curr_w -= last_space.width
-        curr_line.width = curr_w
-        curr_line.height = curr_h
+    if curr_line.words:
+        curr_line.trim_trailing_spaces()
         lines.append(curr_line)
 
     return lines
@@ -308,19 +292,13 @@ def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | Non
             final_lines.append(current_line)
             current_line = Line()
 
-        current_line.words.append(word)
-        current_line.width += word.width
-        if word.height > current_line.height:
-            current_line.height = word.height
+        current_line.add_word(word)
 
     if current_line.words:
         final_lines.append(current_line)
 
     # Post-process: Strip trailing spaces from each line
     for line in final_lines:
-        words = line.words
-        while words and words[-1].text.isspace():
-            last_word = words.pop()
-            line.width -= last_word.width
+        line.trim_trailing_spaces()
 
     return final_lines
