@@ -345,12 +345,12 @@ class DatabaseManager:
                         cursor.execute(query, params)
                         return cursor.fetchall()
                 except sqlite3.Error as e:
-                    logger.warning(
+                    logger.error(
                         "Database query failed on '%s': %s | Query: %s | Params: %s",
                         name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
                         exc_info=True,
                     )
-                    return []
+                    raise
                 finally:
                     conn.row_factory = old_factory
         
@@ -366,12 +366,12 @@ class DatabaseManager:
                 logger.debug("SQL EXECUTE: %.4fs | DB: %s | Query: %s", duration, name, _truncate_for_log(query))
                 return rows
         except sqlite3.Error as e:
-            logger.warning(
+            logger.error(
                 "Database query failed on '%s': %s | Query: %s | Params: %s",
                 name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
                 exc_info=True,
             )
-            return []
+            raise
 
 
     def _aggregate_verses(
