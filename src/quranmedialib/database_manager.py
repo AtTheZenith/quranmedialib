@@ -23,6 +23,7 @@ import time
 from contextlib import closing
 from types import TracebackType
 from typing import Any, Callable, Self
+import threading as threading_mod
 
 from quranmedialib.config import SQLITE_MMAP_SIZE
 from quranmedialib.exceptions import ValidationError
@@ -52,9 +53,6 @@ _SQLITE_PRAGMAS = [
     "PRAGMA locking_mode=NORMAL",
     f"PRAGMA mmap_size={SQLITE_MMAP_SIZE}",
 ]
-
-# Maximum glow radius to prevent resource exhaustion
-MAX_GLOW_RADIUS = 200
 
 # Trusted packaged database table/column names — hardcoded to prevent SQL injection
 _PACKAGED_DB_SCHEMAS = {
@@ -153,7 +151,7 @@ class DatabaseManager:
 
     def __init__(self) -> None:
         """Initializes database connections and registers packaged databases.
-
+        
         Automatically registers packaged databases on first initialization.
         """
         if getattr(self, "_initialized", False):
@@ -164,7 +162,7 @@ class DatabaseManager:
                 return
 
             self._registry: dict[str, dict[str, DatabaseConfig | WbwDatabaseConfig | sqlite3.Connection]] = {}
-            self._connections: dict[str, sqlite3.Connection] = {}
+            self._local = threading_mod.local()
             self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
             self._active_wbw: str | None = None
             self._active_translation: str | None = None
@@ -193,6 +191,7 @@ class DatabaseManager:
                 self.close()
                 raise
 
+
     def __enter__(self) -> Self:
         return self
 
@@ -216,33 +215,38 @@ class DatabaseManager:
         return self._configs[name]
 
     def _get_connection(self, name: str) -> sqlite3.Connection:
-        """Get the connection for a named database."""
-        if name not in self._connections:
-            raise KeyError(f"Unknown database: {name}")
-        return self._connections[name]
+        """Get the connection for a named database, creating it for the current thread if needed.
+        
+        Implements thread-local connection pooling to ensure thread safety and performance.
+        """
+        config = self._get_config(name)
+        
+        # Thread-local storage for connections
+        if not hasattr(self._local, "connections"):
+            self._local.connections = {}
+            
+        if name not in self._local.connections:
+            conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
+            for pragma in _SQLITE_PRAGMAS:
+                conn.execute(pragma)
+            conn.row_factory = None
+            self._local.connections[name] = conn
+            
+        return self._local.connections[name]
 
     def _register_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Registers a connection into the internal registry.
-
+        
         Args:
             name: Unique name for the connection.
             config: Configuration object.
         """
-        conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
-
-        # Apply optimization PRAGMAs
-        for pragma in _SQLITE_PRAGMAS:
-            conn.execute(pragma)
-
-        conn.row_factory = None
-
         with self._lock:
-            self._connections[name] = conn
             self._configs[name] = config
             self._registry[name] = {
                 "config": config,
-                "connection": conn,
             }
+
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Internal method to add a connection without validation."""
@@ -370,7 +374,13 @@ class DatabaseManager:
             raise
 
     # TODO Rename this here and in `_fetch`
-    def _execute_and_profile(self, cursor, query, params, name):
+    def _execute_and_profile(
+        self,
+        cursor: sqlite3.Cursor,
+        query: str,
+        params: tuple[Any, ...],
+        name: str,
+    ) -> list[sqlite3.Row | tuple[Any, ...]]:
         start_time = time.perf_counter()
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -847,12 +857,14 @@ class DatabaseManager:
             return
 
         with self._lock:
-            for name, conn in self._connections.items():
-                if conn:
-                    conn.close()
-                    logger.debug("Closed connection: %s", name)
+            # Note: We cannot easily close thread-local connections for other threads.
+            # The current thread's connections are closed here.
+            if hasattr(self._local, "connections"):
+                for conn in self._local.connections.values():
+                    if conn:
+                        conn.close()
+                self._local.connections.clear()
 
-            self._connections.clear()
             self._configs.clear()
             self._registry.clear()
             self._schema_cache.clear()

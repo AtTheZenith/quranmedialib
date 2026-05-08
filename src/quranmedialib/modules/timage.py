@@ -378,8 +378,7 @@ class LazyTranslationImages(Sequence):
         if self._cache[index] is _NOT_RENDERED:
             self._cache[index] = get_timage(self._texts[index], self._config)
 
-        result = self._cache[index]
-        return None if isinstance(result, _NotRendered) else result
+        return self._cache[index]
 
     def render_all(self) -> list[Image.Image | None]:
         """Force rendering of all translation images.

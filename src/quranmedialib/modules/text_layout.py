@@ -254,7 +254,7 @@ def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | Non
         return wrap_rich_text_greedy(styled_words, max_width)
 
     # Use space-stripped content as base for balancing (spaces are handled by widths)
-    content = [w for w in styled_words if w.text.strip() or w.text == " "]
+    content = [w for w in styled_words if w.text]
     if not content:
         return []
 

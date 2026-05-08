@@ -18,7 +18,7 @@ import os.path
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, NamedTuple
+from typing import Annotated, NamedTuple, Final
 
 from PIL import Image
 
@@ -32,9 +32,11 @@ from quranmedialib.resources import get_font_path
 
 
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
-MAX_FONT_SIZE = 2000
+MAX_FONT_SIZE: Final = 2000
 # Maximum allowed canvas dimension to prevent OOM via extremely large images
-MAX_CANVAS_DIMENSION = 5000
+MAX_CANVAS_DIMENSION: Final = 5000
+# Maximum glow radius for image effects to prevent excessive blurring computation
+MAX_GLOW_RADIUS: Final = 200
 
 # Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
 _working_dir_cache: Path | None = None
@@ -72,10 +74,10 @@ def _ensure_within_working_dir(path: Path) -> None:
 
 
 # Surah and ayah range constants for runtime validation
-MIN_SURAH = 1
-MAX_SURAH = 114
-MIN_AYAH = 1
-MAX_AYAH = 286
+MIN_SURAH: Final = 1
+MAX_SURAH: Final = 114
+MIN_AYAH: Final = 1
+MAX_AYAH: Final = 286
 
 
 # === Layout Primitives ===

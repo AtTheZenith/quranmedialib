@@ -23,7 +23,7 @@ from quranmedialib.config import (
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame
+from quranmedialib.modules.framer import frame, paste_translation_image
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
@@ -223,21 +223,7 @@ def _render_pages(
         if not t_img:
             continue
         canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
-
-        ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
-        if layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
-            ty = layout_cfg.padding.top + (layout_cfg.available_height - t_img.height) // 2 + layout_cfg.timage_y_offset
-        elif layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
-            ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
-
-        tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
-
-        if t_img.mode == "L":
-            canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
-        else:
-            if canvas.mode != "RGBA":
-                canvas = canvas.convert("RGBA")
-            canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
+        paste_translation_image(canvas, t_img, layout_cfg, text_color=text_cfg.color)
         pages.append(canvas)
     return pages
 
@@ -289,7 +275,7 @@ def _render_verse_worker(
         use_bytes: If True, convert images to bytes for IPC.
 
     Returns:
-        list[list[Any]]: List of pages (paths or byte data tuples) for each verse.
+        list[list[OutputItem]]: List of pages (paths or byte data tuples) for each verse.
     """
     if not verse_data:
         return []

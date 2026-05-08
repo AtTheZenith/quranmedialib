@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "frame",
+    "paste_translation_image",
     "QURANIC_STOP_SIGNS",
 ]
 
@@ -350,7 +351,7 @@ def _render_page(
     return page_image
 
 
-def _paste_translation_image(
+def paste_translation_image(
     page_image: Image.Image,
     trans_img: Image.Image,
     config: LayoutConfig,
@@ -471,7 +472,7 @@ def frame(
         # 5. Overlays: Translation images.
         if translation_images and page_index < len(translation_images):
             if trans_img := translation_images[page_index]:
-                _paste_translation_image(
+                paste_translation_image(
                     page_image,
                     trans_img,
                     config,
