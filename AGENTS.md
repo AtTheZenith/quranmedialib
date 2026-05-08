@@ -55,13 +55,25 @@ uv run -m pytest; uv run -m pytest -v --b
 - **Working directory isolation**: Cache working directory lazily; never allow path escaping.
 
 ### 0.3 Code Clarity and Maintainability
-
 - **Zero surprise**: If code behavior is not obvious from reading it, document it. If obvious, do not document.
 - **Self-documenting code**: Prefer descriptive names over comments. A well-named variable removes the need for a comment.
 - **Explicit over implicit**: Return new image objects; document mutations. Use keyword arguments for clarity.
 - **Fail fast and loud**: Validate inputs early with clear error messages. Raise explicit exceptions rather than returning invalid state or None. Users prefer loud, clear failures over silent quality degradation.
 - **Single responsibility**: Each function does one thing well. If describing it requires "and", split it.
 - **Linear flow**: Prefer straight-line code over clever abstractions. Clever code is rarely correct on first try.
+
+### 0.4 Defensive API Design
+- **Immutable by Default**: Use `frozen=True` for all configuration dataclasses.
+- **Explicit Opt-in for Danger**: Use flags like `unsafe_paths` or `trust_config` to explicitly mark boundary-crossing operations.
+- **Fail Fast**: Validate inputs at the very first entry point of the public API to prevent deep-stack failures.
+- **Resource Capping**: Enforce hard limits on canvas dimensions and font sizes to prevent OOM/DoS attacks.
+
+### 0.5 High-Performance Image Pipelines
+- **Mask-First Rendering**: Render text as `'L'` mode masks first, then colorize/composite in a single pass to minimize expensive RGBA operations.
+- **Sub-pixel Precision**: Use float values for widths and positions to prevent cumulative rounding errors in long lines.
+- **Memory-Aware Parallelism**: When using `ParallelRenderer`, monitor aggregate RSS and explicitly clear caches (`clear_rendering_caches`) to avoid OOM during bulk processing.
+- **Thread-Local Resources**: Use `threading.local()` for database connections and other non-thread-safe handles to ensure stability under high concurrency.
+
 
 ---
 

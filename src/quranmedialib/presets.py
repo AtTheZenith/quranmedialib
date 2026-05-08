@@ -12,6 +12,7 @@ Users can call build_preset() directly to generate configs for custom resolution
 """
 
 from quranmedialib.exceptions import ValidationError
+from typing import Final
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
@@ -23,31 +24,31 @@ from quranmedialib.types import (
 )
 
 # === Common Constants ===
-TRANSPARENT: tuple[int, int, int, int] = (0, 0, 0, 0)
-WHITE: tuple[int, int, int, int] = (255, 255, 255, 255)
-ARABIC_WORD_PADDING: tuple[int, int, int, int] = (8, 8, 0, 0)
+TRANSPARENT: Final[tuple[int, int, int, int]] = (0, 0, 0, 0)
+WHITE: Final[tuple[int, int, int, int]] = (255, 255, 255, 255)
+ARABIC_WORD_PADDING: Final[tuple[int, int, int, int]] = (8, 8, 0, 0)
 
 # === Font Presets ===
-FONT_HAFS = FontResource.from_packaged("hafs.otf", "Hafs")
-FONT_INTER = FontResource.from_packaged("inter.ttf", "Inter")
-FONT_INTER_ITALIC = FontResource.from_packaged("inter_italic.ttf", "Inter Italic")
+FONT_HAFS: Final = FontResource.from_packaged("hafs.otf", "Hafs")
+FONT_INTER: Final = FontResource.from_packaged("inter.ttf", "Inter")
+FONT_INTER_ITALIC: Final = FontResource.from_packaged("inter_italic.ttf", "Inter Italic")
 
 # === Database Presets ===
-DATABASE_QURAN = DatabaseConfig.from_packaged(
+DATABASE_QURAN: Final = DatabaseConfig.from_packaged(
     db_name="quran.db",
     tablename="ayat",
     surah_col="sura",
     ayah_col="ayah",
     text_col="text",
 )
-DATABASE_EN_SAHIH = DatabaseConfig.from_packaged(
+DATABASE_EN_SAHIH: Final = DatabaseConfig.from_packaged(
     db_name="english_sahih.db",
     tablename="english_sahih",
     surah_col="sura",
     ayah_col="aya",
     text_col="text",
 )
-DATABASE_WBW_EN = WbwDatabaseConfig.from_packaged(
+DATABASE_WBW_EN: Final = WbwDatabaseConfig.from_packaged(
     db_name="english_wbw.db",
     tablename="wbw",
     surah_col="surah",
@@ -262,7 +263,7 @@ _RESOLUTIONS: dict[str, dict[str, tuple[int, int]]] = {
 # Reference height for scaling (1080p)
 # For landscape: use height (1080). For story: use width (1080). For square: either (1080).
 # We normalize all presets to a "reference dimension" of 1080.
-_REFERENCE_DIM = 1080
+_REFERENCE_DIM: Final = 1080
 
 
 def _get_reference_dimension(aspect_ratio: str, width: int, height: int) -> int:
@@ -403,10 +404,11 @@ _ALL_PRESETS = _build_all_presets()
 
 # === Public Preset Dictionaries ===
 #: Landscape (16:9) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
-LANDSCAPE_PRESET = _ALL_PRESETS["landscape"]
-
+LANDSCAPE_PRESET: Final = _ALL_PRESETS["landscape"]
+ 
 #: Story/Portrait (9:16) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
-STORY_PRESET = _ALL_PRESETS["story"]
-
+STORY_PRESET: Final = _ALL_PRESETS["story"]
+ 
 #: Square (1:1) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
-SQUARE_PRESET = _ALL_PRESETS["square"]
+SQUARE_PRESET: Final = _ALL_PRESETS["square"]
+

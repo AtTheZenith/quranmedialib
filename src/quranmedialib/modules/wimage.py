@@ -23,7 +23,6 @@ def _get_wimage_cached(
     font_path: str,
     font_size: int,
     word_padding: tuple[int, int, int, int],
-    bg_color: tuple[int, ...],
 ) -> Image.Image:
     """Cached internal renderer. Returns new PIL Image for the given text + config.
 
@@ -75,5 +74,4 @@ def get_wimage(text: str, word_config: WordConfig) -> Image.Image:
         str(word_config.font.path),
         word_config.font_size,
         tuple(word_config.word_padding),
-        word_config.background_color,
     )

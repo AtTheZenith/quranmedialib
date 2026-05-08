@@ -5,16 +5,13 @@ from typing import Literal
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter
 
-from quranmedialib.types import Color, Padding
+from quranmedialib.types import Color, Padding, MAX_GLOW_RADIUS
 
 __all__ = [
     "color",
     "glow",
     "pad",
 ]
-
-# Maximum glow radius to prevent resource exhaustion
-MAX_GLOW_RADIUS = 200
 
 # === Helper Functions ===
 
@@ -157,7 +154,7 @@ def glow(
 
     **Performance Note:**
     Large images combined with large radius values (> 100) can be computationally
-    expensive. The "fast" mode uses 8x downsampling, "balanced" uses 2x,
+    expensive. The "fast" mode uses 4x downsampling, "balanced" uses 2x,
     and "quality" uses full resolution Gaussian blur. Larger radii and higher
     resolutions increase processing time.
 
@@ -167,7 +164,7 @@ def glow(
             vibrant/opaque, while values < 1.0 fade it out. Defaults to 1.0.
         radius: The base spread of the glow in pixels. Larger values
             create a wider, softer falloff. Defaults to 50.
-        quality: The blur quality mode. "fast" uses GaussianBlur downsampled 8x,
+        quality: The blur quality mode. "fast" uses GaussianBlur downsampled 4x,
             "balanced" uses GaussianBlur downsampled 2x, and "quality" uses
             full-resolution GaussianBlur. Defaults to "balanced".
 
