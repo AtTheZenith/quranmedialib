@@ -205,11 +205,12 @@ def test_database_manager_get_connection_unknown_db() -> None:
 
 
 def test_database_manager_fetch_sql_error() -> None:
-    """Test that _fetch returns empty list on SQL error (with warning log)."""
+    """Test that _fetch raises sqlite3.Error on SQL error."""
+    import sqlite3
     db = DatabaseManager()
-    # _fetch catches sqlite3.Error and returns [] with a warning
-    result = db._fetch("quran", "SELECT * FROM nonexistent_table", ())
-    assert result == []
+    # _fetch now raises sqlite3.Error instead of returning []
+    with pytest.raises(sqlite3.Error):
+        db._fetch("quran", "SELECT * FROM nonexistent_table", ())
 
 
 def test_database_manager_validate_state() -> None:
