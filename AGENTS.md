@@ -248,15 +248,19 @@ class LayoutConfig:
 
 ## 7. Formatting and Tooling
 
-### 7.1 Ruff Configuration
+### 7.1 Ruff and Sourcery Configuration
+- **Ruff**:
+  - **Line length**: 120 characters (configured in `pyproject.toml`)
+  - **Target version**: Python 3.13
+  - **Lint rules**: `["E", "F", "I"]` (pycodestyle errors, pyflakes, isort)
+  - **Quote style**: Double quotes
+  - **Indent style**: Space (4 spaces)
+  - **Line ending**: LF
+  - **Fixable**: `["ALL"]`
+- **Sourcery**:
+  - Use Sourcery for advanced refactoring suggestions and complexity reduction.
+  - Prioritize "Boring Code" over clever Sourcery suggestions if the latter increases cognitive load.
 
-- **Line length**: 120 characters (configured in `pyproject.toml`)
-- **Target version**: Python 3.13
-- **Lint rules**: `["E", "F", "I"]` (pycodestyle errors, pyflakes, isort)
-- **Quote style**: Double quotes
-- **Indent style**: Space (4 spaces)
-- **Line ending**: LF
-- **Fixable**: `["ALL"]`
 
 ### 7.2 Formatting Rules
 
