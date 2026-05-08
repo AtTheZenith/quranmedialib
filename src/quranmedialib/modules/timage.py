@@ -32,7 +32,7 @@ __all__ = [
 
 
 def normalize_highlight_style(
-    highlight_segments: Any,
+    highlight_segments: str | list[str] | None,
 ) -> str:
     """Normalizes various highlight input formats into a style string.
 
@@ -45,7 +45,7 @@ def normalize_highlight_style(
     return str(highlight_segments)
 
 
-def prepare_translation_segments(text: Any) -> list[str]:
+def prepare_translation_segments(text: str | list[str] | None) -> list[str]:
     """Tokenizes text into words and spaces. Handles strings and lists."""
     if text is None:
         return []
@@ -55,7 +55,7 @@ def prepare_translation_segments(text: Any) -> list[str]:
     return re.findall(r"\S+|\s+", str(text))
 
 
-def format_isolation_text(verse_text: Any, target_word_index: int = -1, *args: Any, **kwargs: Any) -> str:
+def format_isolation_text(verse_text: str | list[str] | None, target_word_index: int = -1, *args: Any, **kwargs: Any) -> str:
     """Formats verse text for word isolation. Accepts list/str and target_index kwarg."""
     t_idx = kwargs.get("target_index", target_word_index)
     if t_idx == -1 and args:
@@ -89,7 +89,7 @@ def format_isolation_text(verse_text: Any, target_word_index: int = -1, *args: A
 def get_timage(
     text: str | None,
     config: TextConfig | None = None,
-    highlight_segments: Any = None,
+    highlight_segments: str | list[str] | None = None,
     **kwargs: Any,
 ) -> Image.Image | None:
     """Renders multi-line translation text. Returns None if text is empty."""
@@ -104,8 +104,12 @@ def get_timage(
 
     # Support max_height as kwarg alias for config.height
     max_height = kwargs.get("max_height", config.height)
-    if max_height is not None and max_height < 0:
-        raise ValueError("Width and height must be >= 0")
+    if max_height is not None:
+        if max_height < 0:
+            raise ValueError("Width and height must be >= 0")
+        from quranmedialib.types import MAX_CANVAS_DIMENSION
+        if max_height > MAX_CANVAS_DIMENSION:
+            raise ValueError(f"max_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {max_height}")
 
     # Measure and wrap
     styled_words = _parse_rich_text(s_text, config, None)
@@ -242,7 +246,7 @@ _RE_STRIP_TAGS = re.compile(r"#[^#]+#")
 
 
 def _parse_rich_text(
-    text: Any,
+    text: object,
     config: TextConfig,
     draw: ImageDraw.ImageDraw,
 ) -> list[StyledWord]:

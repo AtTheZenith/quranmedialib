@@ -28,6 +28,7 @@ def _compute_downscaled_size(image: Image.Image, scale: int) -> tuple[int, int]:
 
 
 def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Image:
+    # sourcery skip: extract-duplicate-method
     """Multiplies the luminance of each pixel with the specified color.
 
     Treats the input's alpha channel (or luminance if L) as a mask for the new solid color.

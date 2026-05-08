@@ -33,6 +33,8 @@ from quranmedialib.resources import get_font_path
 
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
 MAX_FONT_SIZE = 2000
+# Maximum allowed canvas dimension to prevent OOM via extremely large images
+MAX_CANVAS_DIMENSION = 5000
 
 # Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
 _working_dir_cache: Path | None = None
@@ -443,8 +445,12 @@ class LayoutConfig:
         # Validate dimensions
         if self.max_width <= 0:
             raise ValidationError(f"max_width must be positive, got {self.max_width}")
+        if self.max_width > MAX_CANVAS_DIMENSION:
+            raise ValidationError(f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}")
         if self.image_height <= 0:
             raise ValidationError(f"image_height must be positive, got {self.image_height}")
+        if self.image_height > MAX_CANVAS_DIMENSION:
+            raise ValidationError(f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}")
 
         if self.content_width <= 0:
             raise ValidationError(
@@ -565,8 +571,18 @@ class TextConfig:
             raise ValidationError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {self.font_size}")
 
         # Validate max_width
-        if self.max_width is not None and self.max_width <= 0:
-            raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
+        if self.max_width is not None:
+            if self.max_width <= 0:
+                raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
+            if self.max_width > MAX_CANVAS_DIMENSION:
+                raise ValidationError(f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}")
+
+        # Validate height
+        if self.height is not None:
+            if self.height <= 0:
+                raise ValidationError(f"height must be positive when provided, got {self.height}")
+            if self.height > MAX_CANVAS_DIMENSION:
+                raise ValidationError(f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}")
 
         # Resolve paths
         object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))

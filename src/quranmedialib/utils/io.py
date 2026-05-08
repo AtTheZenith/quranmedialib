@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-type SaveFunction = Callable[[Image.Image, str, Any], None]
+type SaveFunction = Callable[..., None]
 
 
 @contextmanager
