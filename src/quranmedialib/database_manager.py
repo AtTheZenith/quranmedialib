@@ -22,7 +22,7 @@ import threading
 import time
 from contextlib import closing
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Callable, Self
 
 from quranmedialib.config import SQLITE_MMAP_SIZE
 from quranmedialib.exceptions import ValidationError
@@ -105,9 +105,7 @@ def _validate_ayah(ayah: int) -> int:
 def _truncate_for_log(value: Any, max_len: int = 100) -> str:
     """Truncate a value for safe logging."""
     s = str(value)
-    if len(s) > max_len:
-        return s[:max_len] + "..."
-    return s
+    return f"{s[:max_len]}..." if len(s) > max_len else s
 
 
 def _is_packaged_db(config: DatabaseConfig | WbwDatabaseConfig) -> bool:
@@ -165,7 +163,7 @@ class DatabaseManager:
             if getattr(self, "_initialized", False):
                 return
 
-            self._registry: dict[str, dict[str, Any]] = {}
+            self._registry: dict[str, dict[str, DatabaseConfig | WbwDatabaseConfig | sqlite3.Connection]] = {}
             self._connections: dict[str, sqlite3.Connection] = {}
             self._configs: dict[str, DatabaseConfig | WbwDatabaseConfig] = {}
             self._active_wbw: str | None = None
@@ -225,19 +223,19 @@ class DatabaseManager:
 
     def _register_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Registers a connection into the internal registry.
-        
+
         Args:
             name: Unique name for the connection.
             config: Configuration object.
         """
         conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
-        
+
         # Apply optimization PRAGMAs
         for pragma in _SQLITE_PRAGMAS:
             conn.execute(pragma)
-        
+
         conn.row_factory = None
-        
+
         with self._lock:
             self._connections[name] = conn
             self._configs[name] = config
@@ -245,7 +243,6 @@ class DatabaseManager:
                 "config": config,
                 "connection": conn,
             }
-
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Internal method to add a connection without validation."""
@@ -318,22 +315,22 @@ class DatabaseManager:
         self,
         name: str,
         query: str,
-        params: tuple[Any, ...] = (),
-        row_factory: Any = None,
-    ) -> list[Any]:
+        params: tuple[str | int | float | bytes | None, ...] = (),
+        row_factory: Callable[[sqlite3.Cursor], Any] | None = None,
+    ) -> list[sqlite3.Row | tuple[Any, ...]]:
         """Execute a query on a named database and return all rows.
-        
+
         Args:
             name: Registered connection name.
             query: SQL query string.
             params: Parameters to bind to the query.
             row_factory: Row factory to use for this fetch (rarely used).
-        
+
         Returns:
             List of result rows.
         """
         conn = self._get_connection(name)
-        
+
         # The lock is only needed if we are actually changing the connection-wide row_factory.
         # Since we now default to None, we only lock if a specific row_factory is requested.
         if row_factory is not None:
@@ -347,32 +344,41 @@ class DatabaseManager:
                 except sqlite3.Error as e:
                     logger.error(
                         "Database query failed on '%s': %s | Query: %s | Params: %s",
-                        name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
+                        name,
+                        e,
+                        _truncate_for_log(query, 200),
+                        _truncate_for_log(params),
                         exc_info=True,
                     )
                     raise
                 finally:
                     conn.row_factory = old_factory
-        
+
         # Hot path: row_factory is None, no locking needed for concurrent reads.
         try:
             with closing(conn.cursor()) as cursor:
-                start_time = time.perf_counter()
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-                end_time = time.perf_counter()
-                
-                duration = end_time - start_time
-                logger.debug("SQL EXECUTE: %.4fs | DB: %s | Query: %s", duration, name, _truncate_for_log(query))
-                return rows
+                return self._execute_and_profile(cursor, query, params, name)
         except sqlite3.Error as e:
             logger.error(
                 "Database query failed on '%s': %s | Query: %s | Params: %s",
-                name, e, _truncate_for_log(query, 200), _truncate_for_log(params),
+                name,
+                e,
+                _truncate_for_log(query, 200),
+                _truncate_for_log(params),
                 exc_info=True,
             )
             raise
 
+    # TODO Rename this here and in `_fetch`
+    def _execute_and_profile(self, cursor, query, params, name):
+        start_time = time.perf_counter()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        end_time = time.perf_counter()
+
+        duration = end_time - start_time
+        logger.debug("SQL EXECUTE: %.4fs | DB: %s | Query: %s", duration, name, _truncate_for_log(query))
+        return rows
 
     def _aggregate_verses(
         self,
@@ -428,9 +434,7 @@ class DatabaseManager:
             "surah_col": _validate_sql_identifier(config.surah_col, "column name"),
             "ayah_col": _validate_sql_identifier(config.ayah_col, "column name"),
             "text_col": _validate_sql_identifier(config.text_col, "column name"),
-            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name")
-            if isinstance(config, WbwDatabaseConfig)
-            else "word",
+            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name") if isinstance(config, WbwDatabaseConfig) else "word",
         }
         self._schema_cache[cache_key] = schema
         return "user", schema
@@ -467,9 +471,7 @@ class DatabaseManager:
         rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number,), row_factory=None)
         return [" ".join(json.loads(row[0])) for row in rows]
 
-    def get_verses_from_range(
-        self, surah_number: SurahNumber, start_ayah: AyahNumber, end_ayah: AyahNumber
-    ) -> list[str]:
+    def get_verses_from_range(self, surah_number: SurahNumber, start_ayah: AyahNumber, end_ayah: AyahNumber) -> list[str]:
         """Fetches Arabic verses for a specific range within a surah.
 
         Always uses the "quran" database.
@@ -532,16 +534,14 @@ class DatabaseManager:
                 WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
             """
 
-        rows = self._fetch(
-            self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None
-        )
+        rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None)
         return " ".join(json.loads(rows[0][0])) if rows and rows[0][0] else ""
 
     # === WBW Database Methods (use active WBW database) ===
 
     def get_wbw_from_surah(self, surah_number: SurahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific surah.
-        
+
         Returns:
             List of word translations in order.
         """
@@ -550,7 +550,7 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
-        
+
         query = f"""
             SELECT {schema["text_col"]}
             FROM {schema["tablename"]}
@@ -560,10 +560,9 @@ class DatabaseManager:
         rows = self._fetch(name, query, (surah_number,), row_factory=None)
         return [row[0] for row in rows]
 
-
     def get_wbw_from_verse(self, surah_number: SurahNumber, ayah_number: AyahNumber) -> list[str]:
         """Fetches all word-by-word translations for a specific verse.
-        
+
         Returns:
             List of word translations in order.
         """
@@ -573,7 +572,7 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
-        
+
         query = f"""
             SELECT {schema["text_col"]}
             FROM {schema["tablename"]}
@@ -583,7 +582,6 @@ class DatabaseManager:
         rows = self._fetch(name, query, (surah_number, ayah_number), row_factory=None)
         return [row[0] for row in rows]
 
-
     def get_wbw_from_word(
         self,
         surah_number: SurahNumber,
@@ -591,12 +589,12 @@ class DatabaseManager:
         word_index: WordIndex,
     ) -> str | None:
         """Fetches the translation for a specific word in a specific verse.
-        
+
         Args:
             surah_number: The surah number.
             ayah_number: The ayah (verse) number.
             word_index: The 1-indexed word position within the verse.
-        
+
         Returns:
             The translation string or None if not found.
         """
@@ -606,7 +604,7 @@ class DatabaseManager:
         name = self._active_wbw or self.DEFAULT_WBW_NAME
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
-        
+
         query = f"""
             SELECT {schema["text_col"]}
             FROM {schema["tablename"]}
@@ -614,7 +612,6 @@ class DatabaseManager:
         """
         rows = self._fetch(name, query, (surah_number, ayah_number, word_index), row_factory=None)
         return rows[0][0] if rows else None
-
 
     @functools.lru_cache(maxsize=114)
     def get_wbw_grouped_by_verse(
@@ -650,9 +647,7 @@ class DatabaseManager:
 
         try:
             rows = self._fetch(name, self._query_cache[query_key], (surah_number,), row_factory=None)
-            if not rows:
-                return {}
-            return {row[0]: json.loads(row[1]) for row in rows}
+            return {row[0]: json.loads(row[1]) for row in rows} if rows else {}
         except (sqlite3.OperationalError, json.JSONDecodeError):
             logger.debug("json_group_array not supported or failed, falling back to manual grouping.")
             query = f"""
@@ -706,12 +701,8 @@ class DatabaseManager:
             """
 
         try:
-            rows = self._fetch(
-                name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None
-            )
-            if not rows:
-                return {}
-            return {row[0]: json.loads(row[1]) for row in rows}
+            rows = self._fetch(name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None)
+            return {row[0]: json.loads(row[1]) for row in rows} if rows else {}
         except (sqlite3.OperationalError, json.JSONDecodeError):
             # Fallback to slower row-by-row fetching for older SQLite versions
             logger.debug("json_group_array not supported or failed, falling back to manual grouping.")
@@ -774,12 +765,12 @@ class DatabaseManager:
         translation_name: str | None = None,
     ) -> str | None:
         """Fetches the translation for a specific verse.
-        
+
         Args:
             surah_number: The surah number.
             ayah_number: The ayah (verse) number.
             translation_name: Optional name of the translation database to use.
-        
+
         Returns:
             The verse translation string or None if not found.
         """
@@ -789,7 +780,7 @@ class DatabaseManager:
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
-        
+
         query = f"""
             SELECT {schema["text_col"]}
             FROM {schema["tablename"]}
@@ -797,7 +788,6 @@ class DatabaseManager:
         """
         rows = self._fetch(name, query, (surah_number, ayah_number), row_factory=None)
         return rows[0][0] if rows else None
-
 
     def get_translations_from_verse_range(
         self,
@@ -807,16 +797,16 @@ class DatabaseManager:
         translation_name: str | None = None,
     ) -> list[str]:
         """Fetches translations for a range of verses in a single query.
-        
+
         Args:
             surah_number: The surah number.
             start_ayah: Starting ayah number (1-indexed, inclusive).
             end_ayah: Ending ayah number (inclusive).
             translation_name: Optional name of the translation database to use.
-        
+
         Returns:
             List of verse translations in order by ayah number.
-        
+
         Raises:
             ValueError: If any ayah in the requested range is missing from the database.
         """
@@ -827,7 +817,7 @@ class DatabaseManager:
         name = translation_name or (self._active_translation or self.DEFAULT_TRANSLATION_NAME)
         config = self._get_config(name)
         _, schema = self._resolve_schema(config)
-        
+
         query = f"""
             SELECT {schema["ayah_col"]}, {schema["text_col"]}
             FROM {schema["tablename"]}
@@ -835,23 +825,16 @@ class DatabaseManager:
             ORDER BY {schema["ayah_col"]}
         """
         rows = self._fetch(name, query, (surah_number, start_ayah, end_ayah), row_factory=None)
-        
-        # Group by ayah and return in order
+
         verses_dict: dict[int, str] = {}
         for row in rows:
             ayah = row[0]
             verses_dict[ayah] = row[1]
-        
-        # Check for missing ayahs and raise error if any are missing
-        missing_ayah = [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]
-        if missing_ayah:
-            raise ValidationError(
-                f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. "
-                "Database may be corrupted or incomplete."
-            )
-        
-        return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1)]
 
+        if missing_ayah := [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]:
+            raise ValidationError(f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. Database may be corrupted or incomplete.")
+
+        return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1)]
 
     def list_connections(self) -> list[str]:
         """List all registered connection names."""

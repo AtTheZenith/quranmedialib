@@ -12,10 +12,14 @@ import gc
 import logging
 import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Callable, Iterator
 
 from PIL import Image
 
+from quranmedialib.config import (
+    DEFAULT_PROCESS_LIMIT_MB,
+    MEMORY_FLUSH_THRESHOLD_RATIO,
+)
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
@@ -32,10 +36,6 @@ from quranmedialib.types import (
     _ensure_within_working_dir,
 )
 from quranmedialib.utils.io import async_image_saver
-from quranmedialib.config import (
-    DEFAULT_PROCESS_LIMIT_MB,
-    MEMORY_FLUSH_THRESHOLD_RATIO,
-)
 from quranmedialib.utils.memory import (
     clear_rendering_caches,
     get_current_rss_mb,
@@ -43,7 +43,7 @@ from quranmedialib.utils.memory import (
 from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 from quranmedialib.workflows.base import BaseWorkflow
 
-# Logger setup
+type OutputItem = str | tuple[str, tuple[int, int], bytes] | Image.Image
 logger = logging.getLogger(__name__)
 
 __all__ = ["VerseRangeWorkflow"]
@@ -89,9 +89,7 @@ class VerseRangeWorkflow(BaseWorkflow):
         self._validate_ayah(end_ayah)
 
         if start_ayah > end_ayah:
-            raise ValidationError(
-                f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
-            )
+            raise ValidationError(f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah}).")
 
         return self._process_range(
             surah=surah,
@@ -150,7 +148,7 @@ class VerseRangeWorkflow(BaseWorkflow):
         else:
             # OPTIM: Direct rendering without IPC byte overhead
             task_list = [(ayah, translations[i]) for i, ayah in enumerate(range(start_verse, end_verse + 1))]
-            for result in _render_verse_worker(
+            yield from _render_verse_worker(
                 task_list,
                 surah,
                 self.layout_config,
@@ -161,8 +159,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 output_dir,
                 filename_prefix,
                 use_bytes=False,
-            ):
-                yield result
+            )
 
 
 def _fetch_worker_data(surah: int, annotate: bool) -> tuple[dict[int, str], dict[int, list[str]]]:
@@ -218,36 +215,31 @@ def _render_pages(
     """Render the verse pages based on the translation mode."""
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
-    if separate_translations:
-        arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
-        pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
-        for t_img in trans_images:
-            if not t_img:
-                continue
-            canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
-
-            ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
-            if layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
-                ty = (
-                    layout_cfg.padding.top
-                    + (layout_cfg.available_height - t_img.height) // 2
-                    + layout_cfg.timage_y_offset
-                )
-            elif layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
-                ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
-
-            tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
-
-            if t_img.mode == "L":
-                canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
-            else:
-                if canvas.mode != "RGBA":
-                    canvas = canvas.convert("RGBA")
-                canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
-            pages.append(canvas)
-        return pages
-    else:
+    if not separate_translations:
         return list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
+    arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
+    pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
+    for t_img in trans_images:
+        if not t_img:
+            continue
+        canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
+
+        ty = layout_cfg.padding.top + layout_cfg.timage_y_offset
+        if layout_cfg.timage_vertical_align == VerticalAlignment.CENTER:
+            ty = layout_cfg.padding.top + (layout_cfg.available_height - t_img.height) // 2 + layout_cfg.timage_y_offset
+        elif layout_cfg.timage_vertical_align == VerticalAlignment.BOTTOM:
+            ty = layout_cfg.padding.top + layout_cfg.available_height - t_img.height + layout_cfg.timage_y_offset
+
+        tx = (layout_cfg.max_width - t_img.width) // 2 + layout_cfg.timage_x_offset
+
+        if t_img.mode == "L":
+            canvas.paste(text_cfg.color, (tx, ty), mask=t_img)
+        else:
+            if canvas.mode != "RGBA":
+                canvas = canvas.convert("RGBA")
+            canvas.alpha_composite(t_img.convert("RGBA"), (tx, ty))
+        pages.append(canvas)
+    return pages
 
 
 def _handle_output(
@@ -255,9 +247,9 @@ def _handle_output(
     ayah: int,
     output_dir: str | None,
     filename_prefix: str,
-    save_fn: Any,
+    save_fn: Callable[[Image.Image, str, str, int], None],
     use_bytes: bool,
-) -> list[Any]:
+) -> list[OutputItem]:
     """Save pages to disk or convert to bytes for IPC."""
     if output_dir:
         paths = []
@@ -283,7 +275,7 @@ def _render_verse_worker(
     output_dir: str | None,
     filename_prefix: str,
     use_bytes: bool = True,
-) -> list[list[Any]]:
+) -> list[list[OutputItem]]:
     """Worker function for rendering a batch of verses. Returns pickle-safe data.
 
     Args:
