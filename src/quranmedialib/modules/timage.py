@@ -245,21 +245,33 @@ def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[float
 _RE_STRIP_TAGS = re.compile(r"#[^#]+#")
 
 
+def _hex_to_rgba(hex_str: str) -> tuple[int, int, int, int]:
+    """Converts 8-digit RGBA hex string to RGBA tuple."""
+    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4, 6))
+
+
+# Regex for structured tags: #style#color#text#
+# Group 1: style (b|i), Group 2: color (8 hex), Group 3: text
+_RE_RICH_TAG = re.compile(r"#(b|i)#([0-9a-fA-F]{8})#([^#]+)#")
+
+
 def _parse_rich_text(
     text: object,
     config: TextConfig,
     draw: ImageDraw.ImageDraw,
 ) -> list[StyledWord]:
-    """Tokenizes and measures text. Detects plain-text fast-path to skip style checks."""
-    clean_text = _RE_STRIP_TAGS.sub("", str(text))
-    segments = prepare_translation_segments(clean_text)
-
+    """Tokenizes and measures text, parsing structured #style#color#text# tags.
+    
+    The parser identifies tags in the format #style#color#text#, where style is 'b' or 'i',
+    color is an 8-digit RGBA hex string, and text is the content to render.
+    """
+    s_text = str(text)
+    
     # 1. Plain-text Fast Path
-    if "[" not in clean_text:
+    if "#" not in s_text:
         f = _load_font_base(str(config.font_path), config.font_size)
         color = config.color
-
-        # Get metrics once (baseline)
+        
         key = (str(config.font_path), config.font_size)
         if key in _font_metrics_cache:
             h, ascent = _font_metrics_cache[key]
@@ -267,13 +279,13 @@ def _parse_rich_text(
             ascent, descent = f.getmetrics()
             h = ascent + descent
             _font_metrics_cache[key] = (h, ascent)
-
-        # Local cache for word widths in this call
+            
         _get_len = f.getlength
         w_cache: dict[str, float] = {}
         _StyledWord = StyledWord
-
+        
         res = []
+        segments = prepare_translation_segments(s_text)
         for s in segments:
             if s in w_cache:
                 w = w_cache[s]
@@ -283,50 +295,68 @@ def _parse_rich_text(
             res.append(_StyledWord(s, f, color, w, h, ascent))
         return res
 
-    # 2. Rich-text path (Style switching)
+    # 2. Rich-text path (Parsing structured tags)
     styled_words = []
     _StyledWord = StyledWord
-    _load_font = _load_font_base
     _metrics = _get_text_metrics
-
+    
     f_norm_path = str(config.font_path)
-    f_high_path = str(config.highlight_font_path)
     f_norm_size = config.font_size
-    f_high_size = config.highlight_font_size
-
     _, h_norm, a_norm = _metrics("", f_norm_path, f_norm_size)
-    _, h_high, a_high = _metrics("", f_high_path, f_high_size)
-
     c_norm = config.color
-    c_high = config.highlight_color
-
-    # Pre-resolve font objects outside hot loop
-    font_norm = _load_font(f_norm_path, f_norm_size)
-    font_high = _load_font(f_high_path, f_high_size)
-
-    # Local caches for style widths
-    w_cache_norm: dict[str, int] = {}
-    w_cache_high: dict[str, int] = {}
-
-    for segment in segments:
-        is_highlight = segment.startswith("[") and segment.endswith("]")
-        token = segment[1:-1] if is_highlight else segment
-
-        if is_highlight:
-            if token in w_cache_high:
-                w = w_cache_high[token]
-            else:
-                w, _, _ = _metrics(token, f_high_path, f_high_size)
-                w_cache_high[token] = w
-            styled_words.append(_StyledWord(token, font_high, c_high, w, h_high, a_high))
+    font_norm = _load_font_base(f_norm_path, f_norm_size)
+    
+    last_pos = 0
+    for match in _RE_RICH_TAG.finditer(s_text):
+        # Handle plain text before the tag
+        plain_segment = s_text[last_pos:match.start()]
+        if plain_segment:
+            for s in prepare_translation_segments(plain_segment):
+                w, h, a = _metrics(s, f_norm_path, f_norm_size)
+                styled_words.append(_StyledWord(s, font_norm, c_norm, w, h, a))
+        
+        # Parse the tag: #style#color#text#
+        style_code = match.group(1)
+        color_hex = match.group(2)
+        tag_text = match.group(3)
+        
+        tag_color = _hex_to_rgba(color_hex)
+        
+        # Determine font based on style
+        if style_code == "b":
+            # For bold, we use normal font but set simulate_bold=True 
+            # unless a specific bold font is provided in config (not currently in TextConfig)
+            f_tag = font_norm
+            is_bold = True
+            is_italic = False
+        elif style_code == "i":
+            # For italic, we use the italic font preset if available
+            # We attempt to load the italic version of the current font
+            try:
+                f_tag = _load_font_base(f_norm_path.replace(".ttf", "_italic.ttf"), f_norm_size)
+            except Exception:
+                f_tag = font_norm
+            is_bold = False
+            is_italic = True
         else:
-            if token in w_cache_norm:
-                w = w_cache_norm[token]
-            else:
-                w, _, _ = _metrics(token, f_norm_path, f_norm_size)
-                w_cache_norm[token] = w
-            styled_words.append(_StyledWord(token, font_norm, c_norm, w, h_norm, a_norm))
-
+            f_tag = font_norm
+            is_bold = False
+            is_italic = False
+            
+        # Measure and create words for the tag text
+        for s in prepare_translation_segments(tag_text):
+            w, h, a = _metrics(s, str(f_tag.path if hasattr(f_tag, 'path') else f_norm_path), f_tag.size if hasattr(f_tag, 'size') else f_norm_size)
+            styled_words.append(_StyledWord(s, f_tag, tag_color, w, h, a, simulate_bold=is_bold))
+            
+        last_pos = match.end()
+        
+    # Handle trailing plain text
+    trailing_text = s_text[last_pos:]
+    if trailing_text:
+        for s in prepare_translation_segments(trailing_text):
+            w, h, a = _metrics(s, f_norm_path, f_norm_size)
+            styled_words.append(_StyledWord(s, font_norm, c_norm, w, h, a))
+            
     return styled_words
 
 

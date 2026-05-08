@@ -187,10 +187,29 @@ uv run -m pytest -v
 # Run benchmarks
 uv run -m pytest -v --benchmark  # or -b
 
-# Lint and format
+# Lint, format, and refactor
 uv run -m ruff check .
 uv run -m ruff format .
+sourcery review
 ```
+
+## Community
+
+We welcome contributions from developers who value engineering rigor and performance.
+
+- **Contribute**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for our technical standards and workflow.
+- **Conduct**: We follow a professional [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+## Troubleshooting & FAQ
+
+**Q: Why are some images rendering slowly?**
+A: Check if you are using `quality` mode in `glow()`. For bulk rendering, use `fast` or `balanced` modes.
+
+**Q: I'm getting memory errors during large Surah renders.**
+A: Ensure you are using `ParallelRenderer` with `ExecutionMode.PROCESS` and monitor memory using the `MemoryMonitor` utility.
+
+**Q: How do I use a custom font?**
+A: Use `FontResource.from_path("path/to/font.ttf")` and pass it into your `WordConfig`.
 
 ## License
 

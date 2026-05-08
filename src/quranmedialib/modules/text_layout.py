@@ -133,8 +133,23 @@ def balance_lines_pyramid(
 ) -> list[int] | None:
     """Core IPL-B algorithm: finds line break indices for a top-heavy layout.
 
-    Uses Prefix Sums + Bisection (O(K log N log W)) for high-performance partitioning.
-    Attempts to create an inverted pyramid shape (W_i >= W_{i+1}).
+    Algorithm Deep-Dive:
+    The Inverted Pyramid Line Balancing (IPL-B) algorithm solves the problem of
+    distributing text into K lines such that each line is no wider than the one
+    above it (W_1 >= W_2 >= ... >= W_K), creating a visually balanced, centered 
+    pyramid shape common in religious and poetic texts.
+
+    Implementation Strategy:
+    1. Prefix Sums: Pre-calculates cumulative widths to allow O(1) range sum 
+       queries (width of any segment of words).
+    2. Bisection over Widths: The algorithm performs a binary search over the 
+       possible width of the first line (W_1).
+    3. Feasibility Check: For a chosen W_1, it greedily attempts to partition 
+       the remaining text into K-1 lines, each limited by the width of the 
+       previous line.
+    4. Complexity: The time complexity is O(K log N log W), where K is the 
+       number of lines, N is the number of words, and W is the search space 
+       for the initial width.
 
     Args:
         widths: List of widths for each word/segment.
