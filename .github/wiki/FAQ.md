@@ -10,7 +10,7 @@ A: You can use `FontResource.from_path("path/to/font.ttf")`. The library will re
 
 ## Rendering & Layout
 
-**Q: What is the "Decremental Line Balancing" layout?**
+**Q: What is the "Descending Line Balancing" layout?**
 A: It is a visual style where the first line of text is the widest, and subsequent lines get progressively narrower. This creates a centered, balanced look often seen in Quranic calligraphy.
 
 **Q: My text is being cut off at the edges. What happened?**

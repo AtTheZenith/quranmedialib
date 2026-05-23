@@ -118,7 +118,7 @@ def _check_pyramid_feasibility(
         if next_idx <= curr_idx:
             return float("inf")
 
-        # Update limit for next line (Decremental Line Balancing constraint)
+        # Update limit for next line (Descending Line Balancing constraint)
         prev_limit = (sums[next_idx] - sums[curr_idx]) - spacing
         curr_idx = next_idx
 
@@ -131,10 +131,10 @@ def balance_lines_pyramid(
     target_k: int,
     max_width: int,
 ) -> list[int] | None:
-    """Core Decremental Line Balancing algorithm: finds line break indices for a top-heavy layout.
+    """Core Descending Line Balancing algorithm: finds line break indices for a top-heavy layout.
 
     Algorithm Deep-Dive:
-    The Decremental Line Balancing algorithm solves the problem of
+    The Descending Line Balancing algorithm solves the problem of
     distributing text into K lines such that each line is no wider than the one
     above it (W_1 >= W_2 >= ... >= W_K), creating a visually balanced, centered 
     pyramid shape common in religious and poetic texts.
@@ -253,7 +253,7 @@ def wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None)
 
 
 def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
-    """Decremental Line Balancing.
+    """Descending Line Balancing.
 
     Strictly enforces W_i >= W_{i+1} to create an inverted pyramid shape.
     Delegates to balance_lines_pyramid for the optimal break search.

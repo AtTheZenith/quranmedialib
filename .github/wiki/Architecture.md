@@ -16,7 +16,7 @@ Text is rendered into grayscale `'L'` mode masks. This is the most computational
 
 ### 3. Layout
 
-The `framer.py` module takes these masks and arranges them into Right-to-Left (RTL) rows. It uses the **Decremental Line Balancing** algorithm to ensure that the text is visually centered and that lines decrease in width as they go down.
+The `framer.py` module takes these masks and arranges them into Right-to-Left (RTL) rows. It uses the **Descending Line Balancing** algorithm to ensure that the text is visually centered and that lines decrease in width as they go down.
 
 ### 4. Composition
 
