@@ -19,11 +19,11 @@ import logging
 import re
 import sqlite3
 import threading
+import threading as threading_mod
 import time
 from contextlib import closing
 from types import TracebackType
 from typing import Any, Callable, Self
-import threading as threading_mod
 
 from quranmedialib.config import SQLITE_MMAP_SIZE
 from quranmedialib.exceptions import ValidationError
@@ -151,7 +151,7 @@ class DatabaseManager:
 
     def __init__(self) -> None:
         """Initializes database connections and registers packaged databases.
-        
+
         Automatically registers packaged databases on first initialization.
         """
         if getattr(self, "_initialized", False):
@@ -191,7 +191,6 @@ class DatabaseManager:
                 self.close()
                 raise
 
-
     def __enter__(self) -> Self:
         return self
 
@@ -216,27 +215,27 @@ class DatabaseManager:
 
     def _get_connection(self, name: str) -> sqlite3.Connection:
         """Get the connection for a named database, creating it for the current thread if needed.
-        
+
         Implements thread-local connection pooling to ensure thread safety and performance.
         """
         config = self._get_config(name)
-        
+
         # Thread-local storage for connections
         if not hasattr(self._local, "connections"):
             self._local.connections = {}
-            
+
         if name not in self._local.connections:
             conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
             for pragma in _SQLITE_PRAGMAS:
                 conn.execute(pragma)
             conn.row_factory = None
             self._local.connections[name] = conn
-            
+
         return self._local.connections[name]
 
     def _register_connection(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Registers a connection into the internal registry.
-        
+
         Args:
             name: Unique name for the connection.
             config: Configuration object.
@@ -246,7 +245,6 @@ class DatabaseManager:
             self._registry[name] = {
                 "config": config,
             }
-
 
     def _add_connection_internal(self, name: str, config: DatabaseConfig | WbwDatabaseConfig) -> None:
         """Internal method to add a connection without validation."""
@@ -444,7 +442,11 @@ class DatabaseManager:
             "surah_col": _validate_sql_identifier(config.surah_col, "column name"),
             "ayah_col": _validate_sql_identifier(config.ayah_col, "column name"),
             "text_col": _validate_sql_identifier(config.text_col, "column name"),
-            "word_id_col": _validate_sql_identifier(config.word_id_col, "column name") if isinstance(config, WbwDatabaseConfig) else "word",
+            "word_id_col": (
+                _validate_sql_identifier(config.word_id_col, "column name")
+                if isinstance(config, WbwDatabaseConfig)
+                else "word"
+            ),
         }
         self._schema_cache[cache_key] = schema
         return "user", schema
@@ -481,7 +483,12 @@ class DatabaseManager:
         rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number,), row_factory=None)
         return [" ".join(json.loads(row[0])) for row in rows]
 
-    def get_verses_from_range(self, surah_number: SurahNumber, start_ayah: AyahNumber, end_ayah: AyahNumber) -> list[str]:
+    def get_verses_from_range(
+        self,
+        surah_number: SurahNumber,
+        start_ayah: AyahNumber,
+        end_ayah: AyahNumber,
+    ) -> list[str]:
         """Fetches Arabic verses for a specific range within a surah.
 
         Always uses the "quran" database.
@@ -544,7 +551,12 @@ class DatabaseManager:
                 WHERE {schema["surah_col"]} = ? AND {schema["ayah_col"]} = ?
             """
 
-        rows = self._fetch(self.DEFAULT_QURAN_NAME, self._query_cache[query_key], (surah_number, ayah_number), row_factory=None)
+        rows = self._fetch(
+            self.DEFAULT_QURAN_NAME,
+            self._query_cache[query_key],
+            (surah_number, ayah_number),
+            row_factory=None,
+        )
         return " ".join(json.loads(rows[0][0])) if rows and rows[0][0] else ""
 
     # === WBW Database Methods (use active WBW database) ===
@@ -711,7 +723,12 @@ class DatabaseManager:
             """
 
         try:
-            rows = self._fetch(name, self._query_cache[query_key], (surah_number, start_ayah, end_ayah), row_factory=None)
+            rows = self._fetch(
+                name,
+                self._query_cache[query_key],
+                (surah_number, start_ayah, end_ayah),
+                row_factory=None,
+            )
             return {row[0]: json.loads(row[1]) for row in rows} if rows else {}
         except (sqlite3.OperationalError, json.JSONDecodeError):
             # Fallback to slower row-by-row fetching for older SQLite versions
@@ -842,7 +859,10 @@ class DatabaseManager:
             verses_dict[ayah] = row[1]
 
         if missing_ayah := [ayah for ayah in range(start_ayah, end_ayah + 1) if ayah not in verses_dict]:
-            raise ValidationError(f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. Database may be corrupted or incomplete.")
+            raise ValidationError(
+                f"Missing translations for ayah(s) {missing_ayah} in surah {surah_number}. "
+                "Database may be corrupted or incomplete."
+            )
 
         return [verses_dict[ayah] for ayah in range(start_ayah, end_ayah + 1)]
 

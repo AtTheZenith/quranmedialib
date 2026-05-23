@@ -30,7 +30,6 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import (
     LayoutConfig,
     TextConfig,
-    VerticalAlignment,
     WordConfig,
     WordItem,
     _ensure_within_working_dir,
@@ -89,7 +88,9 @@ class VerseRangeWorkflow(BaseWorkflow):
         self._validate_ayah(end_ayah)
 
         if start_ayah > end_ayah:
-            raise ValidationError(f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah}).")
+            raise ValidationError(
+                f"Invalid verse range: start_ayah ({start_ayah}) cannot be greater than end_ayah ({end_ayah})."
+            )
 
         return self._process_range(
             surah=surah,

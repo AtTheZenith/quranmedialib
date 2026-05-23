@@ -49,13 +49,15 @@ def prepare_translation_segments(text: str | list[str] | None) -> list[str]:
     """Tokenizes text into words and spaces. Handles strings and lists."""
     if text is None:
         return []
-    if isinstance(text, list):
-        return text
-    # re.findall is implemented in C and much faster than manual Python loops
-    return re.findall(r"\S+|\s+", str(text))
+    return text if isinstance(text, list) else re.findall(r"\S+|\s+", str(text))
 
 
-def format_isolation_text(verse_text: str | list[str] | None, target_word_index: int = -1, *args: Any, **kwargs: Any) -> str:
+def format_isolation_text(
+    verse_text: str | list[str] | None,
+    target_word_index: int = -1,
+    *args: Any,
+    **kwargs: Any,
+) -> str:
     """Formats verse text for word isolation. Accepts list/str and target_index kwarg."""
     t_idx = kwargs.get("target_index", target_word_index)
     if t_idx == -1 and args:
@@ -66,11 +68,7 @@ def format_isolation_text(verse_text: str | list[str] | None, target_word_index:
         style = "#b#"
 
     # Handle list input
-    if isinstance(verse_text, list):
-        words = verse_text
-    else:
-        words = str(verse_text).split()
-
+    words = verse_text if isinstance(verse_text, list) else str(verse_text).split()
     if t_idx < 0:
         raise ValueError("target_index must be non-negative")
     if t_idx >= len(words):
@@ -81,9 +79,7 @@ def format_isolation_text(verse_text: str | list[str] | None, target_word_index:
     words[t_idx] = f"[{words[t_idx]}]"
 
     result = " ".join(words)
-    if style not in result:
-        return f"{style}{result}"
-    return result
+    return f"{style}{result}" if style not in result else result
 
 
 def get_timage(
@@ -108,6 +104,7 @@ def get_timage(
         if max_height < 0:
             raise ValueError("Width and height must be >= 0")
         from quranmedialib.types import MAX_CANVAS_DIMENSION
+
         if max_height > MAX_CANVAS_DIMENSION:
             raise ValueError(f"max_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {max_height}")
 
@@ -247,7 +244,7 @@ _RE_STRIP_TAGS = re.compile(r"#[^#]+#")
 
 def _hex_to_rgba(hex_str: str) -> tuple[int, int, int, int]:
     """Converts 8-digit RGBA hex string to RGBA tuple."""
-    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4, 6))
+    return tuple(int(hex_str[i : i + 2], 16) for i in (0, 2, 4, 6))
 
 
 # Regex for structured tags: #style#color#text#
@@ -261,17 +258,17 @@ def _parse_rich_text(
     draw: ImageDraw.ImageDraw,
 ) -> list[StyledWord]:
     """Tokenizes and measures text, parsing structured #style#color#text# tags.
-    
+
     The parser identifies tags in the format #style#color#text#, where style is 'b' or 'i',
     color is an 8-digit RGBA hex string, and text is the content to render.
     """
     s_text = str(text)
-    
+
     # 1. Plain-text Fast Path
     if "#" not in s_text:
         f = _load_font_base(str(config.font_path), config.font_size)
         color = config.color
-        
+
         key = (str(config.font_path), config.font_size)
         if key in _font_metrics_cache:
             h, ascent = _font_metrics_cache[key]
@@ -279,11 +276,11 @@ def _parse_rich_text(
             ascent, descent = f.getmetrics()
             h = ascent + descent
             _font_metrics_cache[key] = (h, ascent)
-            
+
         _get_len = f.getlength
         w_cache: dict[str, float] = {}
         _StyledWord = StyledWord
-        
+
         res = []
         segments = prepare_translation_segments(s_text)
         for s in segments:
@@ -299,36 +296,33 @@ def _parse_rich_text(
     styled_words = []
     _StyledWord = StyledWord
     _metrics = _get_text_metrics
-    
+
     f_norm_path = str(config.font_path)
     f_norm_size = config.font_size
     _, h_norm, a_norm = _metrics("", f_norm_path, f_norm_size)
     c_norm = config.color
     font_norm = _load_font_base(f_norm_path, f_norm_size)
-    
+
     last_pos = 0
     for match in _RE_RICH_TAG.finditer(s_text):
-        # Handle plain text before the tag
-        plain_segment = s_text[last_pos:match.start()]
-        if plain_segment:
+        if plain_segment := s_text[last_pos : match.start()]:
             for s in prepare_translation_segments(plain_segment):
                 w, h, a = _metrics(s, f_norm_path, f_norm_size)
                 styled_words.append(_StyledWord(s, font_norm, c_norm, w, h, a))
-        
+
         # Parse the tag: #style#color#text#
         style_code = match.group(1)
         color_hex = match.group(2)
         tag_text = match.group(3)
-        
+
         tag_color = _hex_to_rgba(color_hex)
-        
+
         # Determine font based on style
         if style_code == "b":
-            # For bold, we use normal font but set simulate_bold=True 
+            # For bold, we use normal font but set simulate_bold=True
             # unless a specific bold font is provided in config (not currently in TextConfig)
             f_tag = font_norm
             is_bold = True
-            is_italic = False
         elif style_code == "i":
             # For italic, we use the italic font preset if available
             # We attempt to load the italic version of the current font
@@ -337,26 +331,24 @@ def _parse_rich_text(
             except Exception:
                 f_tag = font_norm
             is_bold = False
-            is_italic = True
         else:
             f_tag = font_norm
             is_bold = False
-            is_italic = False
-            
+
         # Measure and create words for the tag text
         for s in prepare_translation_segments(tag_text):
-            w, h, a = _metrics(s, str(f_tag.path if hasattr(f_tag, 'path') else f_norm_path), f_tag.size if hasattr(f_tag, 'size') else f_norm_size)
+            font_path = str(f_tag.path if hasattr(f_tag, "path") else f_norm_path)
+            font_size = f_tag.size if hasattr(f_tag, "size") else f_norm_size
+            w, h, a = _metrics(s, font_path, font_size)
             styled_words.append(_StyledWord(s, f_tag, tag_color, w, h, a, simulate_bold=is_bold))
-            
+
         last_pos = match.end()
-        
-    # Handle trailing plain text
-    trailing_text = s_text[last_pos:]
-    if trailing_text:
+
+    if trailing_text := s_text[last_pos:]:
         for s in prepare_translation_segments(trailing_text):
             w, h, a = _metrics(s, f_norm_path, f_norm_size)
             styled_words.append(_StyledWord(s, font_norm, c_norm, w, h, a))
-            
+
     return styled_words
 
 

@@ -1,10 +1,9 @@
 """Centralized hardware and resource configuration for QuranMediaLib."""
 
 from __future__ import annotations
- 
+
 import os
 from typing import Final
-
 
 # Hardware detection
 CPU_COUNT: Final = os.cpu_count() or 1

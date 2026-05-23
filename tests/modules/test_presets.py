@@ -67,8 +67,8 @@ def test_preset_square_1080p_font_sizes() -> None:
 
 def test_presets_consistent_scaling() -> None:
     """Test that canvas dimensions scale consistently across resolutions."""
+    mode = "default"
     for preset_name, preset in ALL_PRESETS:
-        mode = "default"
         widths = []
         heights = []
         for res in RESOLUTIONS:

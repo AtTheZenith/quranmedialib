@@ -61,7 +61,6 @@ def _build_row(
         word_width, word_height = item.width, item.height
         spacing = word_config.word_spacing if row_items else 0
 
-
         if current_row_width + word_width + spacing > config.content_width:
             if not row_items:
                 # Force at least one item to avoid infinite loop
@@ -122,7 +121,6 @@ def _group_items_into_rows(
         current_pos += row_consumed
         current_y += max_row_height + word_config.row_spacing
 
-
     return page_rows, total_items_consumed
 
 
@@ -156,14 +154,18 @@ def _apply_stop_sign_adjustment(
                 # Only adjust if it actually reduces the item count (moves break backwards).
                 if keep_count < items_consumed:
                     adjusted_rows = current_image_rows[: row_index + 1]
-                    
+
                     # The last row is a tuple: (items, width, height)
                     items, _, height = adjusted_rows[-1]
                     new_items = items[: word_index + 1]
-                    
+
                     # Recalculate width for the sliced items
-                    new_width = sum(it.width for it in new_items) + (len(new_items) - 1) * word_config.word_spacing if new_items else 0
-                    
+                    new_width = (
+                        sum(it.width for it in new_items) + (len(new_items) - 1) * word_config.word_spacing
+                        if new_items
+                        else 0
+                    )
+
                     adjusted_rows[-1] = (new_items, new_width, height)
                     return adjusted_rows, keep_count
 
@@ -177,7 +179,7 @@ def _get_image_rows(
     max_rows: int | None = None,
 ) -> list[tuple[list[WordItem], int, int]]:
     """Internal greedy divider for a specific width constraint.
-    
+
     Returns:
         List of (row_items, row_width, max_row_height) tuples.
     """
@@ -286,7 +288,6 @@ def _get_verse_start_y(content_height: int, config: LayoutConfig, word_config: W
 
 
 def _render_page(
-
     rows: list[tuple[list[WordItem], int, int]],
     config: LayoutConfig,
     word_config: WordConfig,
@@ -464,7 +465,6 @@ def frame(
                 config,
                 word_config,
             )
-
 
         # 4. Render the page canvas.
         page_image = _render_page(current_rows, config, word_config)

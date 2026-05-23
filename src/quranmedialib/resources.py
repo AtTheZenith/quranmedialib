@@ -86,7 +86,7 @@ def verify_asset_exists(relative_path: str) -> bool:
     try:
         path = get_asset_path(relative_path)
         return path.is_file()
-    except (FileNotFoundError, OSError):
+    except OSError:
         return False
 
 
@@ -110,10 +110,8 @@ def get_sqlite_connection(db_name: str, **kwargs) -> sqlite3.Connection:
     if "readonly" not in kwargs:
         kwargs["readonly"] = True
 
-    readonly = kwargs.pop("readonly")
-    if readonly:
-        # Open in read-only mode using URI
-        uri = f"file:{db_path}?mode=ro"
-        return sqlite3.connect(uri, uri=True, **kwargs)
-    else:
+    if not kwargs.pop("readonly", True):
         return sqlite3.connect(str(db_path), **kwargs)
+    # Open in read-only mode using URI
+    uri = f"file:{db_path}?mode=ro"
+    return sqlite3.connect(uri, uri=True, **kwargs)
