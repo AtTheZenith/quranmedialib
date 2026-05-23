@@ -10,7 +10,8 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Callable
+from types import TracebackType
+from typing import Callable
 
 try:
     import psutil
@@ -20,7 +21,6 @@ except ImportError:
 from quranmedialib.config import (
     DEFAULT_AGGREGATE_LIMIT_MB,
     DEFAULT_PROCESS_LIMIT_MB,
-    MEMORY_FLUSH_THRESHOLD_RATIO,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,11 +37,22 @@ class MemoryLimitExceededError(RuntimeError):
         self.limit_mb = limit_mb
 
 
+_main_process: psutil.Process | None = None
+
+
+def _get_main_process() -> psutil.Process:
+    """Return the cached psutil.Process instance for the current process."""
+    global _main_process
+    if _main_process is None:
+        _main_process = psutil.Process(os.getpid())
+    return _main_process
+
+
 def get_current_rss_mb() -> float:
     """Returns the Resident Set Size (RSS) of the current process in MB."""
     if psutil is None:
         return 0.0
-    return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    return _get_main_process().memory_info().rss / (1024 * 1024)
 
 
 def get_aggregate_rss_mb() -> float:
@@ -49,7 +60,7 @@ def get_aggregate_rss_mb() -> float:
     if psutil is None:
         return 0.0
 
-    main_process = psutil.Process(os.getpid())
+    main_process = _get_main_process()
     total_rss = main_process.memory_info().rss
 
     try:
@@ -90,7 +101,7 @@ class MemoryMonitor:
         self,
         limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB,
         interval: float = 0.5,
-        on_breach: Callable[[float, float], Any] | None = None,
+        on_breach: Callable[[float, float], None] | None = None,
     ):
         """Initializes the monitor.
 
@@ -117,10 +128,6 @@ class MemoryMonitor:
                 logger.error("Aggregate memory limit reached: %.2fMB > %.2fMB", current_rss, self.limit_mb)
                 if self.on_breach:
                     self.on_breach(current_rss, self.limit_mb)
-                else:
-                    # Default behavior: log and raise in the main thread is hard,
-                    # so we just log heavily since this is a background thread.
-                    pass
             time.sleep(self.interval)
 
     def __enter__(self) -> MemoryMonitor:
@@ -131,7 +138,12 @@ class MemoryMonitor:
             self._thread.start()
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Stops the background monitor thread."""
         self._stop_event.set()
         if self._thread:

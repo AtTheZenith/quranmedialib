@@ -134,7 +134,7 @@ def test_verse_range_empty_translations() -> None:
 
     # Empty translations should still work
     results = list(workflow.get_iterator(surah=108, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
-    assert len(results) > 0
+    assert results
 
 
 def test_verse_range_invalid_ayah() -> None:

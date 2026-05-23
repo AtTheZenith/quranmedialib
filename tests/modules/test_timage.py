@@ -8,7 +8,7 @@ import pytest
 from PIL import Image, ImageDraw, ImageOps
 
 from quranmedialib import LANDSCAPE_PRESET
-from quranmedialib.modules.text_layout import wrap_rich_text_balanced, wrap_rich_text_greedy
+from quranmedialib.modules.text_layout import wrap_rich_text_balanced
 from quranmedialib.modules.timage import (
     _parse_rich_text,
     format_isolation_text,
@@ -57,10 +57,10 @@ def test_timage_rendering():
 
     test_cases = [
         ("plain", "Hello World!"),
-        ("bold_red", "#b#ff0000#Bold Red Text#"),
-        ("italic_green", "#i#00ff00#Italic Green Text#"),
-        ("bold_italic_blue", "#bi#0000ffff#Bold Italic Blue Text#"),
-        ("center_vertical", "#b#ffffff#Centered in 400px height#"),
+        ("bold_red", "#b#ff0000ff#Bold Red Text#"),
+        ("italic_green", "#i#00ff00ff#Italic Green Text#"),
+        ("bold_italic_blue", "#b#0000ffff#Bold Italic Blue Text#"),
+        ("center_vertical", "#b#ffffffff#Centered in 400px height#"),
     ]
 
     for filename, text in test_cases:
@@ -94,7 +94,7 @@ def test_timage_rendering():
 )
 def test_timage_pyramid(name: str, text: str, max_width: int) -> None:
     """
-    Tests the 'Balanced Inverted Pyramid' logic across different scales.
+    Tests the 'Descending Line Balancing' logic across different scales.
     """
     widths = _verify_pyramid(text, max_width, filename=name)
     if len(widths) > 1:

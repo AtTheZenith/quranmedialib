@@ -82,13 +82,13 @@ def framer_alignment_data():
     words_text = database_manager.get_verse(surah, verse).split()
     verse_translation = [database_manager.get_translation_from_verse(surah, verse)]
     config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    
+
     word_images = [get_wimage(word_text, word_config) for word_text in words_text]
     word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=word_config)
     word_wbw_images.append(verse_number(verse, word_config=word_config))
-    
+
     items = [WordItem(img, text) for img, text in zip(word_wbw_images, words_text + [str(verse)])]
-    
+
     return {
         "items": items,
         "verse_translation": verse_translation,
@@ -96,8 +96,8 @@ def framer_alignment_data():
         "text_config": text_config,
         "word_config": word_config,
     }
- 
- 
+
+
 @pytest.mark.parametrize("v_align", ["top", "center", "bottom"])
 @pytest.mark.parametrize("h_align", ["left", "center", "right"])
 def test_framer_alignment(framer_alignment_data, v_align, h_align) -> None:
@@ -108,19 +108,18 @@ def test_framer_alignment(framer_alignment_data, v_align, h_align) -> None:
     text_config = data["text_config"]
     word_config = data["word_config"]
     verse_translation = data["verse_translation"]
- 
+
     output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
- 
+
     # Modify LayoutConfig for alignment and WordConfig for max_rows
     word_config_dyn = replace(word_config, max_rows_per_page=3)
     config_dyn = replace(config, wimage_vertical_align=v_align, wimage_horizontal_align=h_align)
- 
+
     t_imgs_dyn = [get_timage(t, config=text_config) for t in verse_translation]
     images = frame(items, translation_images=t_imgs_dyn, config=config_dyn, word_config=word_config_dyn)
- 
-    images[0].save(f"{output_dir}/framer_alignment_{v_align}_{h_align}.png")
 
+    images[0].save(f"{output_dir}/framer_alignment_{v_align}_{h_align}.png")
 
 
 def test_framer_offsets() -> None:

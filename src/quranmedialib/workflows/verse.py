@@ -11,8 +11,8 @@ from typing import Iterator
 
 from PIL import Image
 
-from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.exceptions import WorkflowError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages

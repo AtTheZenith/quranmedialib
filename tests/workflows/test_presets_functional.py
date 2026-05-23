@@ -35,7 +35,7 @@ def test_preset_execution(preset_name, preset_set, mode, res) -> None:
     # and check result structure
     results = list(workflow.get_iterator(surah=108, ayah=1, translations=["Test Translation"]))
 
-    assert len(results) > 0, f"No pages yielded for {preset_name}-{mode}-{res}"
+    assert results, f"No pages yielded for {preset_name}-{mode}-{res}"
     pages = results[0]
     assert len(pages) > 0, f"Empty page list for {preset_name}-{mode}-{res}"
 

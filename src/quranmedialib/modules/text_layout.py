@@ -87,6 +87,43 @@ class Line:
         self.width += word.width
         self.height = max(self.height, word.height)
 
+    def trim_trailing_spaces(self) -> None:
+        """Removes trailing space words and updates line width."""
+        while self.words and self.words[-1].text.isspace():
+            last_word = self.words.pop()
+            self.width -= last_word.width
+
+
+def _check_pyramid_feasibility(
+    sums: list[int],
+    spacing: int,
+    target_k: int,
+    w1_limit: int,
+) -> float:
+    """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
+    n = len(sums) - 1
+    curr_idx = 0
+    prev_limit = w1_limit
+    count = 0
+
+    while curr_idx < n:
+        count += 1
+        if count > target_k:
+            return float("inf")
+
+        # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
+        target = prev_limit + spacing + sums[curr_idx]
+        next_idx = bisect.bisect_right(sums, target) - 1
+
+        if next_idx <= curr_idx:
+            return float("inf")
+
+        # Update limit for next line (Descending Line Balancing constraint)
+        prev_limit = (sums[next_idx] - sums[curr_idx]) - spacing
+        curr_idx = next_idx
+
+    return float(count)
+
 
 def balance_lines_pyramid(
     widths: list[int],
@@ -94,10 +131,25 @@ def balance_lines_pyramid(
     target_k: int,
     max_width: int,
 ) -> list[int] | None:
-    """Core IPL-B algorithm: finds line break indices for a top-heavy layout.
+    """Core Descending Line Balancing algorithm: finds line break indices for a top-heavy layout.
 
-    Uses Prefix Sums + Bisection (O(K log N log W)) for high-performance partitioning.
-    Attempts to create an inverted pyramid shape (W_i >= W_{i+1}).
+    Algorithm Deep-Dive:
+    The Descending Line Balancing algorithm solves the problem of
+    distributing text into K lines such that each line is no wider than the one
+    above it (W_1 >= W_2 >= ... >= W_K), creating a visually balanced, centered
+    pyramid shape common in religious and poetic texts.
+
+    Implementation Strategy:
+    1. Prefix Sums: Pre-calculates cumulative widths to allow O(1) range sum
+       queries (width of any segment of words).
+    2. Bisection over Widths: The algorithm performs a binary search over the
+       possible width of the first line (W_1).
+    3. Feasibility Check: For a chosen W_1, it greedily attempts to partition
+       the remaining text into K-1 lines, each limited by the width of the
+       previous line.
+    4. Complexity: The time complexity is O(K log N log W), where K is the
+       number of lines, N is the number of words, and W is the search space
+       for the initial width.
 
     Args:
         widths: List of widths for each word/segment.
@@ -118,35 +170,6 @@ def balance_lines_pyramid(
     for i, w in enumerate(widths):
         sums[i + 1] = sums[i] + w + spacing
 
-    _spacing = spacing
-    _target_k = target_k
-    _n = n
-
-    def check_feasibility(w1_limit: int) -> int:
-        """Finds k using bisection over prefix sums. Zero allocations, O(K log N)."""
-        curr_idx = 0
-        prev_limit = w1_limit
-        count = 0
-
-        while curr_idx < _n:
-            count += 1
-            if count > _target_k:
-                return 9999
-
-            # Find max j such that (sums[j] - sums[curr_idx]) - spacing <= prev_limit
-            # Target = prev_limit + spacing + sums[curr_idx]
-            target = prev_limit + _spacing + sums[curr_idx]
-            next_idx = bisect.bisect_right(sums, target) - 1
-
-            if next_idx <= curr_idx:
-                return 9999
-
-            # Update limit for next line (Inverted Pyramid constraint)
-            prev_limit = (sums[next_idx] - sums[curr_idx]) - _spacing
-            curr_idx = next_idx
-
-        return count
-
     # Bounds
     max_w = max(widths)
     total_w = sums[n] - spacing
@@ -157,7 +180,7 @@ def balance_lines_pyramid(
 
     while low <= high:
         mid = (low + high) // 2
-        if check_feasibility(mid) <= target_k:
+        if _check_pyramid_feasibility(sums, spacing, target_k, mid) <= target_k:
             best_w1 = mid
             high = mid - 1
         else:
@@ -204,54 +227,32 @@ def wrap_rich_text_greedy(styled_words: list[StyledWord], max_width: int | None)
 
     lines = []
     curr_line = Line()
-    curr_words = curr_line.words
-    curr_w = 0
-    curr_h = 0
 
     for word in styled_words:
         w_width = word.width
-        w_height = word.height
-        if curr_w + w_width > max_width:
-            if curr_words:
-                # Strip trailing space from previous line
-                if curr_words[-1].text.isspace():
-                    last_space = curr_words.pop()
-                    curr_w -= last_space.width
-
-                curr_line.width = curr_w
-                curr_line.height = curr_h
+        if curr_line.width + w_width > max_width:
+            if curr_line.words:
+                curr_line.trim_trailing_spaces()
                 lines.append(curr_line)
 
             curr_line = Line()
-            curr_words = curr_line.words
-            curr_w = 0
-            curr_h = 0
-
             w_text = word.text
 
             # Don't start a new line with a space
             if w_text.isspace():
                 continue
 
-        curr_words.append(word)
-        curr_w += w_width
-        if w_height > curr_h:
-            curr_h = w_height
+        curr_line.add_word(word)
 
-    if curr_words:
-        # Strip trailing space from last line
-        if curr_words[-1].text.isspace():
-            last_space = curr_words.pop()
-            curr_w -= last_space.width
-        curr_line.width = curr_w
-        curr_line.height = curr_h
+    if curr_line.words:
+        curr_line.trim_trailing_spaces()
         lines.append(curr_line)
 
     return lines
 
 
 def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | None) -> list[Line]:
-    """Inverted pyramid line balancing (IPL-B).
+    """Descending Line Balancing.
 
     Strictly enforces W_i >= W_{i+1} to create an inverted pyramid shape.
     Delegates to balance_lines_pyramid for the optimal break search.
@@ -267,7 +268,7 @@ def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | Non
         return wrap_rich_text_greedy(styled_words, max_width)
 
     # Use space-stripped content as base for balancing (spaces are handled by widths)
-    content = [w for w in styled_words if w.text.strip() or w.text == " "]
+    content = [w for w in styled_words if w.text]
     if not content:
         return []
 
@@ -308,19 +309,13 @@ def wrap_rich_text_balanced(styled_words: list[StyledWord], max_width: int | Non
             final_lines.append(current_line)
             current_line = Line()
 
-        current_line.words.append(word)
-        current_line.width += word.width
-        if word.height > current_line.height:
-            current_line.height = word.height
+        current_line.add_word(word)
 
     if current_line.words:
         final_lines.append(current_line)
 
     # Post-process: Strip trailing spaces from each line
     for line in final_lines:
-        words = line.words
-        while words and words[-1].text.isspace():
-            last_word = words.pop()
-            line.width -= last_word.width
+        line.trim_trailing_spaces()
 
     return final_lines

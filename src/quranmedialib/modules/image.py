@@ -5,16 +5,13 @@ from typing import Literal
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter
 
-from quranmedialib.types import Color, Padding
+from quranmedialib.types import MAX_GLOW_RADIUS, Color, Padding
 
 __all__ = [
     "color",
     "glow",
     "pad",
 ]
-
-# Maximum glow radius to prevent resource exhaustion
-MAX_GLOW_RADIUS = 200
 
 # === Helper Functions ===
 
@@ -28,6 +25,7 @@ def _compute_downscaled_size(image: Image.Image, scale: int) -> tuple[int, int]:
 
 
 def color(image: Image.Image, color: Color = (255, 255, 255, 255)) -> Image.Image:
+    # sourcery skip: extract-duplicate-method
     """Multiplies the luminance of each pixel with the specified color.
 
     Treats the input's alpha channel (or luminance if L) as a mask for the new solid color.
@@ -156,7 +154,7 @@ def glow(
 
     **Performance Note:**
     Large images combined with large radius values (> 100) can be computationally
-    expensive. The "fast" mode uses 8x downsampling, "balanced" uses 2x,
+    expensive. The "fast" mode uses 4x downsampling, "balanced" uses 2x,
     and "quality" uses full resolution Gaussian blur. Larger radii and higher
     resolutions increase processing time.
 
@@ -166,7 +164,7 @@ def glow(
             vibrant/opaque, while values < 1.0 fade it out. Defaults to 1.0.
         radius: The base spread of the glow in pixels. Larger values
             create a wider, softer falloff. Defaults to 50.
-        quality: The blur quality mode. "fast" uses GaussianBlur downsampled 8x,
+        quality: The blur quality mode. "fast" uses GaussianBlur downsampled 4x,
             "balanced" uses GaussianBlur downsampled 2x, and "quality" uses
             full-resolution GaussianBlur. Defaults to "balanced".
 
