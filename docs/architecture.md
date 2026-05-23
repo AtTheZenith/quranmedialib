@@ -36,7 +36,7 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 **Responsibility**: Positioning masks into a coherent page structure.
 
 - **Framer**: The core engine that implements Right-to-Left (RTL) logic.
-- **Line Balancing**: Implements the **Inverted Pyramid Line Balancing (IPL-B)** algorithm to ensure text is visually centered and aesthetically distributed across lines.
+- **Line Balancing**: Implements the **Decremental Line Balancing** algorithm to ensure text is visually centered and aesthetically distributed across lines.
 - **Page Management**: Calculates when a verse exceeds the `max_width` and automatically handles page breaks.
 - **Output**: A coordinate map of where each image mask should be placed on the final canvas.
 

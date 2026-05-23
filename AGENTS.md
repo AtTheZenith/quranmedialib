@@ -302,12 +302,12 @@ class LayoutConfig:
 ### 8.3 Text Rendering
 
 - **Rich text formatting**: Use tag-based format (`#b#` bold, `#i#` italic, `#hex#` color).
-- **Wrapping**: Balanced inverted-pyramid wrapping (IPL-B) for centered visual distribution; greedy fallback available.
+- **Wrapping**: Decremental Line Balancing wrapping for centered visual distribution; greedy fallback available.
 - **Font loading**: Use `modules/font_cache.py` with `get_font()` — LRU-cached font loading with variable weight axis support; fallback to stroke simulation.
 - **Lazy rendering**: `LazyTranslationImages` implements `Sequence` ABC for deferred image generation.
 - **Text layout module** (`modules/text_layout.py`):
   - `StyledWord`, `Line` — Memory-efficient types with `__slots__`
-  - `balance_lines_pyramid()` — Core IPL-B algorithm (O(K log N log W))
+  - `balance_lines_pyramid()` — Core Decremental Line Balancing algorithm (O(K log N log W))
   - `wrap_rich_text_greedy()` — Simple greedy line wrapping
   - `wrap_rich_text_balanced()` — Inverted pyramid balancing
 

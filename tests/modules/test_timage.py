@@ -94,7 +94,7 @@ def test_timage_rendering():
 )
 def test_timage_pyramid(name: str, text: str, max_width: int) -> None:
     """
-    Tests the 'Balanced Inverted Pyramid' logic across different scales.
+    Tests the 'Decremental Line Balancing' logic across different scales.
     """
     widths = _verify_pyramid(text, max_width, filename=name)
     if len(widths) > 1:
