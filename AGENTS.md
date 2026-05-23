@@ -77,7 +77,12 @@ uv run -m pytest; uv run -m pytest -v --b
 - **Memory-Aware Parallelism**: When using `ParallelRenderer`, monitor aggregate RSS and explicitly clear caches (`clear_rendering_caches`) to avoid OOM during bulk processing.
 - **Thread-Local Resources**: Use `threading.local()` for database connections and other non-thread-safe handles to ensure stability under high concurrency.
 
----
+### 0.6 The libcurl Standard
+
+- **Absolute Utility**: Focus exclusively on providing a robust, predictable tool.
+- **Zero Noise**: Avoid marketing fluff, branding, or "corporate" language in all documentation and communication.
+- **Technical Precision**: Prioritize exactness and clarity over accessibility or "friendliness."
+- **Tool and Manual**: The project is a tool and its documentation is its manual. No unnecessary preamble or postamble.
 
 ## 1. Imports and Modules
 

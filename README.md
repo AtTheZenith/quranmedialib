@@ -4,213 +4,228 @@
 
 </div>
 
-A media producing library for Quranic content. Written in Python. It can generate properly formatted images of Quranic verses along with translations.
+A high-performance media generation library for rendering Quranic Arabic text and translations into customizable, professional-grade images.
 
-## Installation
+**Requirements:** Python 3.13+
 
-### From source (development)
+---
+
+## 📌 Table of Contents
+- [User Guide](#-user-guide)
+    - [Installation](#installation)
+    - [Quick Start](#quick-start)
+    - [Presets Reference](#presets-reference)
+    - [Built-in Workflows](#built-in-workflows)
+    - [Demo Gallery](#demo-gallery)
+- [Developer Guide](#-developer-guide)
+    - [Architecture](#architecture)
+    - [Core Thesis](#core-thesis)
+    - [Core API Reference](#core-api-reference)
+    - [Advanced Workflows](#advanced-workflows)
+    - [Performance & Parallelism](#performance--parallelism)
+    - [Development Suite](#development-suite)
+- [Community & License](#-community--license)
+
+---
+
+## User Guide
+
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/quranmedialib.git
+git clone https://github.com/AtTheZenith/quranmedialib.git
 cd quranmedialib
 
 # Install with uv (recommended)
 uv pip install -e .
-
-# Or with pip
-pip install -e .
 ```
 
-### From PyPI (coming soon)
-
-```bash
-pip install quranmedialib
-```
-
-## Quick Start
+### Quick Start
 
 ```python
-from quranmedialib import DatabaseManager, LANDSCAPE_PRESET
-from quranmedialib.modules.wimage import get_wimage
+from quranmedialib import DatabaseManager, VerseWorkflow, LANDSCAPE_PRESET
 
-# Initialize database manager (auto-loads packaged databases)
+# Initialize database manager
 db = DatabaseManager()
 
-# Get preset configuration for 1080p landscape
-layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+# Configure layout using a preset (1080p Landscape Default)
+layout, text_cfg, word_cfg = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = VerseWorkflow(layout, text_cfg, word_cfg)
 
-# Render a single Arabic word
-word_img = get_wimage("الله", word_config)
+# Render Surah 1, Ayah 1
+translations = ["In the name of Allah,", "the Entirely Merciful, the Especially Merciful."]
+pages = list(workflow.get_iterator(surah=1, ayah=1, translations=translations))
 
-# Get verses from a surah
-verses = db.get_verses_from_surah(1)  # Al-Fatiha
-print(f"Surah 1 has {len(verses)} verses")
+# Save first page
+pages[0][0].save("output.png")
 
 db.close()
 ```
 
-# Workflows
+### Presets Reference
 
-Workflows are high-level orchestrators that handle data retrieval, image generation, and layout. All workflows inherit from `BaseWorkflow` and provide a `get_iterator()` method.
+The library uses a resolution-independent system. All sizing parameters scale linearly from a 1080p baseline.
 
-## Using Built-in Workflows
+| Aspect Ratio | Preset | Resolutions | Modes |
+| :--- | :--- | :--- | :--- |
+| **16:9** | `LANDSCAPE_PRESET` | 720p, 1080p, 1440p, 2160p | `default`, `arabic`, `translation` |
+| **9:16** | `STORY_PRESET` | 720p, 1080p, 1440p, 2160p | `default`, `arabic`, `translation` |
+| **1:1** | `SQUARE_PRESET` | 720p, 1080p, 1440p, 2160p | `default`, `arabic`, `translation` |
 
-### SurahWorkflow
+### Built-in Workflows
 
+Workflows are high-level orchestrators that handle data retrieval, layout, and rendering.
+
+#### `SurahWorkflow`
 Processes an entire surah page by page.
-
 ```python
 from quranmedialib import SurahWorkflow, LANDSCAPE_PRESET
 
 layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
 workflow = SurahWorkflow(layout, text, word)
 
-# Process Surah Al-Ikhlas (112)
 for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
     for img, suffix in page_images:
-        img.save(f"output/surah112_p{page_num}_{suffix}.png")
+        img.save(f"surah112_p{page_num}_{suffix}.png")
 ```
 
-### VerseWorkflow
-
-Renders a single verse with custom translations.
-
-```python
-from quranmedialib import VerseWorkflow, STORY_PRESET
-
-layout, text, word = STORY_PRESET["default"]["1080p"]
-workflow = VerseWorkflow(layout, text, word)
-
-# Render Surah 1, Ayah 1 with custom translation strings
-translations = ["In the name of Allah,", "the Entirely Merciful, the Especially Merciful."]
-iterator = workflow.get_iterator(surah=1, ayah=1, translations=translations)
-
-for page_num, page_images in enumerate(iterator, 1):
-    for img, suffix in page_images:
-        img.save(f"verse1_1_p{page_num}_{suffix}.png")
-```
-
-### VerseRangeWorkflow
-
-Processes a range of verses, supporting parallel rendering.
-
+#### `VerseRangeWorkflow`
+Processes a range of verses with support for parallel rendering.
 ```python
 from quranmedialib import VerseRangeWorkflow, SQUARE_PRESET
 
 layout, text, word = SQUARE_PRESET["default"]["1080p"]
 workflow = VerseRangeWorkflow(layout, text, word)
 
-# Process verses 1-5 of Surah 1
-# translations[verse_index][page_index]
-translations = [["Trans for V1"], ["Trans for V2"], ["Trans for V3"], ["Trans for V4"], ["Trans for V5"]]
-iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=5, translations=translations)
-
-for page_images in iterator:
-    # Handle results
-    pass
+# translations: list[list[str]] -> [verse_index][page_index]
+translations = [["Trans V1"], ["Trans V2"]] 
+iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=2, translations=translations)
 ```
 
-## Creating Custom Workflows
+### Demo Gallery
+*Visual examples of generated content:*
 
-Inherit from `BaseWorkflow` to create custom rendering pipelines.
+<table width="800">
+  <thead>
+    <tr>
+      <th align="left">Preset</th>
+      <th align="center">Image</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>Landscape (1080p)</b></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/fd8b0650-9fcd-4c5c-a9ec-569b083302ce" width="600"></td>
+    </tr>
+    <tr>
+      <td><b>Story (1080p)</b></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/d3bb2696-3218-4b4d-8e8a-4302de7cf065" width="250"></td>
+    </tr>
+    <tr>
+      <td><b>Square (1080p)</b></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/a5ca9c28-5751-438f-8abd-609c4fbaabe4" width="400"></td>
+    </tr>
+  </tbody>
+</table>
 
+---
+
+## Developer Guide
+
+### Architecture
+
+```mermaid
+graph TD
+    DB[(SQLite Database)] --> WF[Workflow Orchestrator]
+    WF --> Layout[Layout Engine: Framer]
+    Layout --> Pipe[Rendering Pipeline]
+    Pipe --> Mask[Mask-First Rendering]
+    Mask --> Comp[Composite/Colorize]
+    Comp --> Out[Final Image]
+    
+    subgraph Config
+        L[LayoutConfig] -.-> Layout
+        W[WordConfig] -.-> Pipe
+        T[TextConfig] -.-> Pipe
+    end
+```
+
+### Core Thesis
+
+QuranMediaLib is built on the **"Boring Code"** philosophy: prioritizing linear, obvious logic over clever abstractions to ensure long-term maintainability.
+
+**Key Engineering Pillars:**
+- **Resolution Independence**: Layouts are defined relative to a 1080p height and scaled linearly.
+- **Memory Efficiency**: Use of `__slots__` for high-frequency objects and `lru_cache` for database queries.
+- **Performance**: Mask-first rendering minimizes expensive RGBA operations.
+
+### Core API Reference
+
+#### `DatabaseManager`
+A thread-safe singleton managing SQLite connections to Quranic databases.
+- `get_verse(surah, ayah)`: Retrieves verse text.
+- `get_verses_from_surah(surah)`: Retrieves all verses in a surah.
+- `minimize_caches()`: Explicitly clears internal LRU caches.
+
+#### Configuration
+- `LayoutConfig`: Controls canvas dimensions, padding, and alignment.
+- `WordConfig`: Defines Arabic font, size, colors, and spacing.
+- `TextConfig`: Defines translation font, size, and rich-text formatting.
+
+#### Resource Management
+Custom assets can be loaded via:
+- `FontResource.from_path("path/to/font.ttf")`
+- `DatabaseConfig.from_path("path/to/db.sqlite")`
+
+### Advanced Workflows
+
+#### `IsolateWordsWorkflow`
+Used to isolate individual words within their layout context, useful for word-by-word study tools.
 ```python
-from typing import Iterator
-from PIL import Image
-from quranmedialib.workflows.base import BaseWorkflow
+from quranmedialib import IsolateWordsWorkflow, LANDSCAPE_PRESET
 
-class MyCustomWorkflow(BaseWorkflow):
-    def get_iterator(self, **kwargs) -> Iterator[list[Image.Image]]:
-        # 1. Access configs via self.layout_config, self.text_config, self.word_config
-        # 2. Retrieve data (e.g., from DatabaseManager)
-        # 3. Generate images (e.g., via get_wimage, get_timage)
-        # 4. Yield lists of images representing pages
-        yield [Image.new("RGBA", (self.layout_config.max_width, self.layout_config.image_height))]
+layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = IsolateWordsWorkflow(layout, text, word)
+
+# Isolates each word of the verse
+iterator = workflow.get_iterator(
+    surah=1, 
+    verse_words=["الله", "الرحمن", "الرحيم"], 
+    translations=["Allah", "The Merciful", "The Compassionate"]
+)
 ```
 
-## Parallel Processing
+### Performance & Parallelism
 
-QuranMediaLib provides a `ParallelRenderer` for CPU-intensive tasks (like applying blurs/glows) and bulk rendering.
+For bulk rendering, the library provides `ParallelRenderer`, which distributes tasks across CPU cores.
 
-```python
-from quranmedialib.utils.parallel import ParallelRenderer, ExecutionMode
-from quranmedialib.modules.image import glow
+- **Execution Modes**: `ExecutionMode.PROCESS` (recommended for CPU-heavy tasks) or `ExecutionMode.THREAD`.
+- **Memory Guard**: The system monitors aggregate RSS to prevent OOM crashes during large Surah renders.
 
-def apply_glow_worker(img):
-    return glow(img)
-
-images = [...] # List of PIL Images
-renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
-
-# Process images in parallel across CPU cores
-glowed_images = list(renderer.map(apply_glow_worker, images))
-```
-
-## Package Structure
-
-```markdown
-quranmedialib/
-├── types.py           # Configuration dataclasses (LayoutConfig, WordConfig, etc.)
-├── presets.py         # Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
-├── database_manager.py # Stateful database connection manager
-├── modules/
-│   ├── wimage.py      # Arabic word rendering
-│   ├── timage.py      # Translation text rendering
-│   ├── framer.py      # Multi-page layout engine
-│   ├── image.py       # Image effects (glow, color, pad)
-│   ├── annotation.py  # Word-by-word annotation
-│   └── verse_number.py # Verse number rendering
-└── workflows/
-    ├── surah.py       # Surah-level processing
-    ├── verse_range.py # Verse range processing
-    └── isolate_words.py # Word isolation workflows
-```
-
-## Presets
-
-- **LANDSCAPE_PRESET**: 16:9 aspect ratio
-- **STORY_PRESET**: 9:16 aspect ratio
-- **SQUARE_PRESET**: 1:1 aspect ratio
-
-Each preset supports resolutions `720p`, `1080p`, `1440p`, `2160p` and modes `default`, `arabic`, `translation`.
-
-## Development
+### Development Suite
 
 ```bash
-# Install with dev dependencies
+# Install dev dependencies
 uv pip install -e ".[dev]"
 
-# Run tests
+# Run all tests
 uv run -m pytest -v
 
 # Run benchmarks
-uv run -m pytest -v --benchmark  # or -b
+uv run -m pytest -v --benchmark
 
-# Lint, format, and refactor
+# Lint and Format
 uv run -m ruff check .
 uv run -m ruff format .
-sourcery review
 ```
 
-## Community
+---
+
+## Community & License
 
 We welcome contributions from developers who value engineering rigor and performance.
 
-- **Contribute**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for our technical standards and workflow.
-- **Conduct**: We follow a professional [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
-
-## Troubleshooting & FAQ
-
-**Q: Why are some images rendering slowly?**
-A: Check if you are using `quality` mode in `glow()`. For bulk rendering, use `fast` or `balanced` modes.
-
-**Q: I'm getting memory errors during large Surah renders.**
-A: Ensure you are using `ParallelRenderer` with `ExecutionMode.PROCESS` and monitor memory using the `MemoryMonitor` utility.
-
-**Q: How do I use a custom font?**
-A: Use `FontResource.from_path("path/to/font.ttf")` and pass it into your `WordConfig`.
-
-## License
-
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+- **Contribute**: See [`CONTRIBUTING.md`](CONTRIBUTING.md) for technical standards.
+- **Conduct**: See [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+- **License**: Apache License 2.0 - see [LICENSE](LICENSE).

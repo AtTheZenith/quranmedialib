@@ -4,15 +4,15 @@
 
 This document provides the high-level "Mental Map" of the QuranMediaLib rendering pipeline. It is designed to help new developers understand how data transforms from raw database entries into a finished, high-resolution image.
 
-## 🗺️ The Rendering Pipeline (The Mental Map)
+## The Rendering Pipeline (The Mental Map)
 
 The library operates as a linear pipeline with four distinct layers. Data flows from the bottom up:
 
-`Asset Layer` $\rightarrow$ `Rendering Layer` $\rightarrow$ `Layout Layer` $\rightarrow$ `Composition Layer`
+`Asset Layer` --> `Rendering Layer` --> `Layout Layer` --> `Composition Layer`
 
 ---
 
-## 🏗️ Layer Breakdown
+## Layer Breakdown
 
 ### 1. Asset Layer (The Foundation)
 
@@ -51,7 +51,7 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 ---
 
-## 🔄 Data Flow Example: Rendering a Single Word
+## Data Flow Example: Rendering a Single Word
 
 1. **Asset**: `DatabaseManager` fetches the Arabic word "الله" and its translation.
 2. **Rendering**: `get_wimage()` generates a grayscale mask of "الله" using the specified font.
