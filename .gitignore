@@ -5,8 +5,12 @@ build/
 dist/
 wheels/
 *.egg-info
-.ruff_cache/
 .venv
+
+# Development
+.env
+.ruff_cache/
+.gitnexus
 
 # Test artifacts
 .pytest_cache/
