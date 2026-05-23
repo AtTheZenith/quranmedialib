@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to QuranMediaLib! We aim to maintain a professional, high-performance library. To ensure the longevity and stability of the codebase, we adhere to a strict set of engineering standards.
 
-## 🛠️ Technical Bar
+## Technical Bar
 
 Before you submit a Pull Request, please familiarize yourself with our **Repository Style Guide** in [`AGENTS.md`](AGENTS.md). 
 
@@ -12,7 +12,7 @@ We treat our code as a professional asset. We prioritize:
 - **Zero Astonishment**: Obvious, boring code is preferred over clever hacks.
 - **Type Safety**: Strict use of Python 3.13 type hints and `Final` for constants.
 
-## 🚀 Contribution Workflow
+## Contribution Workflow
 
 ### 1. Setup Your Environment
 Ensure you have `uv` installed for consistent dependency management.
