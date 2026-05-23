@@ -33,6 +33,6 @@ Search for answers in the [FAQ](FAQ.md).
 ## Core Capabilities
 
 - **Rich Text Rendering**: Bold, italic, and hex-color support for translations.
-- **Intelligent Layout**: Inverted Pyramid Line Balancing (IPL-B) for aesthetically centered text.
+- **Intelligent Layout**: Decremental Line Balancing for aesthetically centered text.
 - **Professional Effects**: Native support for soft glows, precise padding, and alpha-compositing.
 - **Performance**: Optimized with `__slots__`, LRU caching, and multi-process parallel rendering.
