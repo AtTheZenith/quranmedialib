@@ -55,6 +55,7 @@ uv run -m pytest; uv run -m pytest -v --b
 - **Working directory isolation**: Cache working directory lazily; never allow path escaping.
 
 ### 0.3 Code Clarity and Maintainability
+
 - **Zero surprise**: If code behavior is not obvious from reading it, document it. If obvious, do not document.
 - **Self-documenting code**: Prefer descriptive names over comments. A well-named variable removes the need for a comment.
 - **Explicit over implicit**: Return new image objects; document mutations. Use keyword arguments for clarity.
@@ -63,17 +64,18 @@ uv run -m pytest; uv run -m pytest -v --b
 - **Linear flow**: Prefer straight-line code over clever abstractions. Clever code is rarely correct on first try.
 
 ### 0.4 Defensive API Design
+
 - **Immutable by Default**: Use `frozen=True` for all configuration dataclasses.
 - **Explicit Opt-in for Danger**: Use flags like `unsafe_paths` or `trust_config` to explicitly mark boundary-crossing operations.
 - **Fail Fast**: Validate inputs at the very first entry point of the public API to prevent deep-stack failures.
 - **Resource Capping**: Enforce hard limits on canvas dimensions and font sizes to prevent OOM/DoS attacks.
 
 ### 0.5 High-Performance Image Pipelines
+
 - **Mask-First Rendering**: Render text as `'L'` mode masks first, then colorize/composite in a single pass to minimize expensive RGBA operations.
 - **Sub-pixel Precision**: Use float values for widths and positions to prevent cumulative rounding errors in long lines.
 - **Memory-Aware Parallelism**: When using `ParallelRenderer`, monitor aggregate RSS and explicitly clear caches (`clear_rendering_caches`) to avoid OOM during bulk processing.
 - **Thread-Local Resources**: Use `threading.local()` for database connections and other non-thread-safe handles to ensure stability under high concurrency.
-
 
 ---
 
@@ -249,6 +251,7 @@ class LayoutConfig:
 ## 7. Formatting and Tooling
 
 ### 7.1 Ruff and Sourcery Configuration
+
 - **Ruff**:
   - **Line length**: 120 characters (configured in `pyproject.toml`)
   - **Target version**: Python 3.13
@@ -260,7 +263,6 @@ class LayoutConfig:
 - **Sourcery**:
   - Use Sourcery for advanced refactoring suggestions and complexity reduction.
   - Prioritize "Boring Code" over clever Sourcery suggestions if the latter increases cognitive load.
-
 
 ### 7.2 Formatting Rules
 
@@ -562,16 +564,17 @@ QuranMediaLibError (Exception)
 ---
 
 ## 15. Environment
- 
+
 The agent is operating in a Windows environment using PowerShell 7 (`pwsh`) as the primary shell. `sqlite3` is available in the system `PATH`.
- 
+
 ---
- 
+
 ## 16. Development Commands
 
 All development commands use `uv` for consistency.
 
 ### 16.1 Project Management
+
 - **Add dependency**: `uv add <package>`
 - **Sync environment**: `uv sync`
 - **Re-lock dependencies**: `uv lock` (after manual `pyproject.toml` edits)
@@ -579,6 +582,7 @@ All development commands use `uv` for consistency.
 - **Run ephemeral tools**: `uvx <tool>`
 
 ### 16.2 Common Commands
+
 ```bash
 # Run all tests
 uv run -m pytest
@@ -748,3 +752,47 @@ def test_feature() -> None:
 - Skip docstrings on private helpers — all functions should be documented.
 - Hardcode magic numbers — use constants or configuration objects.
 - Use `List`/`Dict` from `typing` — use built-in generics (Python 3.13).
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **quranmedialib** (1732 symbols, 2937 relationships, 117 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/quranmedialib/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/quranmedialib/clusters` | All functional areas |
+| `gitnexus://repo/quranmedialib/processes` | All execution flows |
+| `gitnexus://repo/quranmedialib/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

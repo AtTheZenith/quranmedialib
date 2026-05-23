@@ -57,10 +57,10 @@ def test_timage_rendering():
 
     test_cases = [
         ("plain", "Hello World!"),
-        ("bold_red", "#b#ff0000#Bold Red Text#"),
-        ("italic_green", "#i#00ff00#Italic Green Text#"),
-        ("bold_italic_blue", "#bi#0000ffff#Bold Italic Blue Text#"),
-        ("center_vertical", "#b#ffffff#Centered in 400px height#"),
+        ("bold_red", "#b#ff0000ff#Bold Red Text#"),
+        ("italic_green", "#i#00ff00ff#Italic Green Text#"),
+        ("bold_italic_blue", "#b#0000ffff#Bold Italic Blue Text#"),
+        ("center_vertical", "#b#ffffffff#Centered in 400px height#"),
     ]
 
     for filename, text in test_cases:
