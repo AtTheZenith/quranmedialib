@@ -207,6 +207,7 @@ def test_database_manager_get_connection_unknown_db() -> None:
 def test_database_manager_fetch_sql_error() -> None:
     """Test that _fetch raises sqlite3.Error on SQL error."""
     import sqlite3
+
     db = DatabaseManager()
     # _fetch now raises sqlite3.Error instead of returning []
     with pytest.raises(sqlite3.Error):

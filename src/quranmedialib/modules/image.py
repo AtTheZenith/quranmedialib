@@ -5,7 +5,7 @@ from typing import Literal
 
 from PIL import Image, ImageChops, ImageEnhance, ImageFilter
 
-from quranmedialib.types import Color, Padding, MAX_GLOW_RADIUS
+from quranmedialib.types import MAX_GLOW_RADIUS, Color, Padding
 
 __all__ = [
     "color",

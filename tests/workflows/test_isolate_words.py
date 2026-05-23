@@ -155,4 +155,4 @@ def test_isolate_mismatched_wbw_length() -> None:
             )
         )
         # Should produce results (warning is informational)
-        assert len(results) >= 1
+        assert results

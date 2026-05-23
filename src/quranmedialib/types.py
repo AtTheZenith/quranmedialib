@@ -18,7 +18,7 @@ import os.path
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, NamedTuple, Final
+from typing import Annotated, Final, NamedTuple
 
 from PIL import Image
 
@@ -70,7 +70,7 @@ def _ensure_within_working_dir(path: Path) -> None:
         if not str(resolved).startswith(str(working) + os.sep) and str(resolved) != str(working):
             raise ResourceError(f"Path {path!r} (resolved: {resolved!r}) is outside the working directory {working}.")
     except (OSError, ValueError) as e:
-        raise ResourceError(f"Failed to validate path {path}: {e}")
+        raise ResourceError(f"Failed to validate path {path}: {e}") from e
 
 
 # Surah and ayah range constants for runtime validation
@@ -452,7 +452,9 @@ class LayoutConfig:
         if self.image_height <= 0:
             raise ValidationError(f"image_height must be positive, got {self.image_height}")
         if self.image_height > MAX_CANVAS_DIMENSION:
-            raise ValidationError(f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}")
+            raise ValidationError(
+                f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}"
+            )
 
         if self.content_width <= 0:
             raise ValidationError(
@@ -558,9 +560,7 @@ class TextConfig:
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
                 return get_font_path(default_filename)
-            if isinstance(path, FontResource):
-                return path.path
-            return Path(path)
+            return path.path if isinstance(path, FontResource) else Path(path)
 
         # Coerce alignment
         if isinstance(self.alignment, str):
@@ -577,7 +577,9 @@ class TextConfig:
             if self.max_width <= 0:
                 raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
             if self.max_width > MAX_CANVAS_DIMENSION:
-                raise ValidationError(f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}")
+                raise ValidationError(
+                    f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}"
+                )
 
         # Validate height
         if self.height is not None:

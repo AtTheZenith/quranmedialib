@@ -10,8 +10,8 @@ import logging
 import os
 import threading
 import time
-from typing import Callable
 from types import TracebackType
+from typing import Callable
 
 try:
     import psutil
@@ -128,10 +128,6 @@ class MemoryMonitor:
                 logger.error("Aggregate memory limit reached: %.2fMB > %.2fMB", current_rss, self.limit_mb)
                 if self.on_breach:
                     self.on_breach(current_rss, self.limit_mb)
-                else:
-                    # Default behavior: log and raise in the main thread is hard,
-                    # so we just log heavily since this is a background thread.
-                    pass
             time.sleep(self.interval)
 
     def __enter__(self) -> MemoryMonitor:
@@ -142,7 +138,12 @@ class MemoryMonitor:
             self._thread.start()
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: TracebackType | None) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Stops the background monitor thread."""
         self._stop_event.set()
         if self._thread:

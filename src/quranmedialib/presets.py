@@ -11,8 +11,9 @@ The builder uses 1080p as the reference resolution. All sizing parameters
 Users can call build_preset() directly to generate configs for custom resolutions.
 """
 
-from quranmedialib.exceptions import ValidationError
 from typing import Final
+
+from quranmedialib.exceptions import ValidationError
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
@@ -273,12 +274,7 @@ def _get_reference_dimension(aspect_ratio: str, width: int, height: int) -> int:
     Story: width is the reference (720, 1080, 1440, 2160).
     Square: width = height, so either works.
     """
-    if aspect_ratio == "landscape":
-        return height
-    elif aspect_ratio == "story":
-        return width
-    else:  # square
-        return width
+    return height if aspect_ratio == "landscape" else width
 
 
 def _round_scale(base: int | float, ref_dim: int) -> int:
@@ -405,10 +401,9 @@ _ALL_PRESETS = _build_all_presets()
 # === Public Preset Dictionaries ===
 #: Landscape (16:9) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
 LANDSCAPE_PRESET: Final = _ALL_PRESETS["landscape"]
- 
+
 #: Story/Portrait (9:16) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
 STORY_PRESET: Final = _ALL_PRESETS["story"]
- 
+
 #: Square (1:1) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
 SQUARE_PRESET: Final = _ALL_PRESETS["square"]
-
