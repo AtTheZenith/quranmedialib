@@ -63,7 +63,26 @@ uv run -m pytest; uv run -m pytest -v --b
 - **Single responsibility**: Each function does one thing well. If describing it requires "and", split it.
 - **Linear flow**: Prefer straight-line code over clever abstractions. Clever code is rarely correct on first try.
 
----
+### 0.4 Defensive API Design
+
+- **Immutable by Default**: Use `frozen=True` for all configuration dataclasses.
+- **Explicit Opt-in for Danger**: Use flags like `unsafe_paths` or `trust_config` to explicitly mark boundary-crossing operations.
+- **Fail Fast**: Validate inputs at the very first entry point of the public API to prevent deep-stack failures.
+- **Resource Capping**: Enforce hard limits on canvas dimensions and font sizes to prevent OOM/DoS attacks.
+
+### 0.5 High-Performance Image Pipelines
+
+- **Mask-First Rendering**: Render text as `'L'` mode masks first, then colorize/composite in a single pass to minimize expensive RGBA operations.
+- **Sub-pixel Precision**: Use float values for widths and positions to prevent cumulative rounding errors in long lines.
+- **Memory-Aware Parallelism**: When using `ParallelRenderer`, monitor aggregate RSS and explicitly clear caches (`clear_rendering_caches`) to avoid OOM during bulk processing.
+- **Thread-Local Resources**: Use `threading.local()` for database connections and other non-thread-safe handles to ensure stability under high concurrency.
+
+### 0.6 The libcurl Standard
+
+- **Absolute Utility**: Focus exclusively on providing a robust, predictable tool.
+- **Zero Noise**: Avoid marketing fluff, branding, or "corporate" language in all documentation and communication.
+- **Technical Precision**: Prioritize exactness and clarity over accessibility or "friendliness."
+- **Tool and Manual**: The project is a tool and its documentation is its manual. No unnecessary preamble or postamble.
 
 ## 1. Imports and Modules
 
@@ -236,15 +255,19 @@ class LayoutConfig:
 
 ## 7. Formatting and Tooling
 
-### 7.1 Ruff Configuration
+### 7.1 Ruff and Sourcery Configuration
 
-- **Line length**: 120 characters (configured in `pyproject.toml`)
-- **Target version**: Python 3.13
-- **Lint rules**: `["E", "F", "I"]` (pycodestyle errors, pyflakes, isort)
-- **Quote style**: Double quotes
-- **Indent style**: Space (4 spaces)
-- **Line ending**: LF
-- **Fixable**: `["ALL"]`
+- **Ruff**:
+  - **Line length**: 120 characters (configured in `pyproject.toml`)
+  - **Target version**: Python 3.13
+  - **Lint rules**: `["E", "F", "I"]` (pycodestyle errors, pyflakes, isort)
+  - **Quote style**: Double quotes
+  - **Indent style**: Space (4 spaces)
+  - **Line ending**: LF
+  - **Fixable**: `["ALL"]`
+- **Sourcery**:
+  - Use Sourcery for advanced refactoring suggestions and complexity reduction.
+  - Prioritize "Boring Code" over clever Sourcery suggestions if the latter increases cognitive load.
 
 ### 7.2 Formatting Rules
 
@@ -279,12 +302,12 @@ class LayoutConfig:
 ### 8.3 Text Rendering
 
 - **Rich text formatting**: Use tag-based format (`#b#` bold, `#i#` italic, `#hex#` color).
-- **Wrapping**: Balanced inverted-pyramid wrapping (IPL-B) for centered visual distribution; greedy fallback available.
+- **Wrapping**: Descending Line Balancing wrapping for centered visual distribution; greedy fallback available.
 - **Font loading**: Use `modules/font_cache.py` with `get_font()` — LRU-cached font loading with variable weight axis support; fallback to stroke simulation.
 - **Lazy rendering**: `LazyTranslationImages` implements `Sequence` ABC for deferred image generation.
 - **Text layout module** (`modules/text_layout.py`):
   - `StyledWord`, `Line` — Memory-efficient types with `__slots__`
-  - `balance_lines_pyramid()` — Core IPL-B algorithm (O(K log N log W))
+  - `balance_lines_pyramid()` — Core Descending Line Balancing algorithm (O(K log N log W))
   - `wrap_rich_text_greedy()` — Simple greedy line wrapping
   - `wrap_rich_text_balanced()` — Inverted pyramid balancing
 
@@ -546,14 +569,24 @@ QuranMediaLibError (Exception)
 ---
 
 ## 15. Environment
- 
+
 The agent is operating in a Windows environment using PowerShell 7 (`pwsh`) as the primary shell. `sqlite3` is available in the system `PATH`.
- 
+
 ---
- 
+
 ## 16. Development Commands
 
-All development commands use `uv` for consistency:
+All development commands use `uv` for consistency.
+
+### 16.1 Project Management
+
+- **Add dependency**: `uv add <package>`
+- **Sync environment**: `uv sync`
+- **Re-lock dependencies**: `uv lock` (after manual `pyproject.toml` edits)
+- **Manage Python versions**: `uv python install <version>` or `uv python pin <version>`
+- **Run ephemeral tools**: `uvx <tool>`
+
+### 16.2 Common Commands
 
 ```bash
 # Run all tests
@@ -590,7 +623,7 @@ uv run tests/modules/test_framer.py
 
 ## 17. Testing Conventions
 
-### 16.1 Test Structure
+### 17.1 Test Structure
 
 - Tests live under `tests/` directory, mirroring source structure:
   - `tests/modules/` — Core module tests
@@ -600,7 +633,7 @@ uv run tests/modules/test_framer.py
 - Test files use `test_*.py` naming.
 - Each test module can run standalone with `uv run tests/modules/test_*.py`.
 
-### 16.2 Test Patterns
+### 17.2 Test Patterns
 
 - Use descriptive test names (`test_color`, `test_glow`, `test_framer`).
 - Use `assert` statements for programmatic verification.
@@ -610,13 +643,13 @@ uv run tests/modules/test_framer.py
 - Use `pytest.mark.parametrize` for data-driven tests.
 - Use `@pytest.mark.benchmark` for performance tests (skipped by default).
 
-### 16.3 Database in Tests
+### 17.3 Database in Tests
 
 - `DatabaseManager` is a singleton; tests share the same instance.
 - Tests rarely call `db.close()` explicitly (rely on process exit).
 - For stress tests, measure performance with `time.perf_counter()`.
 
-### 16.4 Test Organization
+### 17.4 Test Organization
 
 ```python
 def test_feature() -> None:
@@ -724,3 +757,47 @@ def test_feature() -> None:
 - Skip docstrings on private helpers — all functions should be documented.
 - Hardcode magic numbers — use constants or configuration objects.
 - Use `List`/`Dict` from `typing` — use built-in generics (Python 3.13).
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **quranmedialib** (1732 symbols, 2937 relationships, 117 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/quranmedialib/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/quranmedialib/clusters` | All functional areas |
+| `gitnexus://repo/quranmedialib/processes` | All execution flows |
+| `gitnexus://repo/quranmedialib/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->

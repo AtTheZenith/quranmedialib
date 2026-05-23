@@ -8,7 +8,6 @@ This module contains tests for verifying image processing functions including:
 """
 
 import os
-import statistics
 
 import pytest
 from PIL import Image, ImageDraw
@@ -40,7 +39,7 @@ def _create_default_word_config() -> WordConfig:
 
 def _analyze_image_brightness(filepath: str) -> dict[str, float]:
     """Calculate comprehensive brightness statistics of an image.
- 
+
     Returns a dict with mean, median, q1, q3, iqr, p10, p90, min, max, range, stdev.
     """
     img = Image.open(filepath).convert("L")  # Convert to grayscale
@@ -48,18 +47,18 @@ def _analyze_image_brightness(filepath: str) -> dict[str, float]:
     n = sum(hist)
     if n == 0:
         return {k: 0.0 for k in ["mean", "median", "q1", "q3", "iqr", "p10", "p90", "min", "max", "range", "stdev"]}
- 
+
     # 1. Mean and Variance for Stdev
     sum_vals = 0
     sum_sq_vals = 0
     for i, count in enumerate(hist):
         sum_vals += i * count
         sum_sq_vals += (i * i) * count
- 
+
     mean_brightness = sum_vals / n
-    variance = (sum_sq_vals / n) - (mean_brightness ** 2)
-    stdev_brightness = variance ** 0.5 if variance > 0 else 0.0
- 
+    variance = (sum_sq_vals / n) - (mean_brightness**2)
+    stdev_brightness = variance**0.5 if variance > 0 else 0.0
+
     # 2. Percentiles using cumulative distribution
     def get_percentile(p: float) -> int:
         target = p * n
@@ -69,17 +68,17 @@ def _analyze_image_brightness(filepath: str) -> dict[str, float]:
             if cumulative >= target:
                 return i
         return 255
- 
+
     median_brightness = get_percentile(0.5)
     q1_brightness = get_percentile(0.25)
     q3_brightness = get_percentile(0.75)
     p10_brightness = get_percentile(0.1)
     p90_brightness = get_percentile(0.9)
- 
+
     # 3. Min, max, range
     min_brightness = next((i for i, count in enumerate(hist) if count > 0), 0)
     max_brightness = next((i for i in range(255, -1, -1) if hist[i] > 0), 255)
- 
+
     return {
         "mean": mean_brightness,
         "median": float(median_brightness),
@@ -254,24 +253,24 @@ def test_glow_wimage_comparison() -> None:
 
 def test_glow_brightness_analysis() -> None:
     """Analyze and print comprehensive brightness statistics for all glow quality modes.
- 
+
     This test generates the glow images (if not already present) and then analyzes
     their brightness using multiple statistical measures: mean, median, quartiles
     (Q1, Q3), IQR, percentiles (P10, P90), and standard deviation.
- 
+
     This helps verify that the three quality modes have comparable brightness levels.
     """
     print("\n=== Glow Brightness Analysis ===\n")
- 
+
     output_dir = "./output/test/image"
-    
+
     # Avoid redundant generation: check if at least one required image exists
     # If not, run the generation tests.
     if not os.path.exists(os.path.join(output_dir, "glowed_rgba_fast.png")):
         test_glow_quality_modes()
         test_glow_on_padded_wimage()
         test_glow_wimage_comparison()
- 
+
     # Analyze RGBA glow images
 
     # Analyze RGBA glow images
@@ -500,6 +499,6 @@ def test_glow_quality_modes_benchmark(request: pytest.FixtureRequest) -> None:
     parts = [f"{mode}={timings[mode]:.1f}ms" for mode in modes]
     request.node.benchmark_data = parts
 
-    print(f"\nGlow Benchmark (500x500, 10 iterations):")
+    print("\nGlow Benchmark (500x500, 10 iterations):")
     for mode in modes:
         print(f"  {mode}: {timings[mode]:.1f}ms")

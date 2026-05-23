@@ -12,8 +12,8 @@ from typing import Iterator
 
 from PIL import Image
 
-from quranmedialib.exceptions import ValidationError, WorkflowError
 from quranmedialib.database_manager import DatabaseManager
+from quranmedialib.exceptions import WorkflowError
 from quranmedialib.workflows.verse_range import VerseRangeWorkflow
 
 # Logger setup
@@ -57,8 +57,7 @@ class SurahWorkflow(VerseRangeWorkflow):
 
         # Warn about unrecognized kwargs to catch typos early
         known_kwargs = {"annotate", "separate_translations", "parallel", "output_dir", "filename_prefix"}
-        unrecognized = set(kwargs.keys()) - known_kwargs
-        if unrecognized:
+        if unrecognized := set(kwargs.keys()) - known_kwargs:
             warnings.warn(
                 f"Unknown kwargs ignored by SurahWorkflow.get_iterator: {unrecognized}",
                 UserWarning,

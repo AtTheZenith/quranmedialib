@@ -13,40 +13,30 @@ structures used throughout the library. It includes:
 
 from __future__ import annotations
 
-import bisect
 import os
 import os.path
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, NamedTuple
+from typing import Annotated, Final, NamedTuple
 
-from PIL import Image, ImageFont
+from PIL import Image
 
-from quranmedialib.exceptions import ResourceError, ValidationError
+from quranmedialib.exceptions import (
+    ResourceError,
+    ValidationError,
+)
 from quranmedialib.resources import get_font_path
 
-# === Exceptions ===
-
-
-class QuranMediaLibError(Exception):
-    """Base class for all QuranMediaLib exceptions."""
-
-
-class LayoutError(QuranMediaLibError):
-    """Raised when rendering dimensions or layouts are invalid."""
-
-
-class DatabaseError(QuranMediaLibError):
-    """Raised when database operations fail or schema is invalid."""
-
-
-class ResourceError(QuranMediaLibError):
-    """Raised when external assets (fonts, DBs) cannot be loaded."""
+# === Path Security ===
 
 
 # Maximum font size limit to prevent decompression bomb attacks and excessive memory usage
-MAX_FONT_SIZE = 2000
+MAX_FONT_SIZE: Final = 2000
+# Maximum allowed canvas dimension to prevent OOM via extremely large images
+MAX_CANVAS_DIMENSION: Final = 5000
+# Maximum glow radius for image effects to prevent excessive blurring computation
+MAX_GLOW_RADIUS: Final = 200
 
 # Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
 _working_dir_cache: Path | None = None
@@ -80,14 +70,14 @@ def _ensure_within_working_dir(path: Path) -> None:
         if not str(resolved).startswith(str(working) + os.sep) and str(resolved) != str(working):
             raise ResourceError(f"Path {path!r} (resolved: {resolved!r}) is outside the working directory {working}.")
     except (OSError, ValueError) as e:
-        raise ResourceError(f"Failed to validate path {path}: {e}")
+        raise ResourceError(f"Failed to validate path {path}: {e}") from e
 
 
 # Surah and ayah range constants for runtime validation
-MIN_SURAH = 1
-MAX_SURAH = 114
-MIN_AYAH = 1
-MAX_AYAH = 286
+MIN_SURAH: Final = 1
+MAX_SURAH: Final = 114
+MIN_AYAH: Final = 1
+MAX_AYAH: Final = 286
 
 
 # === Layout Primitives ===
@@ -457,8 +447,14 @@ class LayoutConfig:
         # Validate dimensions
         if self.max_width <= 0:
             raise ValidationError(f"max_width must be positive, got {self.max_width}")
+        if self.max_width > MAX_CANVAS_DIMENSION:
+            raise ValidationError(f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}")
         if self.image_height <= 0:
             raise ValidationError(f"image_height must be positive, got {self.image_height}")
+        if self.image_height > MAX_CANVAS_DIMENSION:
+            raise ValidationError(
+                f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}"
+            )
 
         if self.content_width <= 0:
             raise ValidationError(
@@ -564,9 +560,7 @@ class TextConfig:
         def _resolve_path(path: Path | str | FontResource | None, default_filename: str) -> Path:
             if path is None:
                 return get_font_path(default_filename)
-            if isinstance(path, FontResource):
-                return path.path
-            return Path(path)
+            return path.path if isinstance(path, FontResource) else Path(path)
 
         # Coerce alignment
         if isinstance(self.alignment, str):
@@ -579,8 +573,20 @@ class TextConfig:
             raise ValidationError(f"font_size exceeds maximum limit of {MAX_FONT_SIZE}, got {self.font_size}")
 
         # Validate max_width
-        if self.max_width is not None and self.max_width <= 0:
-            raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
+        if self.max_width is not None:
+            if self.max_width <= 0:
+                raise ValidationError(f"max_width must be positive when provided, got {self.max_width}")
+            if self.max_width > MAX_CANVAS_DIMENSION:
+                raise ValidationError(
+                    f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}"
+                )
+
+        # Validate height
+        if self.height is not None:
+            if self.height <= 0:
+                raise ValidationError(f"height must be positive when provided, got {self.height}")
+            if self.height > MAX_CANVAS_DIMENSION:
+                raise ValidationError(f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}")
 
         # Resolve paths
         object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))

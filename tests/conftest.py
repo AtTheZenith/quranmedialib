@@ -56,7 +56,8 @@ def default_padding() -> Padding:
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add command-line options for running benchmarks and heavy tests."""
     parser.addoption(
-        "--benchmark", "--b",
+        "--benchmark",
+        "--b",
         action="store_true",
         default=False,
         help="Run performance benchmarks (skipped by default)",
@@ -71,9 +72,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     If --benchmark is NOT provided:
         - Removes all benchmark tests (those marked with 'benchmark').
     """
-    run_benchmarks = config.getoption("--benchmark")
-
-    if run_benchmarks:
+    if config.getoption("--benchmark"):
         # Exclusive Benchmark Mode: Remove standard tests
         items[:] = [item for item in items if "benchmark" in item.keywords]
     else:
@@ -87,11 +86,7 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
     if report.when == "call":
-        # Any test can attach a list of strings to request.node.benchmark_data
-        # which will be auto-formatted into the PASSED/FAILED line.
-        parts = getattr(item, "benchmark_data", [])
-
-        if parts:
+        if parts := getattr(item, "benchmark_data", []):
             report.duration_str = f" [{report.duration:.2f}s | {', '.join(parts)}]"
         else:
             report.duration_str = f" [{report.duration:.2f}s]"

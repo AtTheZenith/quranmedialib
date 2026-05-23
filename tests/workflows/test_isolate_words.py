@@ -10,7 +10,7 @@ import warnings
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, ValidationError, DatabaseManager
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, ValidationError
 from quranmedialib.workflows.isolate_words import IsolateWordsWorkflow
 
 
@@ -155,4 +155,4 @@ def test_isolate_mismatched_wbw_length() -> None:
             )
         )
         # Should produce results (warning is informational)
-        assert len(results) >= 1
+        assert results

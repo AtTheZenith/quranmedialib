@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, WorkflowError, DatabaseManager
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, WorkflowError
 from quranmedialib.workflows.verse import VerseWorkflow
 
 
@@ -206,6 +206,7 @@ def test_verse_empty_text() -> None:
 def test_base_workflow_none_configs_rejected() -> None:
     """Test that BaseWorkflow raises ValidationError when any config is None."""
     from quranmedialib import ValidationError
+
     layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
 
     with pytest.raises(ValidationError, match="must not be None"):
