@@ -135,3 +135,52 @@ def test_frame_stacking_order():
 
     # Green should be on top
     assert frame.image.getpixel((10, 10)) == (0, 255, 0, 255)
+
+
+def test_frame_layerable_integration(dummy_rgba_image, layout_config, word_config):
+    """Verify that Frame correctly handles Layerable objects (like VImage)."""
+    from quranmedialib.modules.vimage import VImage
+    from quranmedialib.types import VerseConfig
+
+    # Create a simple VImage
+    verse_cfg = VerseConfig(word_spacing=0, row_spacing=0)
+    items = [
+        # 100x40 word
+        # create_dummy_word helper from test_vimage.py isn't here, let's make one
+        # we can't import it because it's not exported.
+        # so we'll just use a WordItem with a manual image.
+        # Using a white 'L' mask to be consistent with vimage rendering
+        # the logic in vimage.layer expects either 'L' or 'RGBA'
+    ]
+    # To avoid importing helpers from other tests, we just define the WordItem manually
+    from PIL import Image
+
+    from quranmedialib.types import WordItem
+
+    word_img = Image.new("L", (100, 40), 255)
+    items = [WordItem(image=word_img, text="Test")]
+
+    # Setup layout
+    layout_cfg = layout_config  # from fixture
+    vimg = VImage(items, verse_cfg, layout_cfg)
+
+    # Frame it
+    config = FrameConfig(
+        max_width=1000,
+        image_height=1000,
+        padding=Padding(0, 0, 0, 0),
+        wimage_horizontal_align=HorizontalAlignment.LEFT,
+        wimage_vertical_align=VerticalAlignment.TOP,
+    )
+    frame = Frame(config)
+
+    # Layer the Layerable (VImage)
+    frame.layer(vimg, word_config=word_config)
+
+    # In VImage.layer:
+    # total_width = 100.
+    # Anchor x=0, y=0.
+    # Word 1: current_x = 0 + 100 = 100.
+    # paste(color, (current_x - w_img.width, ry)) -> (100-100, 0) = (0,0)
+    assert frame.image.getpixel((0, 0)) != (0, 0, 0, 0)
+    assert frame.image.getpixel((99, 0)) != (0, 0, 0, 0)

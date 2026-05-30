@@ -221,7 +221,7 @@ class VImage:
                     for row_items, width, height in current_rows:
                         if count >= keep_count:
                             break
-                        
+
                         take = min(len(row_items), keep_count - count)
                         if take < len(row_items):
                             # This is the truncated row; recalculate width
@@ -229,15 +229,16 @@ class VImage:
                             new_width = (
                                 sum(it.width for it in new_items)
                                 + (len(new_items) - 1) * self.verse_config.word_spacing
-                                if new_items else 0
+                                if new_items
+                                else 0
                             )
                             adjusted_rows.append((new_items, new_width, height))
                         else:
                             # Keep the row as is
                             adjusted_rows.append((row_items, width, height))
-                        
+
                         count += take
-                    
+
                     return adjusted_rows, keep_count
 
         return current_rows, items_consumed
@@ -265,7 +266,7 @@ class VImage:
             return
 
         total_width = max(row[1] for row in rows)
-        
+
         word_spacing = self.verse_config.word_spacing
         row_spacing = self.verse_config.row_spacing
         global_word_color = word_config.word_color
@@ -300,14 +301,10 @@ class VImage:
                     color_to_use = item.color if item.color is not None else global_word_color
 
                     if w_img.mode == "L":
-                        if canvas.mode == "L":
-                            color_to_use = 255
+                        color_to_use = 255 if canvas.mode == "L" else color_to_use
                         canvas.paste(color_to_use, (current_x - w_img.width, ry), mask=w_img)
-                    elif w_img.mode == "RGBA":
-                        if canvas.mode == "RGBA":
-                            canvas.alpha_composite(w_img, dest=(current_x - w_img.width, ry))
-                        else:
-                            canvas.paste(w_img.convert(canvas.mode), (current_x - w_img.width, ry))
+                    elif w_img.mode == "RGBA" and canvas.mode == "RGBA":
+                        canvas.alpha_composite(w_img, dest=(current_x - w_img.width, ry))
                     else:
                         canvas.paste(w_img.convert(canvas.mode), (current_x - w_img.width, ry))
 
@@ -335,7 +332,6 @@ class VImage:
         canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0) if mode == "RGBA" else 0)
         self.layer(canvas, 0, 0, word_config=word_config, rows_to_render=rows)
         return canvas
-
 
     @property
     def width(self) -> int:

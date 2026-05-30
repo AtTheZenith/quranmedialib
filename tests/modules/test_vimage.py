@@ -136,3 +136,48 @@ def test_vimage_render_modes(layout_config, word_config):
     # Test L
     img_l = vimg.render(word_config, mode="L")
     assert img_l.mode == "L"
+
+
+def test_vimage_layer_direct(layout_config, word_config):
+    """Test that .layer() renders correctly onto a provided canvas."""
+    verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
+    items = [create_dummy_word("W1", 50, 40)]
+    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
+    vimg = VImage(items, verse_cfg, narrow_layout)
+
+    # Create a blank canvas
+    canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+
+    # Layer at (10, 10)
+    vimg.layer(canvas, x=10, y=10, word_config=word_config)
+
+    # Since it's RTL, W1 (width 50) will be at x = 10 + 50 = 60.
+    # The pixels for W1 should be in [10, 60)
+    assert canvas.getpixel((11, 11)) != (0, 0, 0, 0)
+    assert canvas.getpixel((59, 11)) != (0, 0, 0, 0)
+    # Outside boundaries
+    assert canvas.getpixel((9, 11)) == (0, 0, 0, 0)
+    assert canvas.getpixel((61, 11)) == (0, 0, 0, 0)
+
+
+def test_vimage_layer_vs_render_equality(layout_config, word_config):
+    """Verify that .layer() produces the same pixels as .render()."""
+    verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
+    items = [
+        create_dummy_word("W1", 50, 40),
+        create_dummy_word("W2", 60, 40),
+    ]
+    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
+    vimg = VImage(items, verse_cfg, narrow_layout)
+
+    # 1. Use the old path: render image then paste it
+    img_rendered = vimg.render(word_config)
+    canvas_old = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    canvas_old.paste(img_rendered, (0, 0))
+
+    # 2. Use the new path: layer directly
+    canvas_new = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+    vimg.layer(canvas_new, x=0, y=0, word_config=word_config)
+
+    # Compare pixels
+    assert list(canvas_old.getdata()) == list(canvas_new.getdata())
