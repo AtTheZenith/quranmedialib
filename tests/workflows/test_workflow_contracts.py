@@ -26,7 +26,6 @@ def test_workflow_inheritance(workflow_class) -> None:
 
 def test_workflow_init_null_configs_rejected(workflow_class) -> None:
     """Verify that all workflows reject None configurations during init."""
-    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     with pytest.raises(ValueError, match="must not be None"):
         workflow_class(None)

@@ -8,7 +8,6 @@ from PIL import Image
 
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import (
     format_isolation_text,
@@ -17,6 +16,7 @@ from quranmedialib.modules.timage import (
     prepare_translation_segments,
 )
 from quranmedialib.modules.verse_number import verse_number
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow

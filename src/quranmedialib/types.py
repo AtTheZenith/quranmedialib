@@ -429,14 +429,21 @@ class FrameConfig:
                 object.__setattr__(self, "padding", Padding())
 
         # Coerce alignments
-        for field_name in ("wimage_horizontal_align", "wimage_vertical_align", "timage_horizontal_align", "timage_vertical_align"):
+        align_fields = (
+            "wimage_horizontal_align",
+            "wimage_vertical_align",
+            "timage_horizontal_align",
+            "timage_vertical_align",
+        )
+        for field_name in align_fields:
             val = getattr(self, field_name)
             if isinstance(val, str):
                 enum_cls = HorizontalAlignment if "horizontal" in field_name else VerticalAlignment
                 try:
                     object.__setattr__(self, field_name, enum_cls(val.lower()))
-                except ValueError:
-                    raise ValidationError(f"Invalid alignment value '{val}' for {field_name}. Must be one of {list(enum_cls)}")
+                except ValueError as e:
+                    msg = f"Invalid alignment value '{val}' for {field_name}. Must be one of {list(enum_cls)}"
+                    raise ValidationError(msg) from e
 
         if self.max_width <= 0:
             raise ValidationError(f"max_width must be positive, got {self.max_width}")
@@ -448,7 +455,7 @@ class FrameConfig:
             raise ValidationError(
                 f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}"
             )
-        
+
         if self.content_width <= 0:
             raise ValidationError(f"content_width must be positive, got {self.content_width}")
 
@@ -619,9 +626,7 @@ class TextConfig:
             if self.height <= 0:
                 raise ValidationError(f"height must be positive when provided, got {self.height}")
             if self.height > MAX_CANVAS_DIMENSION:
-                raise ValidationError(
-                    f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}"
-                )
+                raise ValidationError(f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}")
 
         # Resolve paths
         object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))

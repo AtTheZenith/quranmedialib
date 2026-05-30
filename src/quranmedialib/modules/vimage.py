@@ -9,18 +9,16 @@ from __future__ import annotations
 
 import itertools
 import logging
-from typing import Iterator
 
 from PIL import Image
 
+from quranmedialib.modules.text_layout import balance_lines_pyramid
 from quranmedialib.types import (
-    Color,
     LayoutConfig,
     VerseConfig,
     WordConfig,
     WordItem,
 )
-from quranmedialib.modules.text_layout import balance_lines_pyramid
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +63,7 @@ class VImage:
         # Optional balanced wrapping
         if self.verse_config.balanced_wrapping and len(rows) > 1:
             all_items = list(itertools.chain.from_iterable(r[0] for r in rows))
-            rows = self._balance_rows(
-                all_items, len(rows), self.layout_config.content_width
-            )
+            rows = self._balance_rows(all_items, len(rows), self.layout_config.content_width)
 
         return rows
 
@@ -166,32 +162,28 @@ class VImage:
             return [], 0
 
         # The first row of the chunk might be partially consumed
-        first_row_items = self.rows[row_start_idx][0]
         offset_in_row = start_index - current_pos
         chunk_rows = []
-        
+
         # Extract up to max_rows
         for i in range(row_start_idx, min(row_start_idx + max_rows, len(self.rows))):
             row, width, height = self.rows[i]
             items = row[offset_in_row:] if i == row_start_idx else row
-            
+
             # Recalculate width for sliced first row
             if i == row_start_idx and offset_in_row > 0:
                 width = (
-                    sum(it.width for it in items) + (len(items) - 1) * self.verse_config.word_spacing
-                    if items else 0
+                    sum(it.width for it in items) + (len(items) - 1) * self.verse_config.word_spacing if items else 0
                 )
-            
+
             chunk_rows.append((items, width, height))
-            offset_in_row = 0 # Reset for subsequent rows
+            offset_in_row = 0  # Reset for subsequent rows
 
         items_consumed = sum(len(r[0]) for r in chunk_rows)
 
         # Adjust break backwards to end on a stop sign
         if items_consumed < (len(self.items) - start_index):
-            chunk_rows, items_consumed = self._apply_stop_sign_adjustment(
-                chunk_rows, items_consumed
-            )
+            chunk_rows, items_consumed = self._apply_stop_sign_adjustment(chunk_rows, items_consumed)
 
         return chunk_rows, items_consumed
 
@@ -201,6 +193,15 @@ class VImage:
         items_consumed: int,
     ) -> tuple[list[tuple[list[WordItem], int, int]], int]:
         """Adjusts page breaks backwards to end on a Quranic stop sign."""
+        if not current_rows:
+            return current_rows, items_consumed
+
+        # 1. Check if the current break is already on a stop sign
+        last_row = current_rows[-1][0]
+        if last_row and last_row[-1].text and any(sign in last_row[-1].text for sign in QURANIC_STOP_SIGNS):
+            return current_rows, items_consumed
+
+        # 2. Search backwards for the nearest stop sign
         row_lengths = [len(row) for row in current_rows]
         prefix_sums = [0] + list(itertools.accumulate(row_lengths))
 
@@ -216,7 +217,8 @@ class VImage:
                         new_items = items[: word_index + 1]
                         new_width = (
                             sum(it.width for it in new_items) + (len(new_items) - 1) * self.verse_config.word_spacing
-                            if new_items else 0
+                            if new_items
+                            else 0
                         )
                         adjusted_rows[-1] = (new_items, new_width, height)
                         return adjusted_rows, keep_count
@@ -246,16 +248,19 @@ class VImage:
         total_width = max(row[1] for row in rows)
         total_height = sum(row[2] for row in rows) + (len(rows) - 1) * self.verse_config.row_spacing
 
-        canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0))
+        if mode == "L":
+            canvas = Image.new(mode, (total_width, total_height), color=0)
+        else:
+            canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0))
         draw_y = 0
-        
+
         word_spacing = self.verse_config.word_spacing
         row_spacing = self.verse_config.row_spacing
         global_word_color = word_config.word_color
 
         for row, row_width, max_row_height in rows:
-            current_x = total_width # RTL anchor relative to bounding box
-            
+            current_x = total_width  # RTL anchor relative to bounding box
+
             # Align row within the verse bounding box (centering relative to max row width)
             current_x -= (total_width - row_width) // 2 if total_width > row_width else 0
             # Wait, if it's RTL, it's usually right-aligned.
@@ -316,4 +321,6 @@ class VImage:
     @property
     def height(self) -> int:
         """The total height of the verse including row spacings."""
-        return sum(row[2] for row in self.rows) + (len(self.rows) - 1) * self.verse_config.row_spacing if self.rows else 0
+        if not self.rows:
+            return 0
+        return sum(row[2] for row in self.rows) + (len(self.rows) - 1) * self.verse_config.row_spacing
