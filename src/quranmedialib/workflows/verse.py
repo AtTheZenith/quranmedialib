@@ -14,7 +14,8 @@ from PIL import Image
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import WorkflowError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame
+from quranmedialib.modules.vimage import VImage
+from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
@@ -116,10 +117,33 @@ class VerseWorkflow(BaseWorkflow):
         translation_images = self._prepare_translation_images(translations)
 
         # 6. Render Layout
-        yield frame(
-            words=word_items,
-            translation_images=translation_images,
-            frame_cfg=self.frame_cfg,
-            verse_cfg=self.verse_cfg,
-            word_cfg=self.word_cfg,
-        )
+        vimage = VImage(word_items, self.verse_cfg, self.frame_cfg)
+        pages = []
+        page_index = 0
+        current_index = 0
+        total_items = len(word_items)
+
+        while current_index < total_items:
+            current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
+            frame_obj = Frame(self.frame_cfg)
+            v_img = vimage.render(self.word_cfg, rows_to_render=current_rows)
+            frame_obj.layer(
+                v_img,
+                alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
+                offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
+            )
+
+            if translation_images and page_index < len(translation_images):
+                if t_image := translation_images[page_index]:
+                    frame_obj.layer(
+                        t_image,
+                        alignment=(self.frame_cfg.timage_horizontal_align, self.frame_cfg.timage_vertical_align),
+                        offset=(self.frame_cfg.timage_x_offset, self.frame_cfg.timage_y_offset),
+                        text_color=self.text_cfg.color,
+                    )
+
+            pages.append(frame_obj.render())
+            current_index += items_consumed
+            page_index += 1
+
+        yield pages

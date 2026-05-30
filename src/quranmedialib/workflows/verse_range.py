@@ -23,7 +23,8 @@ from quranmedialib.config import (
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame
+from quranmedialib.modules.vimage import VImage
+from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
@@ -220,18 +221,57 @@ def _render_pages(
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
     if not separate_translations:
-        return list(frame(word_items, trans_images, frame_cfg, verse_cfg, word_cfg, text_color=text_cfg.color))
-    arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
-    # For Arabic-only pages, we still use the main verse_cfg for spacing, 
-    # but maybe update max_rows_per_page in verse_cfg? 
-    # Actually, let's create a modified verse_cfg.
+        vimage = VImage(word_items, verse_cfg, frame_cfg)
+        pages = []
+        page_index = 0
+        current_index = 0
+        total_items = len(word_items)
+
+        while current_index < total_items:
+            current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
+            frame_obj = Frame(frame_cfg)
+            v_img = vimage.render(word_cfg, rows_to_render=current_rows)
+            frame_obj.layer(
+                v_img,
+                alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
+                offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+            )
+
+            if trans_images and page_index < len(trans_images):
+                if t_image := trans_images[page_index]:
+                    frame_obj.layer(
+                        t_image,
+                        alignment=(frame_cfg.timage_horizontal_align, frame_cfg.timage_vertical_align),
+                        offset=(frame_cfg.timage_x_offset, frame_cfg.timage_y_offset),
+                        text_color=text_cfg.color,
+                    )
+
+            pages.append(frame_obj.render())
+            current_index += items_consumed
+            page_index += 1
+        return pages
+
     modified_verse_cfg = dataclasses.replace(verse_cfg, max_rows_per_page=2)
-    pages = list(frame(word_items, None, frame_cfg, modified_verse_cfg, word_cfg))
+    vimage = VImage(word_items, modified_verse_cfg, frame_cfg)
+    pages = []
+    current_index = 0
+    total_items = len(word_items)
+
+    while current_index < total_items:
+        current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
+        frame_obj = Frame(frame_cfg)
+        v_img = vimage.render(word_cfg, rows_to_render=current_rows)
+        frame_obj.layer(
+            v_img,
+            alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
+            offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+        )
+        pages.append(frame_obj.render())
+        current_index += items_consumed
+
     for t_img in trans_images:
         if not t_img:
             continue
-        # Create a page with only the translation image using the Frame composition class.
-        from quranmedialib.modules.frame import Frame
         frame_obj = Frame(frame_cfg)
         frame_obj.layer(
             t_img,
