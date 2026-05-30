@@ -53,7 +53,6 @@ def test_preset_story_1080p_max_rows() -> None:
     )
 
 
-
 def test_preset_square_1080p_font_sizes() -> None:
     """Test that SQUARE_PRESET translation font sizes scale across resolutions."""
     font_sizes = []

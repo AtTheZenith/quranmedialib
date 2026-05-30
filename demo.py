@@ -26,11 +26,11 @@ from quranmedialib import (
     WordItem,
 )
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 
@@ -130,11 +130,12 @@ def create_square_demo(
 
     # 3. Frame
     all_items = [WordItem(img, text) for img, text in zip(all_word_images, all_words_text)]
-    
+
     # Use a default VerseConfig since one isn't provided in the demo
     from quranmedialib.types import VerseConfig
+
     verse_cfg = VerseConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5)
-    
+
     vimage = VImage(all_items, verse_cfg, layout_config)
     pages = []
     page_index = 0
@@ -162,7 +163,7 @@ def create_square_demo(
         pages.append(frame_obj.render())
         current_index += items_consumed
         page_index += 1
-    
+
     return pages
 
 

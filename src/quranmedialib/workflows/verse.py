@@ -14,10 +14,10 @@ from PIL import Image
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import WorkflowError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow

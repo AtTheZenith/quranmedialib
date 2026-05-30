@@ -23,14 +23,15 @@ from quranmedialib.config import (
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import (
-    LayoutConfig,
+    FrameConfig,
     TextConfig,
+    VerseConfig,
     WordConfig,
     WordItem,
     _ensure_within_working_dir,
@@ -283,7 +284,6 @@ def _render_pages(
     return pages
 
 
-
 def _handle_output(
     pages: list[Image.Image],
     ayah: int,
@@ -360,7 +360,15 @@ def _render_verse_worker(
                 continue
 
             word_items = _generate_word_items(verse_text, ayah, surah, word_cfg, annotate, all_wbw)
-            pages = _render_pages(word_items, verse_translations, frame_cfg, word_cfg, verse_cfg, text_cfg, separate_translations)
+            pages = _render_pages(
+                word_items,
+                verse_translations,
+                frame_cfg,
+                word_cfg,
+                verse_cfg,
+                text_cfg,
+                separate_translations,
+            )
 
             result = _handle_output(pages, ayah, output_dir, filename_prefix, save, use_bytes)
             batch_results.append(result)

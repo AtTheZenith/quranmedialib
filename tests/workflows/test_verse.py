@@ -207,7 +207,5 @@ def test_base_workflow_none_configs_rejected() -> None:
     """Test that BaseWorkflow raises ValidationError when any config is None."""
     from quranmedialib import ValidationError
 
-    preset = LANDSCAPE_PRESET["default"]["1080p"]
-
     with pytest.raises(ValidationError, match="must not be None"):
         VerseWorkflow(None)  # type: ignore

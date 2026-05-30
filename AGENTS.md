@@ -612,6 +612,9 @@ uv run -m ruff check .
 # Format with Ruff
 uv run -m ruff format .
 
+# Refactor with Sourcery
+uvx sourcery review . --disable low-code-quality --disable no-loop-in-tests --disable no-conditionals-in-tests
+
 # Run demo script
 uv run demo.py
 

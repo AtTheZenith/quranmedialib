@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PIL import Image
+
 from quranmedialib.types import (
     Color,
     FrameConfig,
@@ -58,7 +59,7 @@ class Frame:
         else:
             y = (self.config.image_height - image.height) // 2
 
-        dx, dy = offset if offset else (self.config.wimage_x_offset, self.config.wimage_y_offset)
+        dx, dy = offset or (self.config.wimage_x_offset, self.config.wimage_y_offset)
         x += dx
         y += dy
 

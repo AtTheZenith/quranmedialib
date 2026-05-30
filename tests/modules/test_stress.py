@@ -1,7 +1,7 @@
 import gc
 import threading
 
-from quranmedialib import DatabaseManager, VerseWorkflow, WordConfig, LANDSCAPE_PRESET
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, VerseWorkflow
 from quranmedialib.utils.memory import get_current_rss_mb
 from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer
 
