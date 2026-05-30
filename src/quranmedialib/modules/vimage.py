@@ -197,6 +197,53 @@ class VImage:
             return current_rows, items_consumed
 
         # 1. Check if the current break is already on a stop sign
+        last_row_items = current_rows[-1][0]
+        if (
+            last_row_items
+            and last_row_items[-1].text
+            and any(sign in last_row_items[-1].text for sign in QURANIC_STOP_SIGNS)
+        ):
+            return current_rows, items_consumed
+
+        # 2. Search backwards for the nearest stop sign
+        # Use a flat list of items in the current chunk for easier searching
+        flat_items = []
+        for r in current_rows:
+            flat_items.extend(r[0])
+
+        # Search from the end of the chunk backwards
+        for i in range(items_consumed - 1, -1, -1):
+            item = flat_items[i]
+            if item.text and any(sign in item.text for sign in QURANIC_STOP_SIGNS):
+                keep_count = i + 1
+                if keep_count < items_consumed:
+                    # Reconstruct the rows based on the new keep_count
+                    adjusted_rows = []
+                    count = 0
+                    for row_items, width, height in current_rows:
+                        if count >= keep_count:
+                            break
+
+                        # How many items from this row to keep?
+                        remaining = keep_count - count
+                        take = min(len(row_items), remaining)
+
+                        # Recalculate width for the (possibly) truncated row
+                        new_items = row_items[:take]
+                        new_width = (
+                            sum(it.width for it in new_items) + (len(new_items) - 1) * self.verse_config.word_spacing
+                            if new_items
+                            else 0
+                        )
+
+                        adjusted_rows.append((new_items, new_width, height))
+                        count += take
+
+                    return adjusted_rows, keep_count
+
+        return current_rows, items_consumed
+
+        # 1. Check if the current break is already on a stop sign
         last_row = current_rows[-1][0]
         if last_row and last_row[-1].text and any(sign in last_row[-1].text for sign in QURANIC_STOP_SIGNS):
             return current_rows, items_consumed
@@ -204,6 +251,7 @@ class VImage:
         # 2. Search backwards for the nearest stop sign
         row_lengths = [len(row) for row in current_rows]
         prefix_sums = [0] + list(itertools.accumulate(row_lengths))
+        print(f"DEBUG: Stop sign adjustment: items_consumed={items_consumed}, prefix_sums={prefix_sums}")
 
         for row_index in range(len(current_rows) - 1, -1, -1):
             row = current_rows[row_index][0]
@@ -211,6 +259,7 @@ class VImage:
                 item = row[word_index]
                 if item.text and any(sign in item.text for sign in QURANIC_STOP_SIGNS):
                     keep_count = prefix_sums[row_index] + word_index + 1
+                    print(f"DEBUG: Found stop sign at row {row_index} word {word_index}, keep_count={keep_count}")
                     if keep_count < items_consumed:
                         adjusted_rows = current_rows[: row_index + 1]
                         items, _, height = adjusted_rows[-1]
@@ -221,6 +270,7 @@ class VImage:
                             else 0
                         )
                         adjusted_rows[-1] = (new_items, new_width, height)
+                        print(f"DEBUG: Adjusting break to keep_count={keep_count}")
                         return adjusted_rows, keep_count
 
         return current_rows, items_consumed
