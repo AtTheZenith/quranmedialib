@@ -81,21 +81,20 @@ MAX_AYAH: Final = 286
 
 
 # === Layout Primitives ===
- 
- 
+
+
 @runtime_checkable
 class Layerable(Protocol):
     """Interface for objects that can render themselves directly onto a provided canvas.
-    
-    Implemented by classes that manage their own internal coordinates (like VImage) 
+
+    Implemented by classes that manage their own internal coordinates (like VImage)
     to avoid intermediate canvas allocations.
     """
-    def layer(self, canvas: Image.Image, x: int, y: int, **kwargs) -> None:
-        ...
+
+    def layer(self, canvas: Image.Image, x: int, y: int, **kwargs) -> None: ...
 
 
 class Padding(NamedTuple):
-
     """Container for 4-directional padding values (top, bottom, left, right)."""
 
     top: int = 0

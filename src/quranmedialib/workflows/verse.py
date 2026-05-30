@@ -126,7 +126,7 @@ class VerseWorkflow(BaseWorkflow):
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
             frame_obj = Frame(self.frame_cfg)
-            
+
             # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
             frame_obj.layer(
                 vimage,
@@ -148,6 +148,5 @@ class VerseWorkflow(BaseWorkflow):
             pages.append(frame_obj.render())
             current_index += items_consumed
             page_index += 1
-
 
         yield pages
