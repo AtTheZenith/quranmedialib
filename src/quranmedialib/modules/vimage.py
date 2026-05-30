@@ -206,118 +206,75 @@ class VImage:
             return current_rows, items_consumed
 
         # 2. Search backwards for the nearest stop sign
-        # Use a flat list of items in the current chunk for easier searching
         flat_items = []
         for r in current_rows:
             flat_items.extend(r[0])
 
-        # Search from the end of the chunk backwards
         for i in range(items_consumed - 1, -1, -1):
             item = flat_items[i]
             if item.text and any(sign in item.text for sign in QURANIC_STOP_SIGNS):
                 keep_count = i + 1
                 if keep_count < items_consumed:
-                    # Reconstruct the rows based on the new keep_count
+                    # Reconstruct the rows efficiently
                     adjusted_rows = []
                     count = 0
                     for row_items, width, height in current_rows:
                         if count >= keep_count:
                             break
-
-                        # How many items from this row to keep?
-                        remaining = keep_count - count
-                        take = min(len(row_items), remaining)
-
-                        # Recalculate width for the (possibly) truncated row
-                        new_items = row_items[:take]
-                        new_width = (
-                            sum(it.width for it in new_items) + (len(new_items) - 1) * self.verse_config.word_spacing
-                            if new_items
-                            else 0
-                        )
-
-                        adjusted_rows.append((new_items, new_width, height))
+                        
+                        take = min(len(row_items), keep_count - count)
+                        if take < len(row_items):
+                            # This is the truncated row; recalculate width
+                            new_items = row_items[:take]
+                            new_width = (
+                                sum(it.width for it in new_items)
+                                + (len(new_items) - 1) * self.verse_config.word_spacing
+                                if new_items else 0
+                            )
+                            adjusted_rows.append((new_items, new_width, height))
+                        else:
+                            # Keep the row as is
+                            adjusted_rows.append((row_items, width, height))
+                        
                         count += take
-
+                    
                     return adjusted_rows, keep_count
 
         return current_rows, items_consumed
 
-        # 1. Check if the current break is already on a stop sign
-        last_row = current_rows[-1][0]
-        if last_row and last_row[-1].text and any(sign in last_row[-1].text for sign in QURANIC_STOP_SIGNS):
-            return current_rows, items_consumed
-
-        # 2. Search backwards for the nearest stop sign
-        row_lengths = [len(row) for row in current_rows]
-        prefix_sums = [0] + list(itertools.accumulate(row_lengths))
-        print(f"DEBUG: Stop sign adjustment: items_consumed={items_consumed}, prefix_sums={prefix_sums}")
-
-        for row_index in range(len(current_rows) - 1, -1, -1):
-            row = current_rows[row_index][0]
-            for word_index in range(len(row) - 1, -1, -1):
-                item = row[word_index]
-                if item.text and any(sign in item.text for sign in QURANIC_STOP_SIGNS):
-                    keep_count = prefix_sums[row_index] + word_index + 1
-                    print(f"DEBUG: Found stop sign at row {row_index} word {word_index}, keep_count={keep_count}")
-                    if keep_count < items_consumed:
-                        adjusted_rows = current_rows[: row_index + 1]
-                        items, _, height = adjusted_rows[-1]
-                        new_items = items[: word_index + 1]
-                        new_width = (
-                            sum(it.width for it in new_items) + (len(new_items) - 1) * self.verse_config.word_spacing
-                            if new_items
-                            else 0
-                        )
-                        adjusted_rows[-1] = (new_items, new_width, height)
-                        print(f"DEBUG: Adjusting break to keep_count={keep_count}")
-                        return adjusted_rows, keep_count
-
-        return current_rows, items_consumed
-
-    def render(
+    def layer(
         self,
+        canvas: Image.Image,
+        x: int,
+        y: int,
         word_config: WordConfig,
         rows_to_render: list[tuple[list[WordItem], int, int]] | None = None,
-        mode: str = "RGBA",
-    ) -> Image.Image:
-        """Renders the verse (or a subset of rows) into an image.
+        **kwargs,
+    ) -> None:
+        """Renders the verse (or a subset of rows) directly onto the provided canvas.
 
         Args:
+            canvas: The destination image to draw on.
+            x: The anchor X coordinate (left edge of the bounding box).
+            y: The anchor Y coordinate (top edge of the bounding box).
             word_config: Rendering rules for words.
             rows_to_render: Specific rows to render. If None, renders all self.rows.
-            mode: PIL image mode ('RGBA' or 'L' for mask).
-
-        Returns:
-            A rendered PIL Image.
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
-            return Image.new(mode, (0, 0), color=(0, 0, 0, 0))
+            return
 
         total_width = max(row[1] for row in rows)
-        total_height = sum(row[2] for row in rows) + (len(rows) - 1) * self.verse_config.row_spacing
-
-        if mode == "L":
-            canvas = Image.new(mode, (total_width, total_height), color=0)
-        else:
-            canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0))
-        draw_y = 0
-
+        
         word_spacing = self.verse_config.word_spacing
         row_spacing = self.verse_config.row_spacing
         global_word_color = word_config.word_color
+        draw_y = y
 
         for row, row_width, max_row_height in rows:
-            current_x = total_width  # RTL anchor relative to bounding box
-
-            # Align row within the verse bounding box (centering relative to max row width)
-            current_x -= (total_width - row_width) // 2 if total_width > row_width else 0
-            # Wait, if it's RTL, it's usually right-aligned.
-            # But for a standalone VImage, we center it if we want it to be the bounding box.
-            # Actually, let's just use right-alignment for now and let the framer handle it.
-            # But the VImage itself should be tight.
-            current_x = total_width
+            # RTL anchor relative to bounding box
+            # Alignment is already handled by 'x' anchor provided by Frame
+            current_x = x + total_width
 
             first_color = row[0].color if row else None
             can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)
@@ -333,12 +290,9 @@ class VImage:
                     rx -= word_spacing
 
                 color_to_use = first_color if first_color is not None else global_word_color
-                # Note: canvas is RGBA, mask is L.
-                # If mode is "L", we just paste the mask.
-                if mode == "L":
-                    canvas.paste(row_mask, (current_x - row_width, draw_y))
-                else:
-                    canvas.paste(color_to_use, (current_x - row_width, draw_y), mask=row_mask)
+                if canvas.mode == "L":
+                    color_to_use = 255
+                canvas.paste(color_to_use, (current_x - row_width, draw_y), mask=row_mask)
             else:
                 for item in row:
                     w_img = item.image
@@ -346,22 +300,42 @@ class VImage:
                     color_to_use = item.color if item.color is not None else global_word_color
 
                     if w_img.mode == "L":
-                        if mode == "L":
-                            canvas.paste(w_img, (current_x - w_img.width, ry))
-                        else:
-                            canvas.paste(color_to_use, (current_x - w_img.width, ry), mask=w_img)
-                    else:
-                        if mode == "RGBA":
+                        if canvas.mode == "L":
+                            color_to_use = 255
+                        canvas.paste(color_to_use, (current_x - w_img.width, ry), mask=w_img)
+                    elif w_img.mode == "RGBA":
+                        if canvas.mode == "RGBA":
                             canvas.alpha_composite(w_img, dest=(current_x - w_img.width, ry))
                         else:
-                            # Fallback for L mode canvas with RGBA images: convert to L
-                            canvas.paste(w_img.convert("L"), (current_x - w_img.width, ry))
+                            canvas.paste(w_img.convert(canvas.mode), (current_x - w_img.width, ry))
+                    else:
+                        canvas.paste(w_img.convert(canvas.mode), (current_x - w_img.width, ry))
 
                     current_x -= w_img.width + word_spacing
 
             draw_y += max_row_height + row_spacing
 
+    def render(
+        self,
+        word_config: WordConfig,
+        rows_to_render: list[tuple[list[WordItem], int, int]] | None = None,
+        mode: str = "RGBA",
+    ) -> Image.Image:
+        """Renders the verse (or a subset of rows) into an image.
+
+        Now implemented as a wrapper around the .layer() method.
+        """
+        rows = rows_to_render if rows_to_render is not None else self.rows
+        if not rows:
+            return Image.new(mode, (0, 0), color=(0, 0, 0, 0))
+
+        total_width = max(row[1] for row in rows)
+        total_height = sum(row[2] for row in rows) + (len(rows) - 1) * self.verse_config.row_spacing
+
+        canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0) if mode == "RGBA" else 0)
+        self.layer(canvas, 0, 0, word_config=word_config, rows_to_render=rows)
         return canvas
+
 
     @property
     def width(self) -> int:

@@ -231,11 +231,13 @@ def _render_pages(
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
             frame_obj = Frame(frame_cfg)
-            v_img = vimage.render(word_cfg, rows_to_render=current_rows)
+            # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
             frame_obj.layer(
-                v_img,
+                vimage,
                 alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
                 offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+                word_config=word_cfg,
+                rows_to_render=current_rows,
             )
 
             if trans_images and page_index < len(trans_images):
@@ -261,11 +263,13 @@ def _render_pages(
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
         frame_obj = Frame(frame_cfg)
-        v_img = vimage.render(word_cfg, rows_to_render=current_rows)
+        # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
         frame_obj.layer(
-            v_img,
+            vimage,
             alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
             offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+            word_config=word_cfg,
+            rows_to_render=current_rows,
         )
         pages.append(frame_obj.render())
         current_index += items_consumed
