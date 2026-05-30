@@ -126,11 +126,14 @@ class VerseWorkflow(BaseWorkflow):
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
             frame_obj = Frame(self.frame_cfg)
-            v_img = vimage.render(self.word_cfg, rows_to_render=current_rows)
+            
+            # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
             frame_obj.layer(
-                v_img,
+                vimage,
                 alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
                 offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
+                word_config=self.word_cfg,
+                rows_to_render=current_rows,
             )
 
             if translation_images and page_index < len(translation_images):
@@ -145,5 +148,6 @@ class VerseWorkflow(BaseWorkflow):
             pages.append(frame_obj.render())
             current_index += items_consumed
             page_index += 1
+
 
         yield pages

@@ -1,0 +1,58 @@
+         271606 function calls (271307 primitive calls) in 1.863 seconds
+
+   Ordered by: cumulative time
+   List reduced from 274 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.187    0.187    1.863    1.863 C:\Users\AtTheZenith\Pictures\quranmedialib\profile_bottleneck.py:8(run_simulated_surah)
+      572    0.010    0.000    1.623    0.003 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\workflows\verse.py:70(get_iterator)
+     1433    0.005    0.000    0.586    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:3072(new)
+     2007    0.571    0.000    0.571    0.000 {built-in method PIL._imaging.fill}
+      286    0.001    0.000    0.534    0.002 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\frame.py:21(__init__)
+      286    0.002    0.000    0.404    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\timage.py:393(__getitem__)
+      286    0.007    0.000    0.402    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\timage.py:85(get_timage)
+      574    0.004    0.000    0.316    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageDraw.py:538(text)
+      574    0.006    0.000    0.309    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageDraw.py:596(draw_text)
+      286    0.005    0.000    0.292    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\verse_number.py:31(verse_number)
+      574    0.001    0.000    0.276    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageFont.py:538(getmask2)
+      574    0.269    0.000    0.274    0.000 {method 'render' of 'Font' objects}
+      286    0.006    0.000    0.193    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\timage.py:255(_parse_rich_text)
+     1144    0.002    0.000    0.180    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageFont.py:302(getlength)
+     1144    0.177    0.000    0.177    0.000 {method 'getlength' of 'Font' objects}
+      858    0.006    0.000    0.175    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:1830(alpha_composite)
+      286    0.006    0.000    0.165    0.001 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\vimage.py:245(render)
+      572    0.004    0.000    0.147    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\frame.py:30(layer)
+     1431    0.006    0.000    0.143    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:1738(paste)
+     1431    0.125    0.000    0.125    0.000 {method 'paste' of 'ImagingCore' objects}
+      860    0.005    0.000    0.092    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\database_manager.py:316(_fetch)
+      858    0.002    0.000    0.089    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:3586(alpha_composite)
+      860    0.003    0.000    0.082    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\database_manager.py:375(_execute_and_profile)
+      858    0.080    0.000    0.080    0.000 {built-in method PIL._imaging.alpha_composite}
+      860    0.070    0.000    0.070    0.000 {method 'execute' of 'sqlite3.Cursor' objects}
+      858    0.002    0.000    0.059    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:1267(crop)
+      858    0.004    0.000    0.051    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:1293(_crop)
+      286    0.002    0.000    0.050    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\database_manager.py:788(get_translation_from_verse)
+      286    0.000    0.000    0.050    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\resources.py:47(get_font_path)
+      286    0.003    0.000    0.049    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\resources.py:20(get_asset_path)
+      572    0.003    0.000    0.049    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\database_manager.py:585(get_wbw_from_verse)
+      286    0.001    0.000    0.047    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageDraw.py:734(textbbox)
+      286    0.001    0.000    0.046    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageText.py:267(get_bbox)
+      288    0.001    0.000    0.046    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\ImageFont.py:381(getbbox)
+      858    0.045    0.000    0.045    0.000 {method 'crop' of 'ImagingCore' objects}
+      288    0.045    0.000    0.045    0.000 {method 'getsize' of 'Font' objects}
+      286    0.001    0.000    0.033    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\workflows\verse.py:39(_prepare_word_images)
+      286    0.000    0.000    0.030    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\annotation.py:226(annotate_words)
+      286    0.002    0.000    0.030    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\src\quranmedialib\modules\annotation.py:302(_annotate_words_internal)
+      574    0.026    0.000    0.026    0.000 {method 'draw_bitmap' of 'ImagingDraw' objects}
+      286    0.000    0.000    0.023    0.000 c:\program files\python313\Lib\importlib\resources\_common.py:33(wrapper)
+      286    0.001    0.000    0.022    0.000 c:\program files\python313\Lib\importlib\resources\_common.py:51(files)
+     2581    0.004    0.000    0.018    0.000 c:\program files\python313\Lib\pathlib\_local.py:227(__str__)
+      286    0.002    0.000    0.018    0.000 c:\program files\python313\Lib\importlib\resources\_common.py:107(from_package)
+     1154    0.003    0.000    0.016    0.000 c:\program files\python313\Lib\pathlib\_local.py:289(drive)
+     3149    0.010    0.000    0.015    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:577(_new)
+     6011    0.007    0.000    0.015    0.000 C:\Users\AtTheZenith\Pictures\quranmedialib\.venv\Lib\site-packages\PIL\Image.py:868(load)
+      286    0.001    0.000    0.014    0.000 c:\program files\python313\Lib\importlib\resources\_adapters.py:28(get_resource_reader)
+      286    0.000    0.000    0.013    0.000 c:\program files\python313\Lib\importlib\resources\_adapters.py:149(_native)
+      286    0.001    0.000    0.013    0.000 c:\program files\python313\Lib\importlib\resources\_adapters.py:144(_reader)
+
+
