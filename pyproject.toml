@@ -1,6 +1,6 @@
 [project]
 name = "quranmedialib"
-version = "2.0.1"
+version = "3.0.0"
 description = "A media generation library for Quranic Arabic text and translations with customizable layouts."
 readme = "README.md"
 requires-python = ">=3.13, <3.14"

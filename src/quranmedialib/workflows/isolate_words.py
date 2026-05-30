@@ -78,7 +78,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             )
 
         # 1. Prepare base images and transparent placeholders
-        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+        word_images = [get_wimage(word, self.word_cfg) for word in verse_words]
 
         if annotate:
             # Standardize: use the plural version which supports batching and caching
@@ -87,7 +87,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 surah=surah,
                 ayah=ayah or 1,
                 start=1,
-                word_config=self.word_config,
+                word_config=self.word_cfg,
                 wbw_translations=wbw_translations,
             )
         else:
@@ -96,7 +96,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
         # 2. Add verse number if provided
         items_text = list(verse_words)
         if ayah is not None:
-            v_img = verse_number(ayah, self.word_config)
+            v_img = verse_number(ayah, self.word_cfg)
             annotated_images.append(v_img)
             items_text.append("")
 
@@ -130,7 +130,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             if i < len(formatted_translations):
                 t_img = get_timage(
                     formatted_translations[i],
-                    self.text_config,
+                    self.text_cfg,
                 )
 
             # Bundle into WordItems for layout
@@ -140,6 +140,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             yield frame(
                 items,
                 translation_images=[t_img] if t_img else None,
-                config=self.layout_config,
-                word_config=self.word_config,
+                frame_cfg=self.frame_cfg,
+                verse_cfg=self.verse_cfg,
+                word_cfg=self.word_cfg,
             )

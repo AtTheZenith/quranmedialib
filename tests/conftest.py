@@ -20,19 +20,19 @@ def database_manager() -> DatabaseManager:
 @pytest.fixture(scope="session")
 def word_config() -> WordConfig:
     """Provide a default WordConfig for testing."""
-    return LANDSCAPE_PRESET["default"]["1080p"][2]
+    return LANDSCAPE_PRESET["default"]["1080p"].word
 
 
 @pytest.fixture(scope="session")
 def layout_config():
     """Provide a default LayoutConfig for testing."""
-    return LANDSCAPE_PRESET["default"]["1080p"][0]
+    return LANDSCAPE_PRESET["default"]["1080p"].frame
 
 
 @pytest.fixture(scope="session")
 def text_config():
     """Provide a default TextConfig for testing."""
-    return LANDSCAPE_PRESET["default"]["1080p"][1]
+    return LANDSCAPE_PRESET["default"]["1080p"].text
 
 
 @pytest.fixture

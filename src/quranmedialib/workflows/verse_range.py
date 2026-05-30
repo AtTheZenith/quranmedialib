@@ -23,7 +23,7 @@ from quranmedialib.config import (
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame, paste_translation_image
+from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.wimage import get_wimage
@@ -131,9 +131,10 @@ class VerseRangeWorkflow(BaseWorkflow):
             worker_fn = functools.partial(
                 _render_verse_worker,
                 surah=surah,
-                layout_cfg=self.layout_config,
-                text_cfg=self.text_config,
-                word_cfg=self.word_config,
+                frame_cfg=self.frame_cfg,
+                text_cfg=self.text_cfg,
+                word_cfg=self.word_cfg,
+                verse_cfg=self.verse_cfg,
                 annotate=annotate,
                 separate_translations=separate_translations,
                 output_dir=output_dir,
@@ -152,9 +153,10 @@ class VerseRangeWorkflow(BaseWorkflow):
             yield from _render_verse_worker(
                 task_list,
                 surah,
-                self.layout_config,
-                self.text_config,
-                self.word_config,
+                self.frame_cfg,
+                self.text_cfg,
+                self.word_cfg,
+                self.verse_cfg,
                 annotate,
                 separate_translations,
                 output_dir,
@@ -208,8 +210,9 @@ def _generate_word_items(
 def _render_pages(
     word_items: list[WordItem],
     verse_translations: list[str],
-    layout_cfg: LayoutConfig,
+    frame_cfg: FrameConfig,
     word_cfg: WordConfig,
+    verse_cfg: VerseConfig,
     text_cfg: TextConfig,
     separate_translations: bool,
 ) -> list[Image.Image]:
@@ -217,16 +220,28 @@ def _render_pages(
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
     if not separate_translations:
-        return list(frame(word_items, trans_images, layout_cfg, word_cfg, text_color=text_cfg.color))
+        return list(frame(word_items, trans_images, frame_cfg, verse_cfg, word_cfg, text_color=text_cfg.color))
     arabic_word_cfg = dataclasses.replace(word_cfg, max_rows_per_page=2)
-    pages = list(frame(word_items, None, layout_cfg, arabic_word_cfg))
+    # For Arabic-only pages, we still use the main verse_cfg for spacing, 
+    # but maybe update max_rows_per_page in verse_cfg? 
+    # Actually, let's create a modified verse_cfg.
+    modified_verse_cfg = dataclasses.replace(verse_cfg, max_rows_per_page=2)
+    pages = list(frame(word_items, None, frame_cfg, modified_verse_cfg, word_cfg))
     for t_img in trans_images:
         if not t_img:
             continue
-        canvas = Image.new("RGBA", (layout_cfg.max_width, layout_cfg.image_height), (0, 0, 0, 0))
-        paste_translation_image(canvas, t_img, layout_cfg, text_color=text_cfg.color)
-        pages.append(canvas)
+        # Create a page with only the translation image using the Frame composition class.
+        from quranmedialib.modules.frame import Frame
+        frame_obj = Frame(frame_cfg)
+        frame_obj.layer(
+            t_img,
+            alignment=(frame_cfg.timage_horizontal_align, frame_cfg.timage_vertical_align),
+            offset=(frame_cfg.timage_x_offset, frame_cfg.timage_y_offset),
+            text_color=text_cfg.color,
+        )
+        pages.append(frame_obj.render())
     return pages
+
 
 
 def _handle_output(
@@ -254,9 +269,10 @@ def _handle_output(
 def _render_verse_worker(
     verse_data: list[tuple[int, list[str]]],
     surah: int,
-    layout_cfg: LayoutConfig,
+    frame_cfg: FrameConfig,
     text_cfg: TextConfig,
     word_cfg: WordConfig,
+    verse_cfg: VerseConfig,
     annotate: bool,
     separate_translations: bool,
     output_dir: str | None,
@@ -304,7 +320,7 @@ def _render_verse_worker(
                 continue
 
             word_items = _generate_word_items(verse_text, ayah, surah, word_cfg, annotate, all_wbw)
-            pages = _render_pages(word_items, verse_translations, layout_cfg, word_cfg, text_cfg, separate_translations)
+            pages = _render_pages(word_items, verse_translations, frame_cfg, word_cfg, verse_cfg, text_cfg, separate_translations)
 
             result = _handle_output(pages, ayah, output_dir, filename_prefix, save, use_bytes)
             batch_results.append(result)

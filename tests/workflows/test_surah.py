@@ -24,10 +24,10 @@ def run_test_scenario(surah_num: int, separate_translations: bool, folder_name: 
     # Verify Surah exists
     arabic_verses = db.get_verses_from_surah(surah_num)
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah_num} ({len(arabic_verses)} verses)...")
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    workflow = SurahWorkflow(preset)
 
     # Save results
     output_dir = os.path.join("output/test/surah", folder_name)
@@ -90,8 +90,8 @@ if __name__ == "__main__":
 
 def test_surah_invalid_surah_number() -> None:
     """Test that SurahWorkflow raises error for invalid surah numbers (0 and 115)."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(preset)
 
     for invalid_surah in [0, 115]:
         with pytest.raises(ValueError, match=f"Surah must be between 1 and 114, got {invalid_surah}"):
@@ -100,8 +100,8 @@ def test_surah_invalid_surah_number() -> None:
 
 def test_surah_no_verses_found() -> None:
     """Test that SurahWorkflow raises ValueError for surah outside valid range."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(preset)
 
     # Surah 0 is out of valid range — caught by surah validation before DB lookup
     with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
@@ -110,8 +110,8 @@ def test_surah_no_verses_found() -> None:
 
 def test_surah_empty_translations() -> None:
     """Test that SurahWorkflow works with empty translations for a short surah (surah 108)."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(preset)
 
     # Surah 108 (Al-Kawthar) has 3 verses
     db = DatabaseManager()
@@ -129,8 +129,8 @@ def test_surah_empty_translations() -> None:
 
 def test_surah_invalid_surah_range() -> None:
     """Test that SurahWorkflow raises ValueError for surah outside 1-114."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(preset)
 
     with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
         list(workflow.get_iterator(surah=0))
@@ -141,8 +141,8 @@ def test_surah_invalid_surah_range() -> None:
 
 def test_surah_unrecognized_kwargs_warns() -> None:
     """Test that SurahWorkflow warns on unrecognized kwargs."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(preset)
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -162,8 +162,8 @@ def test_full_surah_fatiha_benchmark() -> None:
     Note: We set a generous 10s limit to avoid false positives on very weak systems,
     but real-world expectation is < 1s.
     """
-    layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = SurahWorkflow(layout, text, word)
+    layout = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = SurahWorkflow(layout)
 
     start_time = time.perf_counter()
     # Execute full surah processing
@@ -185,8 +185,8 @@ def test_high_res_render_performance_ratio(request: pytest.FixtureRequest) -> No
     """
 
     def run_benchmark(res):
-        layout, text, word = LANDSCAPE_PRESET["default"][res]
-        workflow = SurahWorkflow(layout, text, word)
+        layout = LANDSCAPE_PRESET["default"][res]
+        workflow = SurahWorkflow(layout)
         start = time.perf_counter()
         list(workflow.get_iterator(surah=108))  # Al-Kawthar (3 verses)
         return time.perf_counter() - start
