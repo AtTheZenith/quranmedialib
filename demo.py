@@ -26,7 +26,8 @@ from quranmedialib import (
     WordItem,
 )
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame
+from quranmedialib.modules.vimage import VImage
+from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.image import glow
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.verse_number import verse_number
@@ -129,13 +130,40 @@ def create_square_demo(
 
     # 3. Frame
     all_items = [WordItem(img, text) for img, text in zip(all_word_images, all_words_text)]
+    
+    # Use a default VerseConfig since one isn't provided in the demo
+    from quranmedialib.types import VerseConfig
+    verse_cfg = VerseConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5)
+    
+    vimage = VImage(all_items, verse_cfg, layout_config)
+    pages = []
+    page_index = 0
+    current_index = 0
+    total_items = len(all_items)
 
-    return frame(
-        all_items,
-        translation_images=[trans_img],
-        config=layout_config,
-        word_config=word_config,
-    )
+    while current_index < total_items:
+        current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
+        frame_obj = Frame(layout_config)
+        v_img = vimage.render(word_config, rows_to_render=current_rows)
+        frame_obj.layer(
+            v_img,
+            alignment=(layout_config.wimage_horizontal_align, layout_config.wimage_vertical_align),
+            offset=(layout_config.wimage_x_offset, layout_config.wimage_y_offset),
+        )
+
+        if page_index < 1:
+            frame_obj.layer(
+                trans_img,
+                alignment=(layout_config.timage_horizontal_align, layout_config.timage_vertical_align),
+                offset=(layout_config.timage_x_offset, layout_config.timage_y_offset),
+                text_color=(255, 255, 255, 255),
+            )
+
+        pages.append(frame_obj.render())
+        current_index += items_consumed
+        page_index += 1
+    
+    return pages
 
 
 def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
