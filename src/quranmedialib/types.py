@@ -6,7 +6,7 @@ structures used throughout the library. It includes:
 - FontResource: Reference to a font file with metadata
 - DatabaseConfig: Configuration for verse-by-verse database tables
 - WbwDatabaseConfig: Extended config for word-by-word databases
-- LayoutConfig, WordConfig, TextConfig: Rendering configuration
+- FrameConfig, WordConfig, TextConfig: Rendering configuration
 - WordItem, StyledWord, Line: Data transmission types
 - Padding, Alignment: Type-safe layout primitives
 """
@@ -395,56 +395,49 @@ class WordItem:
 
 
 @dataclass(frozen=True, slots=True)
-class LayoutConfig:
+class FrameConfig:
     """Stores canvas sizing and top-level layout offsets.
 
     Attributes:
         max_width: Total canvas width in pixels.
         image_height: Total canvas height in pixels.
         padding: Internal canvas margins (top, bottom, left, right).
-        wimage_x_offset: Additional X offset for word images.
-        wimage_y_offset: Additional Y offset for word images.
-        timage_x_offset: Additional X offset for translation images.
-        timage_y_offset: Additional Y offset for translation images.
-        timage_vertical_align: Vertical alignment for translation text.
-        timage_horizontal_align: Horizontal alignment for translation text.
-        wimage_vertical_align: Vertical alignment for Arabic word block.
-        wimage_horizontal_align: Horizontal alignment for Arabic word block.
+        wimage_horizontal_align: Horizontal anchoring for the content.
+        wimage_vertical_align: Vertical anchoring for the content.
+        wimage_x_offset: Additional X offset for content.
+        wimage_y_offset: Additional Y offset for content.
     """
 
     max_width: int
     image_height: int
     padding: Padding = field(default_factory=Padding)
+    wimage_horizontal_align: HorizontalAlignment = HorizontalAlignment.CENTER
+    wimage_vertical_align: VerticalAlignment = VerticalAlignment.CENTER
     wimage_x_offset: int = 0
     wimage_y_offset: int = 0
+    timage_horizontal_align: HorizontalAlignment = HorizontalAlignment.CENTER
+    timage_vertical_align: VerticalAlignment = VerticalAlignment.CENTER
     timage_x_offset: int = 0
     timage_y_offset: int = 0
-    timage_vertical_align: VerticalAlignment | str = VerticalAlignment.CENTER
-    timage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
-    wimage_vertical_align: VerticalAlignment | str = VerticalAlignment.CENTER
-    wimage_horizontal_align: HorizontalAlignment | str = HorizontalAlignment.CENTER
 
     def __post_init__(self):
-        """Ensure string literals are converted to Enums, validate dimensions."""
-        if isinstance(self.timage_vertical_align, str):
-            object.__setattr__(self, "timage_vertical_align", VerticalAlignment(self.timage_vertical_align.lower()))
-        if isinstance(self.timage_horizontal_align, str):
-            object.__setattr__(
-                self, "timage_horizontal_align", HorizontalAlignment(self.timage_horizontal_align.lower())
-            )
-        if isinstance(self.wimage_vertical_align, str):
-            object.__setattr__(self, "wimage_vertical_align", VerticalAlignment(self.wimage_vertical_align.lower()))
-        if isinstance(self.wimage_horizontal_align, str):
-            object.__setattr__(
-                self, "wimage_horizontal_align", HorizontalAlignment(self.wimage_horizontal_align.lower())
-            )
+        """Validate dimensions, coerce padding and alignments."""
         if not isinstance(self.padding, Padding):
             try:
                 object.__setattr__(self, "padding", Padding(*self.padding))
             except (TypeError, ValueError):
                 object.__setattr__(self, "padding", Padding())
 
-        # Validate dimensions
+        # Coerce alignments
+        for field_name in ("wimage_horizontal_align", "wimage_vertical_align", "timage_horizontal_align", "timage_vertical_align"):
+            val = getattr(self, field_name)
+            if isinstance(val, str):
+                enum_cls = HorizontalAlignment if "horizontal" in field_name else VerticalAlignment
+                try:
+                    object.__setattr__(self, field_name, enum_cls(val.lower()))
+                except ValueError:
+                    raise ValidationError(f"Invalid alignment value '{val}' for {field_name}. Must be one of {list(enum_cls)}")
+
         if self.max_width <= 0:
             raise ValidationError(f"max_width must be positive, got {self.max_width}")
         if self.max_width > MAX_CANVAS_DIMENSION:
@@ -455,12 +448,9 @@ class LayoutConfig:
             raise ValidationError(
                 f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}"
             )
-
+        
         if self.content_width <= 0:
-            raise ValidationError(
-                f"LayoutConfig content_width must be positive, got {self.content_width}. "
-                f"(max_width={self.max_width}, padding.left={self.padding.left}, padding.right={self.padding.right})"
-            )
+            raise ValidationError(f"content_width must be positive, got {self.content_width}")
 
     @property
     def content_width(self) -> int:
@@ -473,20 +463,66 @@ class LayoutConfig:
         return self.image_height - self.padding.top - self.padding.bottom
 
 
+LayoutConfig = FrameConfig
+
+
+@dataclass(frozen=True, slots=True)
+class VerseConfig:
+    """Configuration for verse-level layout and wrapping.
+
+    Attributes:
+        word_spacing: Horizontal space between words.
+        row_spacing: Vertical space between rows.
+        max_rows_per_page: Maximum number of rows before starting a new page.
+        balanced_wrapping: Whether to use balanced line wrapping.
+    """
+
+    word_spacing: int = 10
+    row_spacing: int = 20
+    max_rows_per_page: int = 5
+    balanced_wrapping: bool = False
+
+    def __post_init__(self):
+        """Validate layout parameters."""
+        if self.word_spacing < 0:
+            raise ValidationError(f"word_spacing cannot be negative, got {self.word_spacing}")
+        if self.row_spacing < 0:
+            raise ValidationError(f"row_spacing cannot be negative, got {self.row_spacing}")
+        if self.max_rows_per_page <= 0:
+            raise ValidationError(f"max_rows_per_page must be positive, got {self.max_rows_per_page}")
+
+
+@dataclass(frozen=True, slots=True)
+class Preset:
+    """Unified configuration preset for rendering.
+
+    Attributes:
+        frame: Canvas and framing configuration.
+        word: Word-level rendering configuration.
+        verse: Verse-level layout configuration.
+        text: Translation text rendering configuration.
+    """
+
+    frame: FrameConfig
+    word: WordConfig
+    verse: VerseConfig
+    text: TextConfig
+
+
 @dataclass(frozen=True, slots=True)
 class WordConfig:
-    """Configuration for word and verse rendering behavior.
+    """Configuration for atomic word rendering behavior.
 
-    Controls font sizes, spacing, colors, and specific verse-number styles.
+    Controls font sizes, colors, and specific verse-number styles.
     """
 
     font_size: FontSize
-    max_rows_per_page: int = 5
-    row_spacing: int = 20
-    word_spacing: int = 10
     word_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(10, 10, 10, 10))
-    verse_v_offset: int = 0
+    word_spacing: int = 10
+    row_spacing: int = 20
+    max_rows_per_page: int = 5
     balanced_wrapping: bool = False
+    verse_v_offset: int = 0
     verse_number_size: int = 110
     verse_number_padding: Padding | tuple[int, int, int, int] = field(default_factory=lambda: Padding(1, 41, 1, 1))
     verse_number_color: Color = (255, 255, 255, 255)
@@ -511,9 +547,6 @@ class WordConfig:
                 raise ValidationError(f"{name} must be positive, got {size}")
             if size > MAX_FONT_SIZE:
                 raise ValidationError(f"{name} exceeds maximum limit of {MAX_FONT_SIZE}, got {size}")
-
-        if self.max_rows_per_page <= 0:
-            raise ValidationError(f"max_rows_per_page must be positive, got {self.max_rows_per_page}")
 
         # Resolve defaults
         if self.font is None:
@@ -586,7 +619,9 @@ class TextConfig:
             if self.height <= 0:
                 raise ValidationError(f"height must be positive when provided, got {self.height}")
             if self.height > MAX_CANVAS_DIMENSION:
-                raise ValidationError(f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}")
+                raise ValidationError(
+                    f"height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.height}"
+                )
 
         # Resolve paths
         object.__setattr__(self, "font_path", _resolve_path(self.font_path, "inter.ttf"))

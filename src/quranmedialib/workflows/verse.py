@@ -45,7 +45,7 @@ class VerseWorkflow(BaseWorkflow):
     ) -> list[Image.Image]:
         """Generates and optionally annotates word images for the verse."""
         # Generate base word images
-        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+        word_images = [get_wimage(word, self.word_cfg) for word in verse_words]
 
         if annotate:
             # annotate_words returns a tuple (images, texts) when texts are provided
@@ -54,7 +54,7 @@ class VerseWorkflow(BaseWorkflow):
                 surah=surah,
                 ayah=ayah,
                 start=1,
-                word_config=self.word_config,
+                word_config=self.word_cfg,
                 texts=verse_words,
             )
         else:
@@ -64,7 +64,7 @@ class VerseWorkflow(BaseWorkflow):
 
     def _prepare_translation_images(self, translations: list[str]) -> LazyTranslationImages:
         """Creates a lazy wrapper that defers get_timage() calls until accessed."""
-        return LazyTranslationImages(translations, self.text_config)
+        return LazyTranslationImages(translations, self.text_cfg)
 
     def get_iterator(
         self,
@@ -104,7 +104,7 @@ class VerseWorkflow(BaseWorkflow):
         annotated_images = self._prepare_word_images(surah, ayah, verse_words, wbw_translations, annotate)
 
         # 3. Add verse number marker
-        vn_image = verse_number(ayah, self.word_config)
+        vn_image = verse_number(ayah, self.word_cfg)
         annotated_images.append(vn_image)
 
         # 4. Prepare WordItems for layout
@@ -119,6 +119,7 @@ class VerseWorkflow(BaseWorkflow):
         yield frame(
             words=word_items,
             translation_images=translation_images,
-            config=self.layout_config,
-            word_config=self.word_config,
+            frame_cfg=self.frame_cfg,
+            verse_cfg=self.verse_cfg,
+            word_cfg=self.word_cfg,
         )

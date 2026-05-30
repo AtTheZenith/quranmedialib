@@ -12,7 +12,7 @@ from dataclasses import replace
 import pytest
 from PIL import Image
 
-from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, LayoutConfig, WordConfig, WordItem
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, FrameConfig, VerseConfig, WordConfig, WordItem, ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.framer import frame
 from quranmedialib.modules.timage import get_timage
@@ -40,16 +40,16 @@ def test_framer(request: pytest.FixtureRequest) -> None:
     split_index = verse_translation[1].find("after them,") + len("after them,") + 1
     verse_translation = [verse_translation[0], verse_translation[1][:split_index], verse_translation[1][split_index:]]
 
-    config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
     print(f"Converting {len(words_text)} words to images...")
-    word_images = [get_wimage(word_text, word_config) for word_text in words_text]
+    word_images = [get_wimage(word_text, preset.word) for word_text in words_text]
 
     print("Annotating words with translations...")
-    word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=word_config)
-    word_wbw_images.append(verse_number(verse, word_config=word_config))
+    word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=preset.word)
+    word_wbw_images.append(verse_number(verse, word_config=preset.word))
 
     # Pre-render translations
-    translation_images = [get_timage(t, config=text_config) for t in verse_translation]
+    translation_images = [get_timage(t, config=preset.text) for t in verse_translation]
 
     # Bundle into WordItems
     items = [WordItem(img, text) for img, text in zip(word_wbw_images[:-1], words_text)]
@@ -59,8 +59,8 @@ def test_framer(request: pytest.FixtureRequest) -> None:
     images = frame(
         items,
         translation_images=translation_images,
-        config=config,
-        word_config=word_config,
+        frame_cfg=preset.frame,
+        verse_cfg=preset.verse,
     )
 
     output_dir = "./output/test/framer"
@@ -81,20 +81,20 @@ def framer_alignment_data():
     verse = 1
     words_text = database_manager.get_verse(surah, verse).split()
     verse_translation = [database_manager.get_translation_from_verse(surah, verse)]
-    config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
-    word_images = [get_wimage(word_text, word_config) for word_text in words_text]
-    word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=word_config)
-    word_wbw_images.append(verse_number(verse, word_config=word_config))
+    word_images = [get_wimage(word_text, preset.word) for word_text in words_text]
+    word_wbw_images = annotate_words(word_images, surah, verse, 1, word_config=preset.word)
+    word_wbw_images.append(verse_number(verse, word_config=preset.word))
 
     items = [WordItem(img, text) for img, text in zip(word_wbw_images, words_text + [str(verse)])]
 
     return {
         "items": items,
         "verse_translation": verse_translation,
-        "config": config,
-        "text_config": text_config,
-        "word_config": word_config,
+        "frame_cfg": preset.frame,
+        "text_cfg": preset.text,
+        "word_cfg": preset.word,
     }
 
 
@@ -104,20 +104,20 @@ def test_framer_alignment(framer_alignment_data, v_align, h_align) -> None:
     """Tests all combinations of vertical and horizontal alignment."""
     data = framer_alignment_data
     items = data["items"]
-    config = data["config"]
-    text_config = data["text_config"]
-    word_config = data["word_config"]
+    frame_cfg = data["frame_cfg"]
+    text_cfg = data["text_cfg"]
+    word_cfg = data["word_cfg"]
     verse_translation = data["verse_translation"]
 
     output_dir = "./output/test/framer"
     os.makedirs(output_dir, exist_ok=True)
 
     # Modify LayoutConfig for alignment and WordConfig for max_rows
-    word_config_dyn = replace(word_config, max_rows_per_page=3)
-    config_dyn = replace(config, wimage_vertical_align=v_align, wimage_horizontal_align=h_align)
+    word_config_dyn = replace(word_cfg, max_rows_per_page=3)
+    frame_cfg_dyn = replace(frame_cfg, wimage_vertical_align=v_align, wimage_horizontal_align=h_align)
 
-    t_imgs_dyn = [get_timage(t, config=text_config) for t in verse_translation]
-    images = frame(items, translation_images=t_imgs_dyn, config=config_dyn, word_config=word_config_dyn)
+    t_imgs_dyn = [get_timage(t, config=text_cfg) for t in verse_translation]
+    images = frame(items, translation_images=t_imgs_dyn, frame_cfg=frame_cfg_dyn, verse_cfg=word_config_dyn)
 
     images[0].save(f"{output_dir}/framer_alignment_{v_align}_{h_align}.png")
 
@@ -128,7 +128,7 @@ def test_framer_offsets() -> None:
     words = [Image.new("RGBA", (50, 50), (255, 0, 0, 255)) for _ in range(3)]
 
     # Config without offsets
-    config_0 = LayoutConfig(
+    config_0 = FrameConfig(
         max_width=500,
         image_height=500,
         padding=(0, 0, 0, 0),
@@ -138,8 +138,10 @@ def test_framer_offsets() -> None:
         wimage_horizontal_align="right",  # align right (start) to make X check easier
     )
 
+
+
     # Config with offsets
-    config_offset = LayoutConfig(
+    config_offset = FrameConfig(
         max_width=500,
         image_height=500,
         padding=(0, 0, 0, 0),
@@ -149,8 +151,7 @@ def test_framer_offsets() -> None:
         wimage_horizontal_align="right",
     )
 
-    word_config = WordConfig(
-        font_size=1,
+    word_config = VerseConfig(
         word_spacing=10,
         row_spacing=10,
         max_rows_per_page=1,
@@ -170,7 +171,7 @@ def test_framer_offsets() -> None:
     t_img = Image.new("RGBA", (100, 50), (0, 255, 0, 255))
 
     # Config with T offset
-    config_t = LayoutConfig(
+    config_t = FrameConfig(
         max_width=500,
         image_height=500,
         padding=(0, 0, 0, 0),
@@ -178,7 +179,7 @@ def test_framer_offsets() -> None:
         timage_y_offset=0,
     )
 
-    pages_t = frame(word_items, translation_images=[t_img], config=config_t, word_config=word_config)
+    pages_t = frame(word_items, translation_images=[t_img], frame_cfg=config_t, verse_cfg=word_config)
     img_t = pages_t[0]
 
     # Check TImage position - scan for green pixels to verify TImage is drawn with offset
@@ -200,7 +201,7 @@ def test_framer_offsets() -> None:
 
 
 def frame_words(words: list, config: object, word_config: object) -> tuple[int, int, int, int] | None:
-    pages_0 = frame(words, config=config, word_config=word_config)
+    pages_0 = frame(words, frame_cfg=config, verse_cfg=word_config)
     img_0 = pages_0[0]
     return img_0.getbbox()
 
@@ -216,29 +217,33 @@ if __name__ == "__main__":
 
 def test_frame_empty_words() -> None:
     """Test that frame returns empty list for empty words."""
-    result = frame([], translation_images=None, config=None, word_config=None)
+    result = frame([], translation_images=None, frame_cfg=None, verse_cfg=None)
     assert result == []
 
 
 def test_frame_none_word_item_image() -> None:
     """Test that frame raises ValueError when WordItem has None image."""
-    word_config = WordConfig(font_size=10)
+    # Use a valid VerseConfig for the test
+    verse_cfg = VerseConfig()
     # Create WordItem with None image
     bad_item = WordItem(None)  # type: ignore
 
+
+
     with pytest.raises(ValueError, match="One or more WordItems are missing their image content"):
-        frame([bad_item], word_config=word_config)
+        frame([bad_item], verse_cfg=verse_cfg)
 
 
 def test_frame_none_config_creates_defaults() -> None:
     """Test that frame works with None config (should create defaults)."""
-    word_config = WordConfig(font_size=10)
+    word_cfg = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = Image.new("RGBA", (50, 50))
     items = [WordItem(dummy_img)]
 
     # Should not raise, creates default config
-    result = frame(items, word_config=word_config)
+    result = frame(items, word_cfg=word_cfg)
     assert len(result) > 0
+
 
 
 def test_frame_invalid_alignment_value() -> None:
@@ -256,13 +261,10 @@ def test_frame_invalid_alignment_value() -> None:
 @pytest.mark.parametrize("negative_strength", [-1.0, -0.5, 0.0])
 def test_frame_negative_word_spacing(negative_strength: float) -> None:
     """Test that frame handles negative word spacing."""
-    word_config = WordConfig(font_size=10, word_spacing=-10)
-    dummy_img = Image.new("RGBA", (50, 50))
-    items = [WordItem(dummy_img), WordItem(dummy_img)]
+    # We expect ValidationError because VerseConfig forbids negative spacing in __post_init__
+    with pytest.raises(ValidationError, match="word_spacing cannot be negative"):
+        VerseConfig(word_spacing=-10)
 
-    # Should handle gracefully (may produce overlapping images)
-    result = frame(items, word_config=word_config)
-    assert len(result) > 0
 
 
 # === Zero Content Width Validation Tests ===
@@ -273,7 +275,7 @@ def test_frame_zero_content_width_raises_error() -> None:
     # content_width = max_width - padding.left - padding.right = 100 - 50 - 50 = 0
     # Validation now happens at config creation, not in frame()
     with pytest.raises(ValueError, match="content_width must be positive"):
-        LayoutConfig(max_width=100, image_height=1080, padding=(50, 50, 50, 50))
+        FrameConfig(max_width=100, image_height=1080, padding=(50, 50, 50, 50))
 
 
 def test_frame_negative_content_width_raises_error() -> None:
@@ -281,4 +283,4 @@ def test_frame_negative_content_width_raises_error() -> None:
     # content_width = max_width - padding.left - padding.right = 50 - 50 - 50 = -50
     # Validation now happens at config creation, not in frame()
     with pytest.raises(ValueError, match="content_width must be positive"):
-        LayoutConfig(max_width=50, image_height=1080, padding=(50, 50, 50, 50))
+        FrameConfig(max_width=50, image_height=1080, padding=(50, 50, 50, 50))

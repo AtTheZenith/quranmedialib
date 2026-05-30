@@ -53,7 +53,7 @@ def test_timage_rendering():
     output_dir = "./output/test/timage"
     os.makedirs(output_dir, exist_ok=True)
 
-    _, text_config, _ = LANDSCAPE_PRESET["default"]["1080p"]
+    text_config = LANDSCAPE_PRESET["default"]["1080p"].text
 
     test_cases = [
         ("plain", "Hello World!"),

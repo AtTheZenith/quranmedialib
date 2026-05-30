@@ -37,11 +37,11 @@ def test_verse(request: pytest.FixtureRequest) -> None:
 
     translations = [db.get_translation_from_verse(surah_number=surah, ayah_number=ayah)]
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah}, Ayah {ayah}...")
 
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    workflow = VerseWorkflow(preset)
 
     # Call get_iterator
     verse_generator = workflow.get_iterator(
@@ -77,12 +77,12 @@ def test_verse_without_annotation() -> None:
 
     translations = [db.get_translation_from_verse(surah_number=surah, ayah_number=ayah)]
 
-    layout_config, text_config = LANDSCAPE_PRESET["default"]["1080p"][:2]
-    word_config = LANDSCAPE_PRESET["arabic"]["1080p"][2]
+    # Combine a default preset with a specific word config for "arabic" mode
+    preset = LANDSCAPE_PRESET["arabic"]["1080p"]
 
     print(f"Processing Surah {surah}, Ayah {ayah} (without annotation)...")
 
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    workflow = VerseWorkflow(preset)
 
     # Call get_iterator without annotation
     verse_generator = workflow.get_iterator(
@@ -119,8 +119,8 @@ if __name__ == "__main__":
 
 def test_verse_invalid_surah() -> None:
     """Test that VerseWorkflow handles invalid surah numbers (empty verses)."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     # Surah 0 doesn't exist, workflow should handle empty verses gracefully
     # Either raise error or return empty results
@@ -141,8 +141,8 @@ def test_verse_invalid_surah() -> None:
 
 def test_verse_invalid_ayah() -> None:
     """Test that VerseWorkflow handles invalid ayah numbers (empty verse)."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     # Ayah 0 doesn't exist, should handle gracefully
     try:
@@ -154,8 +154,8 @@ def test_verse_invalid_ayah() -> None:
 
 def test_verse_empty_translations() -> None:
     """Test that VerseWorkflow handles empty translations list."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     # Empty translations should still work (no translation images)
     results = list(workflow.get_iterator(surah=1, ayah=1, translations=[], annotate=False))
@@ -164,8 +164,8 @@ def test_verse_empty_translations() -> None:
 
 def test_verse_invalid_surah_range() -> None:
     """Test that VerseWorkflow raises ValueError for surah outside 1-114."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     with pytest.raises(ValueError, match="Surah must be between 1 and 114"):
         list(workflow.get_iterator(surah=0, ayah=1, translations=["test"], annotate=False))
@@ -179,8 +179,8 @@ def test_verse_invalid_surah_range() -> None:
 
 def test_verse_invalid_ayah_range() -> None:
     """Test that VerseWorkflow raises ValueError for ayah outside 1-286."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     with pytest.raises(ValueError, match="Ayah must be between 1 and 286"):
         list(workflow.get_iterator(surah=1, ayah=0, translations=["test"], annotate=False))
@@ -194,8 +194,8 @@ def test_verse_invalid_ayah_range() -> None:
 
 def test_verse_empty_text() -> None:
     """Test that VerseWorkflow raises ValueError when DB returns empty verse text."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     # Surah 114 has only 6 verses, so ayah=7 returns empty text
     # (ayah is within 1-286 global range but doesn't exist in this surah)
@@ -207,13 +207,7 @@ def test_base_workflow_none_configs_rejected() -> None:
     """Test that BaseWorkflow raises ValidationError when any config is None."""
     from quranmedialib import ValidationError
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     with pytest.raises(ValidationError, match="must not be None"):
-        VerseWorkflow(None, text_config, word_config)  # type: ignore
-
-    with pytest.raises(ValidationError, match="must not be None"):
-        VerseWorkflow(layout_config, None, word_config)  # type: ignore
-
-    with pytest.raises(ValidationError, match="must not be None"):
-        VerseWorkflow(layout_config, text_config, None)  # type: ignore
+        VerseWorkflow(None)  # type: ignore

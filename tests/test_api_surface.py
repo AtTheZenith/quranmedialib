@@ -33,6 +33,8 @@ def test_api_exports_completeness() -> None:
         # Config classes
         "WordItem",
         "LayoutConfig",
+        "FrameConfig",
+        "VerseConfig",
         "WordConfig",
         "TextConfig",
         "HorizontalAlignment",
@@ -100,17 +102,17 @@ def test_api_workflows_resolvable() -> None:
     """Verify that workflows can be instantiated from the top-level package."""
     from quranmedialib import LANDSCAPE_PRESET, IsolateWordsWorkflow, SurahWorkflow, VerseRangeWorkflow, VerseWorkflow
 
-    layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     # Just check that constructors are reachable and don't fail basic init validation
-    v = VerseWorkflow(layout, text, word)
+    v = VerseWorkflow(preset)
     assert v is not None
 
-    s = SurahWorkflow(layout, text, word)
+    s = SurahWorkflow(preset)
     assert s is not None
 
-    vr = VerseRangeWorkflow(layout, text, word)
+    vr = VerseRangeWorkflow(preset)
     assert vr is not None
 
-    iw = IsolateWordsWorkflow(layout, text, word)
+    iw = IsolateWordsWorkflow(preset)
     assert iw is not None
