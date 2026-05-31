@@ -19,6 +19,17 @@ Each preset supports:
 - **Modes**: `default` (Arabic + Translation), `arabic` (Arabic only), `translation` (Translation only).
 - **Resolutions**: `720p`, `1080p`, `1440p`, `2160p`.
 
+### Dynamic Preset Building
+
+Instead of using pre-defined constants, you can build a preset for a custom resolution:
+
+```python
+from quranmedialib.presets import build_preset
+
+# Build a landscape default preset for 1920x1080
+layout, text_cfg, word_cfg = build_preset("landscape", "default", 1920, 1080)
+```
+
 ---
 
 ## ⚙️ Deep Customization
@@ -30,7 +41,7 @@ If presets aren't enough, you can modify the config objects directly.
 Controls the "frame" of your image.
 
 - `max_width` / `image_height`: Total pixels of the canvas.
-- `padding`: A `Padding` object (top, bottom, left, right).
+- `padding`: A `Padding` object. **Project Standard Order**: `(top, bottom, left, right)`.
 - `timage_vertical_align`: Set to `TOP`, `CENTER`, or `BOTTOM`.
 
 ### 2. WordConfig (Arabic Styling)

@@ -116,15 +116,15 @@ iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=2, translations
   <tbody>
     <tr>
       <td><b>Landscape (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/fd8b0650-9fcd-4c5c-a9ec-569b083302ce" width="600"></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/fd8b0650-9fcd-4c5c-a9ec-569b083302ce" width="600" alt="Landscape 1080p Render Example"></td>
     </tr>
     <tr>
       <td><b>Story (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/d3bb2696-3218-4b4d-8e8a-4302de7cf065" width="250"></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/d3bb2696-3218-4b4d-8e8a-4302de7cf065" width="250" alt="Story 1080p Render Example"></td>
     </tr>
     <tr>
       <td><b>Square (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/a5ca9c28-5751-438f-8abd-609c4fbaabe4" width="400"></td>
+      <td align="center"><img src="https://github.com/user-attachments/assets/a5ca9c28-5751-438f-8abd-609c4fbaabe4" width="400" alt="Square 1080p Render Example"></td>
     </tr>
   </tbody>
 </table>
@@ -137,11 +137,11 @@ iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=2, translations
 
 ```mermaid
 graph TD
-    DB[(SQLite Database)] --> WF[Workflow Orchestrator]
-    WF --> Layout[Layout Engine: Framer]
+    DB[(SQLite Database)] -->     WF[Workflow Orchestrator]
+    WF --> Layout[Layout Engine: VImage]
     Layout --> Pipe[Rendering Pipeline]
     Pipe --> Mask[Mask-First Rendering]
-    Mask --> Comp[Composite/Colorize]
+    Mask --> Comp[Composition: Frame]
     Comp --> Out[Final Image]
     
     subgraph Config

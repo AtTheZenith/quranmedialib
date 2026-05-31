@@ -55,8 +55,16 @@ workflow = VerseRangeWorkflow(layout, text, word)
 
 # Process verses 1-5 of Surah 1
 translations = [["V1 Trans"], ["V2 Trans"], ["V3 Trans"], ["V4 Trans"], ["V5 Trans"]]
-iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=5, translations=translations)
+iterator = workflow.get_iterator(
+    surah=1, 
+    start_ayah=1, 
+    end_ayah=5, 
+    translations=translations,
+    output_dir="output/range_test" # Optional: Save images directly to disk
+)
 ```
+
+**Note**: When `output_dir` is provided, the iterator yields lists of file paths instead of image objects.
 
 ### 4. IsolateWordsWorkflow
 

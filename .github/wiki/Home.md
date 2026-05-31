@@ -23,7 +23,7 @@ Explore our high-level orchestrators in the [Workflows Guide](Workflows.md).
 Check out the [Developer Guide](Developer-Guide.md) and our [Contribution Standards](../../CONTRIBUTING.md).
 
 ### System Architecture
-Dive into the [System Architecture](Architecture.md) and the [Design Decisions (ADR)](../../docs/adr.md).
+Dive into the [System Architecture](Architecture.md), our [Core Modules](Modules.md), and the [Design Decisions (ADR)](../../docs/adr.md).
 
 ### FAQ
 Search for answers in the [FAQ](FAQ.md).
