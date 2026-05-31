@@ -18,7 +18,7 @@ def test_verse_number() -> None:
     logger.info(f"Generating ayah number {test_number} using Unicode symbol...")
 
     # Test default padding (10, 10, 10, 10)
-    img_default = verse_number(test_number, LANDSCAPE_PRESET["default"]["1080p"][2])
+    img_default = verse_number(test_number, LANDSCAPE_PRESET["default"]["1080p"].word)
     logger.info(f"Default padding size: {img_default.size}")
 
     output_dir = "./output/test/verse_number"
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
 def test_verse_number_negative() -> None:
     """Test that verse_number raises ValueError for negative numbers."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     with pytest.raises(ValueError, match="Verse number must be non-negative"):
         verse_number(-1, word_config)
@@ -50,7 +50,7 @@ def test_verse_number_negative() -> None:
 
 def test_verse_number_zero() -> None:
     """Test that verse_number handles zero correctly."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Zero should be valid (non-negative)
     img = verse_number(0, word_config)
@@ -61,7 +61,7 @@ def test_verse_number_zero() -> None:
 
 def test_verse_number_large_value() -> None:
     """Test that verse_number handles large values correctly."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Large ayah number should work
     img = verse_number(9999, word_config)
@@ -79,7 +79,7 @@ def test_verse_number_negative_padding_dimensions() -> None:
     """Test that verse_number with extreme negative padding produces a valid image."""
     from quranmedialib.types import Padding, WordConfig
 
-    base_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    base_config = LANDSCAPE_PRESET["default"]["1080p"].word
     # Create config with negative padding
     neg_config = WordConfig(
         font=base_config.font,
@@ -99,7 +99,7 @@ def test_verse_number_negative_padding_dimensions() -> None:
 
 def test_verse_number_empty_text() -> None:
     """Test that verse_number with 0 produces a valid marker."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     img = verse_number(0, word_config)
     assert img is not None
     assert img.size[0] > 0

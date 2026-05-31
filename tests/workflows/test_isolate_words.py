@@ -39,11 +39,11 @@ def test_isolate_words() -> None:
     # Use WBW translations as the list of strings for the bottom translation area
     translation_list = list(wbw_translations)
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
     print(f"Processing Surah {surah}, Verse {verse} ({len(words)} words)...")
 
-    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+    workflow = IsolateWordsWorkflow(preset)
 
     # Call get_iterator with explicit arguments
     isolation_generator = workflow.get_iterator(
@@ -81,8 +81,8 @@ if __name__ == "__main__":
 
 def test_isolate_words_invalid_surah() -> None:
     """Test that IsolateWordsWorkflow raises ValueError for invalid surah."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(preset)
 
     # Surah 0 is invalid — should raise ValidationError
     with pytest.raises(ValidationError, match="Surah must be between 1 and 114"):
@@ -96,8 +96,8 @@ def test_isolate_words_invalid_surah() -> None:
 
 def test_isolate_words_empty_verse_words() -> None:
     """Test that IsolateWordsWorkflow raises ValueError for empty verse_words list."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(preset)
 
     # Empty verse_words should now raise ValueError (security fix)
     with pytest.raises(ValueError, match="verse_words must be a non-empty list"):
@@ -113,8 +113,8 @@ def test_isolate_words_empty_verse_words() -> None:
 
 def test_isolate_words_none_ayah() -> None:
     """Test that IsolateWordsWorkflow works when ayah is None."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(preset)
 
     verse_words = ["word1", "word2", "word3"]
 
@@ -138,8 +138,8 @@ def test_isolate_words_none_ayah() -> None:
 
 def test_isolate_mismatched_wbw_length() -> None:
     """Test that IsolateWordsWorkflow warns when wbw_translations length mismatches."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = IsolateWordsWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = IsolateWordsWorkflow(preset)
 
     # 3 words but only 1 wbw_translation -- should work with warning
     with warnings.catch_warnings(record=True):

@@ -23,13 +23,13 @@ MODES = ["default", "arabic", "translation"]
 def test_preset_execution(preset_name, preset_set, mode, res) -> None:
     """Verify that every preset-mode-res combination can render a verse."""
     try:
-        layout, text, word = preset_set[mode][res]
+        preset = preset_set[mode][res]
     except KeyError:
         pytest.skip(f"Preset {preset_name} does not support mode={mode} res={res}")
         return
 
     # Use Surah 108:1 for a quick check
-    workflow = VerseWorkflow(layout, text, word)
+    workflow = VerseWorkflow(preset)
 
     # We don't save output here to stay fast, just ensure no exceptions
     # and check result structure
@@ -41,8 +41,8 @@ def test_preset_execution(preset_name, preset_set, mode, res) -> None:
 
     # Verify dimensions match LayoutConfig
     img = pages[0]
-    assert img.width == layout.max_width
-    assert img.height == layout.image_height
+    assert img.width == preset.frame.max_width
+    assert img.height == preset.frame.image_height
 
 
 def test_preset_definitions_completeness() -> None:

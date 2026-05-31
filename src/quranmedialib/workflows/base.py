@@ -16,7 +16,7 @@ from quranmedialib.exceptions import ValidationError
 from quranmedialib.types import MAX_AYAH, MAX_SURAH, MIN_AYAH, MIN_SURAH
 
 if TYPE_CHECKING:
-    from quranmedialib.types import LayoutConfig, TextConfig, WordConfig
+    from quranmedialib.types import Preset
 
 # Logger setup
 logger = logging.getLogger(__name__)
@@ -30,23 +30,19 @@ class BaseWorkflow(ABC):
 
     def __init__(
         self,
-        layout_config: LayoutConfig,
-        text_config: TextConfig,
-        word_config: WordConfig,
+        preset: Preset,
     ):
-        """Initializes the workflow with shared configurations.
+        """Initializes the workflow with a preset configuration.
 
         Raises:
-            ValidationError: If any config object is None.
+            ValidationError: If preset is None.
         """
-        if layout_config is None or text_config is None or word_config is None:
-            raise ValidationError(
-                f"Configuration objects must not be None. "
-                f"Got layout_config={layout_config}, text_config={text_config}, word_config={word_config}"
-            )
-        self.layout_config = layout_config
-        self.text_config = text_config
-        self.word_config = word_config
+        if preset is None:
+            raise ValidationError("Preset configuration must not be None.")
+        self.frame_cfg = preset.frame
+        self.word_cfg = preset.word
+        self.verse_cfg = preset.verse
+        self.text_cfg = preset.text
 
     def _validate_surah(self, surah: int) -> int:
         """Validates surah number (1-114)."""
@@ -62,7 +58,8 @@ class BaseWorkflow(ABC):
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(layout={self.layout_config}, text={self.text_config}, word={self.word_config})"
+            f"{self.__class__.__name__}(frame={self.frame_cfg}, word={self.word_cfg}, "
+            f"verse={self.verse_cfg}, text={self.text_cfg})"
         )
 
     @abstractmethod

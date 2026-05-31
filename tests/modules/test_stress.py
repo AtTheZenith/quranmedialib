@@ -1,7 +1,7 @@
 import gc
 import threading
 
-from quranmedialib import DatabaseManager, LayoutConfig, TextConfig, VerseWorkflow, WordConfig
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, VerseWorkflow
 from quranmedialib.utils.memory import get_current_rss_mb
 from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer
 
@@ -50,10 +50,8 @@ def test_parallel_renderer_extreme_churn():
 def test_rendering_memory_stability():
     """Verify that memory usage remains stable (no leaks) during repeated heavy rendering."""
     # Setup simple config
-    layout = LayoutConfig(max_width=1920, image_height=1080)
-    text = TextConfig()
-    word = WordConfig(font_size=80)
-    workflow = VerseWorkflow(layout, text, word)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseWorkflow(preset)
 
     # Translation for a verse
     translations = [

@@ -26,11 +26,11 @@ def test_annotate_word() -> None:
     # 1. Fetch Arabic word and convert to image
     arabic_words = db.get_verse(surah, ayah).split()
     arabic_text = arabic_words[word_idx - 1]
-    arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"][2])
+    arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"].word)
 
     # 2. Annotate with translation (Use plural API for single word test)
     annotated_imgs = annotate_words(
-        [arabic_img], surah, ayah, word_idx, db=db, word_config=LANDSCAPE_PRESET["default"]["1080p"][2]
+        [arabic_img], surah, ayah, word_idx, db=db, word_config=LANDSCAPE_PRESET["default"]["1080p"].word
     )
     annotated_img = annotated_imgs[0]
 
@@ -71,7 +71,7 @@ def test_annotate_words() -> None:
     output_dir = "./output/test/annotation"
     os.makedirs(output_dir, exist_ok=True)
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     # 1. Non-batched words (Surah 1:1, Words 1 and 2)
     # in (the) name, (of) allah
     annotated_images = _test_set(1, 1, (1, 2), word_config)
@@ -110,7 +110,7 @@ def test_annotate_word_missing_config() -> None:
 
     arabic_words = db.get_verse(surah, ayah).split()
     arabic_text = arabic_words[word_idx - 1]
-    arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"][2])
+    arabic_img = get_wimage(arabic_text, LANDSCAPE_PRESET["default"]["1080p"].word)
 
     # 3. Use internal impl for testing invalid config if needed, or stick to plural API
     with pytest.raises(ValueError, match="word_config is required for annotation"):
@@ -119,8 +119,8 @@ def test_annotate_word_missing_config() -> None:
 
 def test_annotate_word_invalid_surah() -> None:
     """Test that annotate_word raises ValueError for invalid surah numbers."""
-    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"].word)
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Surah 0 doesn't exist — should raise ValueError
     with pytest.raises(ValueError, match="Surah number must be between"):
@@ -133,8 +133,8 @@ def test_annotate_word_invalid_surah() -> None:
 
 def test_annotate_word_invalid_ayah() -> None:
     """Test that annotate_word raises ValueError for invalid ayah numbers."""
-    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"].word)
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Ayah 0 doesn't exist — should raise ValueError
     with pytest.raises(ValueError, match="Ayah number must be between"):
@@ -143,8 +143,8 @@ def test_annotate_word_invalid_ayah() -> None:
 
 def test_annotate_word_invalid_word_index() -> None:
     """Test that annotate_word handles invalid word indices."""
-    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    arabic_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"].word)
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Word index 0 doesn't exist - should raise ValueError for 1-based API
     with pytest.raises(ValueError, match="start index must be 1-based"):
@@ -153,13 +153,13 @@ def test_annotate_word_invalid_word_index() -> None:
 
 def test_annotate_words_empty_list() -> None:
     """Test that annotate_words handles empty image list."""
-    result = annotate_words([], 1, 1, 1, word_config=LANDSCAPE_PRESET["default"]["1080p"][2])
+    result = annotate_words([], 1, 1, 1, word_config=LANDSCAPE_PRESET["default"]["1080p"].word)
     assert result == []
 
 
 def test_annotate_words_missing_config() -> None:
     """Test that annotate_words raises ValueError when word_config is None."""
-    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"].word)
 
     with pytest.raises(ValueError, match="word_config is required for annotation"):
         annotate_words([dummy_img], 1, 1, 1, word_config=None)
@@ -167,7 +167,7 @@ def test_annotate_words_missing_config() -> None:
 
 def test_annotate_words_out_of_bounds_range() -> None:
     """Test that annotate_words raises ValueError for out-of-bounds word range."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
 
     # Surah 1:1 has only 4 words, but we request 10 starting from index 1
@@ -178,7 +178,7 @@ def test_annotate_words_out_of_bounds_range() -> None:
 
 def test_annotate_words_invalid_surah() -> None:
     """Test that annotate_words handles invalid surah numbers."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
 
     with pytest.raises(Exception):
@@ -189,7 +189,7 @@ def test_annotate_words_with_texts_missing_config() -> None:
     """Test that annotate_words_with_texts raises ValueError when word_config is None."""
     from quranmedialib.modules.annotation import annotate_words_with_texts
 
-    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"][2])
+    dummy_img = get_wimage("test", LANDSCAPE_PRESET["default"]["1080p"].word)
 
     with pytest.raises(ValueError, match="word_config is required for annotation"):
         annotate_words_with_texts([dummy_img], 1, 1, 1, texts=["test"], word_config=None)
@@ -197,7 +197,7 @@ def test_annotate_words_with_texts_missing_config() -> None:
 
 def test_annotate_word_none_image() -> None:
     """Test that annotate_word handles None image gracefully."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     # Use internal impl if testing specific edge case, or plural for public behavior
     with pytest.raises((TypeError, AttributeError)):
@@ -211,7 +211,7 @@ def test_annotate_words_zero_start_index() -> None:
     """Test that annotate_words raises ValueError for start=0."""
     from quranmedialib.modules.annotation import annotate_words
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
 
     with pytest.raises(ValueError, match="start index must be 1-based"):
@@ -222,7 +222,7 @@ def test_annotate_words_negative_start_index() -> None:
     """Test that annotate_words raises ValueError for negative start."""
     from quranmedialib.modules.annotation import annotate_words
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
 
     with pytest.raises(ValueError, match="start index must be 1-based"):
@@ -236,7 +236,7 @@ def test_annotate_words_texts_length_mismatch() -> None:
     """Test that annotate_words_with_texts handles fewer texts than images."""
     from quranmedialib.modules.annotation import annotate_words_with_texts
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
     images = [dummy_img, dummy_img, dummy_img]  # 3 images
     texts = ["only one text"]  # 1 text
@@ -260,7 +260,7 @@ def test_annotate_words_texts_length_mismatch() -> None:
 
 def test_annotate_words_wbw_translations_length_mismatch() -> None:
     """Test that annotate_words handles fewer wbw_translations than images."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
 
     # Only 1 wbw translation for 3 words -- should handle gracefully
@@ -272,7 +272,7 @@ def test_annotate_words_wbw_translations_length_mismatch() -> None:
 
 def test_annotate_words_range_exceeds_images() -> None:
     """Test that annotate_words with start+count beyond image count raises error."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     dummy_img = get_wimage("test", word_config)
     images = [dummy_img] * 10  # 10 images
 
