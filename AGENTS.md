@@ -110,7 +110,7 @@ uv run -m pytest; uv run -m pytest -v --b
   - `snake_case` for functions, methods, variables, and parameters.
   - `PascalCase` for classes.
   - `UPPER_SNAKE_CASE` for constants.
-- Functions should describe actions clearly (`get_wimage`, `annotate_words`, `frame`, `glow`, `pad`).
+- Functions should describe actions clearly (`get_wimage`, `annotate_words`, `glow`, `pad`).
 - Private helpers use a leading underscore (`_normalize_items`, `_group_items_into_rows`).
 
 ---
@@ -293,11 +293,11 @@ class LayoutConfig:
 
 ### 8.2 Layout (Framing Words)
 
-- `frame` lays out word images into right‑to‑left rows and pages.
+- `Frame` manages the RGBA canvas and handles the layering of `VImage` objects into right‑to‑left rows and pages.
 - `_group_items_into_rows` ensures first item always placed to avoid infinite loops.
 - `_apply_stop_sign_adjustment` uses `QURANIC_STOP_SIGNS` to adjust page breaks.
 - `_render_page` canvas is RGBA with transparent background; words placed RTL.
-- `QURANIC_STOP_SIGNS` — List of 7 Unicode characters used for Quranic stop sign detection in `framer.py`.
+- `QURANIC_STOP_SIGNS` — List of 7 Unicode characters used for Quranic stop sign detection in `vimage.py`.
 
 ### 8.3 Text Rendering
 
