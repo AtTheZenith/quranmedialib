@@ -164,6 +164,9 @@ def test_frame_layerable_integration(dummy_rgba_image, layout_config, word_confi
     layout_cfg = layout_config  # from fixture
     vimg = VImage(items, verse_cfg, layout_cfg)
 
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
     # Frame it
     config = FrameConfig(
         max_width=1000,
@@ -175,7 +178,7 @@ def test_frame_layerable_integration(dummy_rgba_image, layout_config, word_confi
     frame = Frame(config)
 
     # Layer the Layerable (VImage)
-    frame.layer(vimg, word_config=word_config)
+    frame.layer(vimg, word_config=word_config, rows_to_render=rows)
 
     # In VImage.layer:
     # total_width = 100.

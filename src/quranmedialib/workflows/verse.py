@@ -127,6 +127,9 @@ class VerseWorkflow(BaseWorkflow):
             current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
             frame_obj = Frame(self.frame_cfg)
 
+            rendered_width = max(row[1] for row in current_rows) if current_rows else 0
+            rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * self.verse_cfg.row_spacing
+
             # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
             frame_obj.layer(
                 vimage,
@@ -134,6 +137,8 @@ class VerseWorkflow(BaseWorkflow):
                 offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
                 word_config=self.word_cfg,
                 rows_to_render=current_rows,
+                rendered_width=rendered_width,
+                rendered_height=rendered_height,
             )
 
             if translation_images and page_index < len(translation_images):

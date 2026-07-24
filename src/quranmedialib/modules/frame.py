@@ -59,19 +59,22 @@ class Frame:
             image.height if hasattr(image, "height") else (image.height if isinstance(image, Image.Image) else 0)
         )
 
+        rendered_width = kwargs.get("rendered_width", obj_width)
+        rendered_height = kwargs.get("rendered_height", obj_height)
+
         if h_align == HorizontalAlignment.LEFT:
             x = self.config.padding.left
         elif h_align == HorizontalAlignment.RIGHT:
-            x = self.config.max_width - obj_width - self.config.padding.right
+            x = self.config.max_width - rendered_width - self.config.padding.right
         else:
-            x = (self.config.max_width - obj_width) // 2
+            x = self.config.padding.left + (self.config.content_width - rendered_width) // 2
 
         if v_align == VerticalAlignment.TOP:
             y = self.config.padding.top
         elif v_align == VerticalAlignment.BOTTOM:
-            y = self.config.image_height - obj_height - self.config.padding.bottom
+            y = self.config.image_height - rendered_height - self.config.padding.bottom
         else:
-            y = (self.config.image_height - obj_height) // 2
+            y = self.config.padding.top + (self.config.available_height - rendered_height) // 2
 
         dx, dy = offset or (self.config.wimage_x_offset, self.config.wimage_y_offset)
         x += dx

@@ -35,10 +35,13 @@ def test_vimage_greedy_pack(layout_config, word_config):
 
     vimg = VImage(items, verse_cfg, narrow_layout)
 
-    assert len(vimg.rows) == 2
-    assert len(vimg.rows[0][0]) == 2
-    assert len(vimg.rows[1][0]) == 2
-    assert vimg.rows[0][1] == 110
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
+    assert len(rows) == 2
+    assert len(rows[0][0]) == 2
+    assert len(rows[1][0]) == 2
+    assert rows[0][1] == 110
 
 
 def test_vimage_balanced_wrapping(layout_config, word_config):
@@ -55,8 +58,11 @@ def test_vimage_balanced_wrapping(layout_config, word_config):
 
     vimg = VImage(items, verse_cfg, narrow_layout)
 
-    assert len(vimg.rows) >= 2
-    assert sum(len(r[0]) for r in vimg.rows) == 5
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
+    assert len(rows) >= 2
+    assert sum(len(r[0]) for r in rows) == 5
 
 
 def test_vimage_stop_sign_chunking(layout_config, word_config):
@@ -118,8 +124,13 @@ def test_vimage_bounding_box(layout_config, word_config):
     narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding(0, 0, 0, 0))
     vimg = VImage(items, verse_cfg, narrow_layout)
 
-    assert vimg.width == 160
-    assert vimg.height == 60
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
+    assert len(rows) == 1
+    assert rows[0][1] == 160  # W1(100) + spacing(10) + W2(50)
+    total_height = sum(r[2] for r in rows) + (len(rows) - 1) * verse_cfg.row_spacing
+    assert total_height == 60
 
 
 def test_vimage_render_modes(layout_config, word_config):
@@ -129,12 +140,15 @@ def test_vimage_render_modes(layout_config, word_config):
     narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
     vimg = VImage(items, verse_cfg, narrow_layout)
 
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
     # Test RGBA
-    img_rgba = vimg.render(word_config, mode="RGBA")
+    img_rgba = vimg.render(word_config, rows_to_render=rows, mode="RGBA")
     assert img_rgba.mode == "RGBA"
 
     # Test L
-    img_l = vimg.render(word_config, mode="L")
+    img_l = vimg.render(word_config, rows_to_render=rows, mode="L")
     assert img_l.mode == "L"
 
 
@@ -145,11 +159,14 @@ def test_vimage_layer_direct(layout_config, word_config):
     narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
     vimg = VImage(items, verse_cfg, narrow_layout)
 
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
     # Create a blank canvas
     canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
 
     # Layer at (10, 10)
-    vimg.layer(canvas, x=10, y=10, word_config=word_config)
+    vimg.layer(canvas, x=10, y=10, word_config=word_config, rows_to_render=rows)
 
     # Since it's RTL, W1 (width 50) will be at x = 10 + 50 = 60.
     # The pixels for W1 should be in [10, 60)
@@ -170,14 +187,17 @@ def test_vimage_layer_vs_render_equality(layout_config, word_config):
     narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
     vimg = VImage(items, verse_cfg, narrow_layout)
 
+    # Rows computed on-demand via get_page_chunk
+    rows, consumed = vimg.get_page_chunk(0, 10)
+
     # 1. Use the old path: render image then paste it
-    img_rendered = vimg.render(word_config)
+    img_rendered = vimg.render(word_config, rows_to_render=rows)
     canvas_old = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
     canvas_old.paste(img_rendered, (0, 0))
 
     # 2. Use the new path: layer directly
     canvas_new = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
-    vimg.layer(canvas_new, x=0, y=0, word_config=word_config)
+    vimg.layer(canvas_new, x=0, y=0, word_config=word_config, rows_to_render=rows)
 
     # Compare pixels
     assert list(canvas_old.getdata()) == list(canvas_new.getdata())

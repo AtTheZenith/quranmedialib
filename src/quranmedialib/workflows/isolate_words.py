@@ -148,10 +148,16 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
                 frame_obj = Frame(self.frame_cfg)
                 v_img = vimage.render(self.word_cfg, rows_to_render=current_rows)
+
+                rendered_width = max(row[1] for row in current_rows) if current_rows else 0
+                rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * self.verse_cfg.row_spacing
+
                 frame_obj.layer(
                     v_img,
                     alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
                     offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
+                    rendered_width=rendered_width,
+                    rendered_height=rendered_height,
                 )
 
                 trans_images = [t_img] if t_img else None

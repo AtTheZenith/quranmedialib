@@ -231,6 +231,10 @@ def _render_pages(
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
             frame_obj = Frame(frame_cfg)
+
+            rendered_width = max(row[1] for row in current_rows) if current_rows else 0
+            rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * verse_cfg.row_spacing
+
             # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
             frame_obj.layer(
                 vimage,
@@ -238,6 +242,8 @@ def _render_pages(
                 offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
                 word_config=word_cfg,
                 rows_to_render=current_rows,
+                rendered_width=rendered_width,
+                rendered_height=rendered_height,
             )
 
             if trans_images and page_index < len(trans_images):
@@ -263,6 +269,10 @@ def _render_pages(
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
         frame_obj = Frame(frame_cfg)
+
+        rendered_width = max(row[1] for row in current_rows) if current_rows else 0
+        rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * verse_cfg.row_spacing
+
         # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
         frame_obj.layer(
             vimage,
@@ -270,6 +280,8 @@ def _render_pages(
             offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
             word_config=word_cfg,
             rows_to_render=current_rows,
+            rendered_width=rendered_width,
+            rendered_height=rendered_height,
         )
         pages.append(frame_obj.render())
         current_index += items_consumed

@@ -46,7 +46,7 @@ class VImage:
         self.items = items
         self.verse_config = verse_config
         self.layout_config = layout_config
-        self.rows = self._calculate_layout()
+        self.rows = []  # computed on-demand in get_page_chunk
 
     def _calculate_layout(self) -> list[tuple[list[WordItem], int, int]]:
         """Calculates the optimal row arrangement for the entire verse.
@@ -149,43 +149,31 @@ class VImage:
         Returns:
             A tuple of (rows_for_page, total_items_consumed).
         """
-        # Find which rows contain the items starting from start_index
-        current_pos = 0
-        row_start_idx = -1
-        for i, (row, _, _) in enumerate(self.rows):
-            if current_pos <= start_index < current_pos + len(row):
-                row_start_idx = i
-                break
-            current_pos += len(row)
-
-        if row_start_idx == -1:
+        remaining_items = self.items[start_index:]
+        if not remaining_items:
             return [], 0
 
-        # The first row of the chunk might be partially consumed
-        offset_in_row = start_index - current_pos
-        chunk_rows = []
+        # Step 1: Greedy pack into rows
+        rows = self._greedy_pack(remaining_items, self.layout_config.content_width)
 
-        # Extract up to max_rows
-        for i in range(row_start_idx, min(row_start_idx + max_rows, len(self.rows))):
-            row, width, height = self.rows[i]
-            items = row[offset_in_row:] if i == row_start_idx else row
+        # Trim to max_rows
+        if len(rows) > max_rows:
+            rows = rows[:max_rows]
 
-            # Recalculate width for sliced first row
-            if i == row_start_idx and offset_in_row > 0:
-                width = (
-                    sum(it.width for it in items) + (len(items) - 1) * self.verse_config.word_spacing if items else 0
-                )
+        # Step 2: Optional balanced wrapping (PER PAGE)
+        if self.verse_config.balanced_wrapping and len(rows) > 1:
+            all_items = list(itertools.chain.from_iterable(r[0] for r in rows))
+            balanced = self._balance_rows(all_items, len(rows), self.layout_config.content_width)
+            if balanced is not None:
+                rows = balanced
 
-            chunk_rows.append((items, width, height))
-            offset_in_row = 0  # Reset for subsequent rows
+        items_consumed = sum(len(r[0]) for r in rows)
 
-        items_consumed = sum(len(r[0]) for r in chunk_rows)
+        # Step 3: Stop sign adjustment
+        if items_consumed < len(remaining_items):
+            rows, items_consumed = self._apply_stop_sign_adjustment(rows, items_consumed)
 
-        # Adjust break backwards to end on a stop sign
-        if items_consumed < (len(self.items) - start_index):
-            chunk_rows, items_consumed = self._apply_stop_sign_adjustment(chunk_rows, items_consumed)
-
-        return chunk_rows, items_consumed
+        return rows, items_consumed
 
     def _apply_stop_sign_adjustment(
         self,
@@ -324,7 +312,7 @@ class VImage:
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
-            return Image.new(mode, (0, 0), color=(0, 0, 0, 0))
+            return Image.new(mode, (0, 0), color=(0, 0, 0, 0) if mode == "RGBA" else 0)
 
         total_width = max(row[1] for row in rows)
         total_height = sum(row[2] for row in rows) + (len(rows) - 1) * self.verse_config.row_spacing
