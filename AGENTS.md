@@ -16,7 +16,7 @@ Security is not an afterthought; it is engineered into every layer.
 **Before starting any feature work**, fetch the baseline speed of the existing codebase:
 
 ```powershell
-uv run -m pytest; uv run -m pytest -v --b
+uv run -m pytest; uv run -m pytest --benchmark
 ```
 
 **Stop immediately if you encounter any errors** before proceeding with feature work.
@@ -111,7 +111,7 @@ uv run -m pytest; uv run -m pytest -v --b
   - `PascalCase` for classes.
   - `UPPER_SNAKE_CASE` for constants.
 - Functions should describe actions clearly (`get_wimage`, `annotate_words`, `glow`, `pad`).
-- Private helpers use a leading underscore (`_normalize_items`, `_group_items_into_rows`).
+- Private helpers use a leading underscore (`_normalize_items`, `_greedy_pack`).
 
 ---
 
@@ -171,6 +171,8 @@ uv run -m pytest; uv run -m pytest -v --b
 - `DatabaseConfig` — Verse-by-verse database configuration (`from_packaged`, `from_path` with `unsafe_paths`, `trust_config`)
 - `WbwDatabaseConfig` — Word-by-word database configuration (extends DatabaseConfig with `word_id_col`)
 - `LayoutConfig` — Canvas sizing, padding, alignment, offsets (has `content_width` and `available_height` properties)
+- `FrameConfig` — Canvas composition settings (padding, alignment, background color)
+- `VerseConfig` — Verse-level layout settings (word spacing, row spacing, max rows per page, balanced wrapping)
 - `WordConfig` — Word rendering config (font sizes, spacing, colors, verse number config)
 - `TextConfig` — Translation text rendering config (font sizes, colors, paths, highlight config)
 - `WordItem` — Data transmission type combining image + text with precomputed width/height
@@ -190,7 +192,8 @@ uv run -m pytest; uv run -m pytest -v --b
   - Font sizes and colors in `get_wimage`.
   - Padding and color in `pad`.
   - `strength` and `radius` in `glow`.
-  - Layout options in `frame`.
+  - Layout options in `Frame` and `VImage`.
+  - `rendered_width` and `rendered_height` kwargs in `Frame.layer()` for multi-page alignment.
 - Keep public functions short by delegating to private helpers.
 - Use `**kwargs` for extensibility in workflow methods; document expected keys in docstring.
 - Functions that process images generally return new objects instead of mutating inputs.
@@ -291,12 +294,13 @@ class LayoutConfig:
   - Opaque images: glow uses screen‑style blending for vibrancy.
 - **Mode semantics**: `get_wimage` returns `'L'` mode images as masks (not RGBA); document any conversions.
 
-### 8.2 Layout (Framing Words)
+### 8.2 Layout (VImage Composition)
 
-- `Frame` manages the RGBA canvas and handles the layering of `VImage` objects into right‑to‑left rows and pages.
-- `_group_items_into_rows` ensures first item always placed to avoid infinite loops.
+- `VImage` is the verse image layout engine that implements RTL row packing (`_greedy_pack`), Descending Line Balancing (`_balance_rows`), and page chunking (`get_page_chunk`).
+- `Frame` manages the RGBA canvas and handles layering of `VImage` objects onto pages (`Frame.layer()`).
+- `get_page_chunk` computes rows per-page from remaining items, matching v2's per-page row computation behavior.
 - `_apply_stop_sign_adjustment` uses `QURANIC_STOP_SIGNS` to adjust page breaks.
-- `_render_page` canvas is RGBA with transparent background; words placed RTL.
+- `VImage.layer()` places rendered word rows onto the page canvas at computed positions.
 - `QURANIC_STOP_SIGNS` — List of 7 Unicode characters used for Quranic stop sign detection in `vimage.py`.
 
 ### 8.3 Text Rendering
@@ -400,7 +404,7 @@ def get_iterator(
 
 ### 9.5 Workflow Conventions
 
-- Accept configuration objects (`LayoutConfig`, `TextConfig`, `WordConfig`) in `__init__`.
+- Accept a single `Preset` object in `__init__` (contains `frame`, `word`, `verse`, `text` configs).
 - Return `Iterator[list[Image.Image]]` (list of pages per iteration).
 - Use `**kwargs` for optional parameters to allow future extensibility.
 - Delegate complex logic to private helper methods (e.g., `_process_range`, `_prepare_word_images`).
@@ -419,7 +423,7 @@ Presets provide pre-configured layouts for common formats and resolutions. The b
 ### 10.2 Structure
 
 ```python
-PRESET[aspect_ratio][mode][resolution] -> tuple[LayoutConfig, TextConfig, WordConfig]
+PRESET[aspect_ratio][mode][resolution] -> Preset
 ```
 
 - **Aspect ratios**: `"landscape"` (16:9), `"story"` (9:16), `"square"` (1:1)
@@ -437,7 +441,7 @@ PRESET[aspect_ratio][mode][resolution] -> tuple[LayoutConfig, TextConfig, WordCo
 ```python
 from quranmedialib.presets import build_preset
 
-layout, text_cfg, word_cfg = build_preset("landscape", "default", 1920, 1080)
+preset = build_preset("landscape", "default", 1920, 1080)
 ```
 
 ### 10.5 Font and Database Presets
@@ -450,7 +454,7 @@ layout, text_cfg, word_cfg = build_preset("landscape", "default", 1920, 1080)
 ```python
 from quranmedialib import LANDSCAPE_PRESET
 
-layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+preset = LANDSCAPE_PRESET["default"]["1080p"]
 ```
 
 ---
@@ -619,7 +623,7 @@ uvx sourcery review . --disable low-code-quality --disable no-loop-in-tests --di
 uv run demo.py
 
 # Run individual test module directly
-uv run tests/modules/test_framer.py
+uv run tests/modules/test_vimage.py
 ```
 
 ---
@@ -638,7 +642,7 @@ uv run tests/modules/test_framer.py
 
 ### 17.2 Test Patterns
 
-- Use descriptive test names (`test_color`, `test_glow`, `test_framer`).
+- Use descriptive test names (`test_color`, `test_glow`, `test_vimage`).
 - Use `assert` statements for programmatic verification.
 - Image-producing tests save outputs under `./output/test/`.
 - Use helper functions for common setup (e.g., `_create_default_word_config()`).
@@ -687,7 +691,7 @@ def test_feature() -> None:
 
 **Database classes:** `DatabaseConfig`, `WbwDatabaseConfig`, `DatabaseManager`
 
-**Config classes:** `WordItem`, `LayoutConfig`, `WordConfig`, `TextConfig`
+**Config classes:** `WordItem`, `LayoutConfig`, `FrameConfig`, `VerseConfig`, `WordConfig`, `TextConfig`, `Preset`
 
 **Enums:** `HorizontalAlignment`, `VerticalAlignment`
 

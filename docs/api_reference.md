@@ -32,7 +32,7 @@ The central thread-safe singleton for all data retrieval.
 
 ## Rendering Workflows
 
-All workflows inherit from `BaseWorkflow` and implement `get_iterator(...)` which yields `list[Image.Image]` (pages).
+All workflows inherit from `BaseWorkflow` and accept a single `Preset` object in `__init__`. They implement `get_iterator(...)` which yields `list[Image.Image]` (pages).
 
 ### Workflow Detail
 
@@ -77,13 +77,35 @@ Pre-configured settings for different media formats.
 - `STORY_PRESET`: 9:16 aspect la...
 - `SQUARE_PRESET`: 1:1 aspect ratio.
 
-**Usage:** `layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]`
+**Usage:** `preset = LANDSCAPE_PRESET["default"]["1080p"]`
 
 ### Config Classes
-- `LayoutConfig`: Canvas size, padding, and alignment.
+- `Preset`: Unified 4-field config container (`frame`, `word`, `verse`, `text`). Access configs as `preset.frame`, `preset.word`, etc.
+- `FrameConfig`: Canvas composition settings (padding, alignment, background color).
+- `LayoutConfig`: Canvas sizing, padding, and alignment.
+- `VerseConfig`: Verse-level layout settings (word spacing, row spacing, max rows per page, balanced wrapping).
 - `WordConfig`: Font size, colors, and word-level padding.
 - `TextConfig`: Translation font and style settings.
 - `FontResource`: Handles font file resolution.
+
+## Layout & Composition
+
+### `VImage` (`modules/vimage.py`)
+Verse image layout engine that groups rendered word items into right-to-left rows and computes page breaks.
+
+| Method | Signature | Returns | Description |
+| :--- | :--- | :--- | :--- |
+| `get_page_chunk` | `(start_index: int, max_rows: int)` | `tuple[list, int]` | Computes rows from remaining items (per-page, matching v2 behavior). Returns `(rows, items_consumed)`. |
+| `layer` | `(base_image: Image.Image, rows: list, **kwargs)` | `Image.Image` | Renders word rows onto the page canvas at computed positions. |
+| `render` | `(rows: list, **kwargs)` | `Image.Image` | Renders rows onto a transparent canvas. |
+
+### `Frame` (`modules/frame.py`)
+Canvas composition class that manages the RGBA canvas and handles layering of `VImage` objects.
+
+| Method | Signature | Returns | Description |
+| :--- | :--- | :--- | :--- |
+| `layer` | `(obj: Image.Image \| VImage, **kwargs)` | `Image.Image` | Layers a VImage onto the frame canvas. Supports `rendered_width`, `rendered_height` kwargs for centering. |
+| `config` | property | `FrameConfig` | The frame's canvas and composition configuration. |
 
 ## Utility Tools
 

@@ -9,15 +9,15 @@ We prioritize linearity and maintainability over clever abstractions. If a piece
 
 ### 1. Adding a New Preset
 Presets are defined in `src/quranmedialib/presets.py`. To add a new preset:
-1. Define the `LayoutConfig`, `TextConfig`, and `WordConfig` for the baseline resolution (1080p).
+1. Define the `FrameConfig`, `TextConfig`, `WordConfig`, and `VerseConfig` for the baseline resolution (1080p).
 2. Add it to the appropriate preset map (e.g., `LANDSCAPE_PRESET`).
-3. The `build_preset` function will automatically handle scaling for other resolutions.
+3. The `build_preset` function will automatically handle scaling for other resolutions, returning a `Preset` object.
 
 ### 2. Creating a Custom Workflow
 Workflows orchestrate the rendering pipeline. To create one:
 1. Inherit from `BaseWorkflow`.
 2. Implement `get_iterator(...)`.
-3. Use `self.layout_config`, `self.text_config`, and `self.word_config` for settings.
+3. Use `self.frame_cfg`, `self.verse_cfg`, `self.word_cfg`, and `self.text_cfg` for settings.
 4. Yield a `list[Image.Image]` representing the pages for each iteration.
 
 ### 3. Modifying the Rendering Pipeline
@@ -35,7 +35,7 @@ We maintain a high bar for correctness and performance. Every PR must pass the f
 Before implementing any feature or fix, establish a baseline speed for the existing codebase to ensure no regressions are introduced.
 ```powershell
 # Run all tests, then run benchmarks
-uv run -m pytest; uv run -m pytest -v --b
+uv run -m pytest; uv run -m pytest --benchmark
 ```
 
 ### 2. Writing Tests

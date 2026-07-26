@@ -56,5 +56,5 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 1. **Asset**: `DatabaseManager` fetches the Arabic word "الله" and its translation.
 2. **Rendering**: `get_wimage()` generates a grayscale mask of "الله" using the specified font.
-3. **Layout**: `frame()` determines the word should be at position `(x=100, y=50)` on Page 1.
+3. **Layout**: `VImage.get_page_chunk()` groups items into right-to-left rows and `VImage.layer()` positions each mask on the page canvas.
 4. **Composition**: `color()` applies a gold hue to the mask, `glow()` adds a soft outer radiance, and the result is pasted onto the canvas.
