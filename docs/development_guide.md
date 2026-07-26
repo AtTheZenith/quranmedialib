@@ -9,23 +9,28 @@ We prioritize linearity and maintainability over clever abstractions. If a piece
 
 ### 1. Adding a New Preset
 Presets are defined in `src/quranmedialib/presets.py`. To add a new preset:
-1. Define the `FrameConfig`, `TextConfig`, `WordConfig`, and `VerseConfig` for the baseline resolution (1080p).
-2. Add it to the appropriate preset map (e.g., `LANDSCAPE_PRESET`).
-3. The `build_preset` function will automatically handle scaling for other resolutions, returning a `Preset` object.
+1. Define UDim2-based `PresetLayout` entries in `_ARABIC_LAYOUT` / `_TRANSLATION_LAYOUT` dicts (one per aspect ratio).
+2. Add mode-specific overrides in `_MODE_OVERRIDES` for `word`, `text`, and `verse` configs.
+3. The `build_preset` function returns a `Preset` object with the `frame`, `word`, `verse`, and `text` configs.
+4. Layouts are resolution-independent — one definition works at 720p through 2160p.
 
 ### 2. Creating a Custom Workflow
 Workflows orchestrate the rendering pipeline. To create one:
 1. Inherit from `BaseWorkflow`.
 2. Implement `get_iterator(...)`.
 3. Use `self.frame_cfg`, `self.verse_cfg`, `self.word_cfg`, and `self.text_cfg` for settings.
-4. Yield a `list[Image.Image]` representing the pages for each iteration.
+4. Resolve layout positions via `build_layout_guide(aspect, frame_w, frame_h)`.
+5. Create `VImage(items, verse_cfg, guide.arabic.width)` with content width from the guide.
+6. Create `Frame(frame_w, frame_h, bg)` directly with dimensions.
+7. Use `frame.layer_at(image, rect)` with `ResolvedRect` from the guide.
+8. Yield a `list[Image.Image]` representing the pages for each iteration.
 
 ### 3. Modifying the Rendering Pipeline
 The pipeline follows: `Asset` --> `Rendering` --> `Layout` --> `Composition`.
 - **Assets**: Modify `database_manager.py` for data retrieval.
 - **Rendering**: Modify `modules/wimage.py` or `timage.py` for glyph generation.
-- **Layout**: Modify `modules/vimage.py` for RTL and line balancing logic.
-- **Composition**: Modify `modules/frame.py` for the canvas and layering logic.
+- **Layout**: Modify `modules/vimage.py` for RTL and line balancing logic, or `modules/layout_engine.py` for UDim2/AnchorPoint resolution.
+- **Composition**: Modify `modules/frame.py` for the frame surface and layering logic.
 
 ## Testing & Quality Assurance
 

@@ -79,14 +79,30 @@ Pre-configured settings for different media formats.
 
 **Usage:** `preset = LANDSCAPE_PRESET["default"]["1080p"]`
 
+### Layout Types (New in v4.0)
+Resolution-independent layout primitives inspired by Roblox UDim2.
+- `UDim2(scale_x, offset_x, scale_y, offset_y)`: Scale+offset pair. Resolved as `parent_dim * scale + offset`.
+- `AnchorPoint(x, y)`: Pivot point (0-1 per axis). `(0.5, 0.5)` = center, `(0, 0)` = top-left.
+- `ResolvedRect(left, top, width, height)`: Absolute pixel rectangle after resolution.
+- `PresetLayout(position, size, anchor)`: Layout element definition using UDim2 + AnchorPoint.
+
 ### Config Classes
 - `Preset`: Unified 4-field config container (`frame`, `word`, `verse`, `text`). Access configs as `preset.frame`, `preset.word`, etc.
-- `FrameConfig`: Canvas composition settings (padding, alignment, background color).
-- `LayoutConfig`: Canvas sizing, padding, and alignment.
+- `FrameConfig`: Frame-level settings (`background_color`, `max_width`, `image_height`, `aspect_ratio`). No layout logic — position is handled by `PresetLayout` + `LayoutEngine`.
 - `VerseConfig`: Verse-level layout settings (word spacing, row spacing, max rows per page, balanced wrapping).
 - `WordConfig`: Font size, colors, and word-level padding.
 - `TextConfig`: Translation font and style settings.
 - `FontResource`: Handles font file resolution.
+
+### Layout Engine (`modules/layout_engine.py`)
+New in v4.0. Resolves `PresetLayout` definitions to absolute pixel rects for any frame size.
+
+| Function / Class | Signature | Returns | Description |
+| :--- | :--- | :--- | :--- |
+| `LayoutEngine` | `(frame_width, frame_height)` | — | Resolves layout elements for a given frame size. |
+| `engine.resolve_rect` | `(elem: PresetLayout)` | `ResolvedRect` | Resolves one element to absolute pixel coords. |
+| `LayoutGuide` | `(arabic, translation)` | — | Container holding `ResolvedRect` for both content areas. |
+| `build_layout_guide` | `(aspect_ratio, frame_w, frame_h)` | `LayoutGuide` | Convenience: builds a full guide from preset layout definitions. |
 
 ## Layout & Composition
 
@@ -95,17 +111,22 @@ Verse image layout engine that groups rendered word items into right-to-left row
 
 | Method | Signature | Returns | Description |
 | :--- | :--- | :--- | :--- |
-| `get_page_chunk` | `(start_index: int, max_rows: int)` | `tuple[list, int]` | Computes rows from remaining items (per-page, matching v2 behavior). Returns `(rows, items_consumed)`. |
-| `layer` | `(base_image: Image.Image, rows: list, **kwargs)` | `Image.Image` | Renders word rows onto the page canvas at computed positions. |
-| `render` | `(rows: list, **kwargs)` | `Image.Image` | Renders rows onto a transparent canvas. |
+| `get_page_chunk` | `(start_index: int, max_rows: int)` | `tuple[list, int]` | Computes rows from remaining items (per-page). Returns `(rows, items_consumed)`. |
+| `layer` | `(base_image, x, y, word_config, rows_to_render)` | `None` | Renders word rows directly onto the frame canvas at the given position. |
+
+**Constructor** (v4): `VImage(items, verse_config, content_width)` — takes `int` content width instead of a config object.
 
 ### `Frame` (`modules/frame.py`)
-Canvas composition class that manages the RGBA canvas and handles layering of `VImage` objects.
+Frame composition class that manages the RGBA surface and handles layering of images and Layerable objects.
+
+**Constructor** (v4): `Frame(width, height, background_color=(0,0,0,0))`
 
 | Method | Signature | Returns | Description |
 | :--- | :--- | :--- | :--- |
-| `layer` | `(obj: Image.Image \| VImage, **kwargs)` | `Image.Image` | Layers a VImage onto the frame canvas. Supports `rendered_width`, `rendered_height` kwargs for centering. |
-| `config` | property | `FrameConfig` | The frame's canvas and composition configuration. |
+| `layer_at` | `(image, rect: ResolvedRect, text_color=None, **kwargs)` | `None` | Places content at a resolved pixel rect. Handles `Layerable`, `'L'` masks, `RGBA` composites. |
+| `render` | `()` | `Image.Image` | Returns the final composed RGBA image. |
+
+`layer()` (old API) is deprecated — use `layer_at()` with a `ResolvedRect` instead.
 
 ## Utility Tools
 

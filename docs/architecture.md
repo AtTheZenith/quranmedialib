@@ -35,19 +35,22 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 **Responsibility**: Positioning masks into a coherent page structure.
 
-- **VImage**: The core engine that implements Right-to-Left (RTL) logic and spatial arrangement.
+- **Resolution Independence** (v4.0): Layout uses `UDim2` (scale + offset pairs) and `AnchorPoint` (0-1 pivot) defined in `PresetLayout`. One definition works at any resolution — no per-resolution scaling tables.
+- **LayoutEngine**: Resolves `PresetLayout` elements to absolute pixel `ResolvedRect` positions for a given frame size at render time.
+- **VImage**: The core engine that implements Right-to-Left (RTL) logic and spatial arrangement. Takes `content_width` directly (no longer depends on FrameConfig).
 - **Line Balancing**: Implements the **Descending Line Balancing** algorithm to ensure text is visually centered and aesthetically distributed across lines.
-- **Page Management**: Calculates when a verse exceeds the `max_width` and automatically handles page breaks.
-- **Output**: A coordinate map of where each image mask should be placed on the final canvas.
+- **Page Management**: Calculates when a verse exceeds the available width and automatically handles page breaks.
+- **Output**: A coordinate map of where each image mask should be placed on the final frame.
 
 ### 4. Composition Layer (The Final Pass)
 
-**Responsibility**: Applying aesthetics, colors, and effects onto a canvas.
+**Responsibility**: Applying aesthetics, colors, and effects onto a frame.
 
-- **Frame**: The composition class that manages the RGBA canvas and handles the layering of images.
+- **Frame**: The composition class that manages the RGBA surface and handles the layering of images. Accepts `(width, height, bg)` directly — no config object required.
+- **Frame.layer_at()** (v4.0): Places content at a resolved `ResolvedRect` position. Replaces the old `layer()` with its manual alignment/offset calculations.
 - **Colorization**: The `'L'` mode masks are colorized using the `color` function, preserving the alpha channel.
 - **Visual Effects**: Applies high-end effects like Gaussian blurs (Glow), padding, and alpha compositing.
-- **Final Assembly**: Pastes the colorized images onto the final RGBA canvas.
+- **Final Assembly**: Pastes the colorized images onto the final RGBA frame.
 - **Output**: A final high-resolution `RGBA` image.
 
 ---
