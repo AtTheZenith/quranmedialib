@@ -3,7 +3,7 @@
 This module contains tests for verifying configuration validation including:
 - Padding validation
 - Alignment enum/string coercion
-- LayoutConfig validation
+- FrameConfig validation
 - WordConfig validation
 - TextConfig validation
 - FontResource validation
@@ -15,8 +15,8 @@ from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
+    FrameConfig,
     HorizontalAlignment,
-    LayoutConfig,
     Padding,
     ResourceError,
     TextConfig,
@@ -104,71 +104,17 @@ def test_vertical_alignment_invalid_string() -> None:
         VerticalAlignment("invalid")
 
 
-# === LayoutConfig Tests ===
+# === FrameConfig Tests ===
 
 
-def test_layout_config_valid_alignment_strings() -> None:
-    """Test that LayoutConfig coerces valid alignment strings to enums."""
-    config = LayoutConfig(
-        max_width=1920,
-        image_height=1080,
-        wimage_vertical_align="top",
-        wimage_horizontal_align="right",
-        timage_vertical_align="bottom",
-        timage_horizontal_align="left",
-    )
-    assert config.wimage_vertical_align == VerticalAlignment.TOP
-    assert config.wimage_horizontal_align == HorizontalAlignment.RIGHT
-    assert config.timage_vertical_align == VerticalAlignment.BOTTOM
-    assert config.timage_horizontal_align == HorizontalAlignment.LEFT
+def test_frame_config_defaults() -> None:
+    """Verify simplified FrameConfig defaults."""
+    config = FrameConfig()
+    assert config.background_color == (0, 0, 0, 0)
+    assert config.max_width == 1920
+    assert config.image_height == 1080
 
 
-def test_layout_config_invalid_alignment_string() -> None:
-    """Test that LayoutConfig raises ValueError for invalid alignment strings."""
-    with pytest.raises(ValueError):
-        LayoutConfig(
-            max_width=1920,
-            image_height=1080,
-            wimage_vertical_align="invalid_align",
-        )
-
-
-def test_layout_config_padding_tuple_coercion() -> None:
-    """Test that LayoutConfig coerces tuple padding to Padding object."""
-    config = LayoutConfig(
-        max_width=1920,
-        image_height=1080,
-        padding=(10, 20, 30, 40),
-    )
-    assert isinstance(config.padding, Padding)
-    assert config.padding.top == 10
-    assert config.padding.bottom == 20
-    assert config.padding.left == 30
-    assert config.padding.right == 40
-
-
-def test_layout_config_content_width() -> None:
-    """Test LayoutConfig content_width property."""
-    config = LayoutConfig(max_width=1920, image_height=1080, padding=(50, 50, 100, 100))
-    assert config.content_width == 1920 - 100 - 100  # max_width - left - right
-
-
-def test_layout_config_available_height() -> None:
-    """Test LayoutConfig available_height property."""
-    config = LayoutConfig(max_width=1920, image_height=1080, padding=(50, 100, 0, 0))
-    assert config.available_height == 1080 - 50 - 100  # image_height - top - bottom
-
-
-def test_layout_config_negative_dimensions() -> None:
-    """Test that LayoutConfig raises ValueError for negative dimensions."""
-    with pytest.raises(ValueError, match="max_width must be positive"):
-        LayoutConfig(max_width=-100, image_height=-100)
-
-
-def test_layout_config_zero_dimensions() -> None:
-    """Test that LayoutConfig raises ValueError for zero dimensions."""
-    with pytest.raises(ValueError, match="max_width must be positive"):
-        LayoutConfig(max_width=0, image_height=0)
 
 
 # === WordConfig Tests ===
@@ -413,15 +359,6 @@ def test_valid_ayah_boundaries(ayah: int) -> None:
 # === Round 2: types.py Edge Cases ===
 
 
-def test_layout_config_padding_too_few_elements() -> None:
-    """Test that LayoutConfig with < 4 padding elements uses defaults for missing."""
-    config = LayoutConfig(max_width=1920, image_height=1080, padding=(10, 20))
-    # Padding(10, 20, 0, 0) — missing elements default to 0
-    assert config.padding.top == 10
-    assert config.padding.bottom == 20
-    assert config.padding.left == 0
-    assert config.padding.right == 0
-
 
 def test_word_config_max_rows_per_page_boundary() -> None:
     """Test that WordConfig with max_rows_per_page=1 works."""
@@ -554,18 +491,4 @@ def test_line_add_word() -> None:
     assert len(line.words) == 2
 
 
-# === Alignment Enum Consistency ===
 
-
-def test_alignment_string_case_insensitivity() -> None:
-    """Test that LayoutConfig handles case-insensitive alignment strings."""
-    config = LayoutConfig(
-        max_width=1000,
-        image_height=1000,
-        timage_vertical_align="CENTER",
-        timage_horizontal_align="Right",
-    )
-    from quranmedialib.types import HorizontalAlignment, VerticalAlignment
-
-    assert config.timage_vertical_align == VerticalAlignment.CENTER
-    assert config.timage_horizontal_align == HorizontalAlignment.RIGHT

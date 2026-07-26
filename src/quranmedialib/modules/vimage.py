@@ -14,7 +14,6 @@ from PIL import Image
 
 from quranmedialib.modules.text_layout import balance_lines_pyramid
 from quranmedialib.types import (
-    LayoutConfig,
     VerseConfig,
     WordConfig,
     WordItem,
@@ -33,7 +32,7 @@ class VImage:
     Attributes:
         items: The list of WordItems forming the verse.
         verse_config: Layout rules for the verse.
-        layout_config: Geometry constraints (e.g., content width).
+        content_width: Available width for row wrapping in pixels.
         rows: The calculated 2D spatial arrangement (items, width, height).
     """
 
@@ -41,11 +40,11 @@ class VImage:
         self,
         items: list[WordItem],
         verse_config: VerseConfig,
-        layout_config: LayoutConfig,
+        content_width: int,
     ):
         self.items = items
         self.verse_config = verse_config
-        self.layout_config = layout_config
+        self.content_width = content_width
         self.rows = []  # computed on-demand in get_page_chunk
 
     def _calculate_layout(self) -> list[tuple[list[WordItem], int, int]]:
@@ -58,12 +57,12 @@ class VImage:
             return []
 
         # Initial greedy packing
-        rows = self._greedy_pack(self.items, self.layout_config.content_width)
+        rows = self._greedy_pack(self.items, self.content_width)
 
         # Optional balanced wrapping
         if self.verse_config.balanced_wrapping and len(rows) > 1:
             all_items = list(itertools.chain.from_iterable(r[0] for r in rows))
-            rows = self._balance_rows(all_items, len(rows), self.layout_config.content_width)
+            rows = self._balance_rows(all_items, len(rows), self.content_width)
 
         return rows
 
@@ -154,7 +153,7 @@ class VImage:
             return [], 0
 
         # Step 1: Greedy pack into rows
-        rows = self._greedy_pack(remaining_items, self.layout_config.content_width)
+        rows = self._greedy_pack(remaining_items, self.content_width)
 
         # Trim to max_rows
         if len(rows) > max_rows:
@@ -163,7 +162,7 @@ class VImage:
         # Step 2: Optional balanced wrapping (PER PAGE)
         if self.verse_config.balanced_wrapping and len(rows) > 1:
             all_items = list(itertools.chain.from_iterable(r[0] for r in rows))
-            balanced = self._balance_rows(all_items, len(rows), self.layout_config.content_width)
+            balanced = self._balance_rows(all_items, len(rows), self.content_width)
             if balanced is not None:
                 rows = balanced
 

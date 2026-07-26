@@ -19,6 +19,7 @@ from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.presets import build_layout_guide
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
@@ -116,8 +117,15 @@ class VerseWorkflow(BaseWorkflow):
         # 5. Prepare Translation Images (lazy - renders on demand)
         translation_images = self._prepare_translation_images(translations)
 
-        # 6. Render Layout
-        vimage = VImage(word_items, self.verse_cfg, self.frame_cfg)
+        # 6. Resolve layout positions from UDim2 presets
+        guide = build_layout_guide(
+            self.frame_cfg.aspect_ratio,
+            self.frame_cfg.max_width,
+            self.frame_cfg.image_height,
+        )
+
+        # 7. Render Layout
+        vimage = VImage(word_items, self.verse_cfg, guide.arabic.width)
         pages = []
         page_index = 0
         current_index = 0
@@ -125,28 +133,25 @@ class VerseWorkflow(BaseWorkflow):
 
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
-            frame_obj = Frame(self.frame_cfg)
+            frame_obj = Frame(
+                self.frame_cfg.max_width,
+                self.frame_cfg.image_height,
+                self.frame_cfg.background_color,
+            )
 
-            rendered_width = max(row[1] for row in current_rows) if current_rows else 0
-            rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * self.verse_cfg.row_spacing
-
-            # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
-            frame_obj.layer(
+            # Layer the VImage directly onto the frame canvas via resolved layout rect
+            frame_obj.layer_at(
                 vimage,
-                alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
-                offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
+                guide.arabic,
                 word_config=self.word_cfg,
                 rows_to_render=current_rows,
-                rendered_width=rendered_width,
-                rendered_height=rendered_height,
             )
 
             if translation_images and page_index < len(translation_images):
                 if t_image := translation_images[page_index]:
-                    frame_obj.layer(
+                    frame_obj.layer_at(
                         t_image,
-                        alignment=(self.frame_cfg.timage_horizontal_align, self.frame_cfg.timage_vertical_align),
-                        offset=(self.frame_cfg.timage_x_offset, self.frame_cfg.timage_y_offset),
+                        guide.translation,
                         text_color=self.text_cfg.color,
                     )
 

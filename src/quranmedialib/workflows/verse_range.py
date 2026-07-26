@@ -28,6 +28,8 @@ from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.modules.layout_engine import LayoutGuide
+from quranmedialib.presets import build_layout_guide
 from quranmedialib.types import (
     FrameConfig,
     TextConfig,
@@ -126,6 +128,12 @@ class VerseRangeWorkflow(BaseWorkflow):
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
         total_verses = end_verse - start_verse + 1
 
+        guide = build_layout_guide(
+            self.frame_cfg.aspect_ratio,
+            self.frame_cfg.max_width,
+            self.frame_cfg.image_height,
+        )
+
         if parallel and total_verses > 1:
             renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
             tasks = [(ayah, translations[i]) for i, ayah in enumerate(range(start_verse, end_verse + 1))]
@@ -134,6 +142,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 _render_verse_worker,
                 surah=surah,
                 frame_cfg=self.frame_cfg,
+                guide=guide,
                 text_cfg=self.text_cfg,
                 word_cfg=self.word_cfg,
                 verse_cfg=self.verse_cfg,
@@ -156,6 +165,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 task_list,
                 surah,
                 self.frame_cfg,
+                guide,
                 self.text_cfg,
                 self.word_cfg,
                 self.verse_cfg,
@@ -213,16 +223,21 @@ def _render_pages(
     word_items: list[WordItem],
     verse_translations: list[str],
     frame_cfg: FrameConfig,
+    guide: LayoutGuide,
     word_cfg: WordConfig,
     verse_cfg: VerseConfig,
     text_cfg: TextConfig,
     separate_translations: bool,
 ) -> list[Image.Image]:
-    """Render the verse pages based on the translation mode."""
+    """Render the verse pages using resolved layout guide."""
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
+    canvas_w = frame_cfg.max_width
+    canvas_h = frame_cfg.image_height
+    bg = frame_cfg.background_color
+
     if not separate_translations:
-        vimage = VImage(word_items, verse_cfg, frame_cfg)
+        vimage = VImage(word_items, verse_cfg, guide.arabic.width)
         pages = []
         page_index = 0
         current_index = 0
@@ -230,28 +245,20 @@ def _render_pages(
 
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
-            frame_obj = Frame(frame_cfg)
+            frame_obj = Frame(canvas_w, canvas_h, bg)
 
-            rendered_width = max(row[1] for row in current_rows) if current_rows else 0
-            rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * verse_cfg.row_spacing
-
-            # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
-            frame_obj.layer(
+            frame_obj.layer_at(
                 vimage,
-                alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
-                offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+                guide.arabic,
                 word_config=word_cfg,
                 rows_to_render=current_rows,
-                rendered_width=rendered_width,
-                rendered_height=rendered_height,
             )
 
             if trans_images and page_index < len(trans_images):
                 if t_image := trans_images[page_index]:
-                    frame_obj.layer(
+                    frame_obj.layer_at(
                         t_image,
-                        alignment=(frame_cfg.timage_horizontal_align, frame_cfg.timage_vertical_align),
-                        offset=(frame_cfg.timage_x_offset, frame_cfg.timage_y_offset),
+                        guide.translation,
                         text_color=text_cfg.color,
                     )
 
@@ -261,27 +268,20 @@ def _render_pages(
         return pages
 
     modified_verse_cfg = dataclasses.replace(verse_cfg, max_rows_per_page=2)
-    vimage = VImage(word_items, modified_verse_cfg, frame_cfg)
+    vimage = VImage(word_items, modified_verse_cfg, guide.arabic.width)
     pages = []
     current_index = 0
     total_items = len(word_items)
 
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
-        frame_obj = Frame(frame_cfg)
+        frame_obj = Frame(canvas_w, canvas_h, bg)
 
-        rendered_width = max(row[1] for row in current_rows) if current_rows else 0
-        rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * verse_cfg.row_spacing
-
-        # Layer the VImage directly onto the frame canvas to avoid intermediate allocations
-        frame_obj.layer(
+        frame_obj.layer_at(
             vimage,
-            alignment=(frame_cfg.wimage_horizontal_align, frame_cfg.wimage_vertical_align),
-            offset=(frame_cfg.wimage_x_offset, frame_cfg.wimage_y_offset),
+            guide.arabic,
             word_config=word_cfg,
             rows_to_render=current_rows,
-            rendered_width=rendered_width,
-            rendered_height=rendered_height,
         )
         pages.append(frame_obj.render())
         current_index += items_consumed
@@ -289,11 +289,10 @@ def _render_pages(
     for t_img in trans_images:
         if not t_img:
             continue
-        frame_obj = Frame(frame_cfg)
-        frame_obj.layer(
+        frame_obj = Frame(canvas_w, canvas_h, bg)
+        frame_obj.layer_at(
             t_img,
-            alignment=(frame_cfg.timage_horizontal_align, frame_cfg.timage_vertical_align),
-            offset=(frame_cfg.timage_x_offset, frame_cfg.timage_y_offset),
+            guide.translation,
             text_color=text_cfg.color,
         )
         pages.append(frame_obj.render())
@@ -326,6 +325,7 @@ def _render_verse_worker(
     verse_data: list[tuple[int, list[str]]],
     surah: int,
     frame_cfg: FrameConfig,
+    guide: LayoutGuide,
     text_cfg: TextConfig,
     word_cfg: WordConfig,
     verse_cfg: VerseConfig,
@@ -340,7 +340,9 @@ def _render_verse_worker(
     Args:
         verse_data: List of (ayah_number, translation_list) tuples.
         surah: Surah number.
-        layout_cfg, text_cfg, word_cfg: Configurations.
+        frame_cfg: Canvas configuration.
+        guide: Resolved layout positions.
+        text_cfg, word_cfg, verse_cfg: Configurations.
         annotate: Whether to annotate words.
         separate_translations: Separate translation pages.
         output_dir: Optional directory to save images.
@@ -380,6 +382,7 @@ def _render_verse_worker(
                 word_items,
                 verse_translations,
                 frame_cfg,
+                guide,
                 word_cfg,
                 verse_cfg,
                 text_cfg,

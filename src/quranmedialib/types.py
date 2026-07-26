@@ -83,6 +83,71 @@ MAX_AYAH: Final = 286
 # === Layout Primitives ===
 
 
+@dataclass(frozen=True, slots=True)
+class UDim2:
+    """Scale+offset size/position value (inspired by Roblox).
+
+    Resolves to absolute pixels via: parent_size * scale + offset.
+    """
+    x_scale: float = 0.0
+    x_offset: float = 0.0
+    y_scale: float = 0.0
+    y_offset: float = 0.0
+
+    def resolve(self, parent_w: float | int, parent_h: float | int) -> tuple[int, int]:
+        return (
+            int(parent_w * self.x_scale + self.x_offset),
+            int(parent_h * self.y_scale + self.y_offset),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AnchorPoint:
+    """Pivot point for layout elements. 0-1 range per axis.
+
+    Examples:
+        AnchorPoint(0, 0)   = top-left
+        AnchorPoint(0.5, 0.5) = center
+        AnchorPoint(1, 1)   = bottom-right
+    """
+    x: float = 0.0
+    y: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedRect:
+    """Absolute pixel rectangle for content placement."""
+    left: int = 0
+    top: int = 0
+    width: int = 0
+    height: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PresetLayout:
+    """Resolution-independent layout element definition.
+
+    Attributes:
+        position: Where the element's anchor point is placed within parent.
+        size: Width/height of the element.
+        anchor: Which point of the element pivots at position.
+    """
+    position: UDim2 = UDim2(0, 0, 0, 0)
+    size: UDim2 = UDim2(1, 0, 1, 0)
+    anchor: AnchorPoint = AnchorPoint(0, 0)
+
+    def resolve(self, canvas_w: int, canvas_h: int) -> ResolvedRect:
+        elem_w, elem_h = self.size.resolve(canvas_w, canvas_h)
+        pos_x, pos_y = self.position.resolve(canvas_w, canvas_h)
+        left = int(pos_x - elem_w * self.anchor.x)
+        top = int(pos_y - elem_h * self.anchor.y)
+        return ResolvedRect(left=left, top=top, width=elem_w, height=elem_h)
+
+    @classmethod
+    def fill(cls) -> PresetLayout:
+        return cls(UDim2(0, 0, 0, 0), UDim2(1, 0, 1, 0), AnchorPoint(0, 0))
+
+
 @runtime_checkable
 class Layerable(Protocol):
     """Interface for objects that can render themselves directly onto a provided canvas.
@@ -407,81 +472,22 @@ class WordItem:
 
 @dataclass(frozen=True, slots=True)
 class FrameConfig:
-    """Stores canvas sizing and top-level layout offsets.
+    """Simplified canvas configuration.
+
+    In v4, layout positioning is handled by PresetLayout + LayoutEngine.
+    FrameConfig carries canvas-level rendering options and the target
+    canvas dimensions.
 
     Attributes:
-        max_width: Total canvas width in pixels.
-        image_height: Total canvas height in pixels.
-        padding: Internal canvas margins (top, bottom, left, right).
-        wimage_horizontal_align: Horizontal anchoring for the content.
-        wimage_vertical_align: Vertical anchoring for the content.
-        wimage_x_offset: Additional X offset for content.
-        wimage_y_offset: Additional Y offset for content.
+        background_color: Canvas background color (RGBA).
+        max_width: Canvas width in pixels.
+        image_height: Canvas height in pixels.
+        aspect_ratio: Aspect ratio key for layout lookup ("landscape", "story", "square").
     """
-
-    max_width: int
-    image_height: int
-    padding: Padding = field(default_factory=Padding)
-    wimage_horizontal_align: HorizontalAlignment = HorizontalAlignment.CENTER
-    wimage_vertical_align: VerticalAlignment = VerticalAlignment.CENTER
-    wimage_x_offset: int = 0
-    wimage_y_offset: int = 0
-    timage_horizontal_align: HorizontalAlignment = HorizontalAlignment.CENTER
-    timage_vertical_align: VerticalAlignment = VerticalAlignment.CENTER
-    timage_x_offset: int = 0
-    timage_y_offset: int = 0
-
-    def __post_init__(self):
-        """Validate dimensions, coerce padding and alignments."""
-        if not isinstance(self.padding, Padding):
-            try:
-                object.__setattr__(self, "padding", Padding(*self.padding))
-            except (TypeError, ValueError):
-                object.__setattr__(self, "padding", Padding())
-
-        # Coerce alignments
-        align_fields = (
-            "wimage_horizontal_align",
-            "wimage_vertical_align",
-            "timage_horizontal_align",
-            "timage_vertical_align",
-        )
-        for field_name in align_fields:
-            val = getattr(self, field_name)
-            if isinstance(val, str):
-                enum_cls = HorizontalAlignment if "horizontal" in field_name else VerticalAlignment
-                try:
-                    object.__setattr__(self, field_name, enum_cls(val.lower()))
-                except ValueError as e:
-                    msg = f"Invalid alignment value '{val}' for {field_name}. Must be one of {list(enum_cls)}"
-                    raise ValidationError(msg) from e
-
-        if self.max_width <= 0:
-            raise ValidationError(f"max_width must be positive, got {self.max_width}")
-        if self.max_width > MAX_CANVAS_DIMENSION:
-            raise ValidationError(f"max_width exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.max_width}")
-        if self.image_height <= 0:
-            raise ValidationError(f"image_height must be positive, got {self.image_height}")
-        if self.image_height > MAX_CANVAS_DIMENSION:
-            raise ValidationError(
-                f"image_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {self.image_height}"
-            )
-
-        if self.content_width <= 0:
-            raise ValidationError(f"content_width must be positive, got {self.content_width}")
-
-    @property
-    def content_width(self) -> int:
-        """Available width for layout (max_width - left_padding - right_padding)."""
-        return self.max_width - self.padding.left - self.padding.right
-
-    @property
-    def available_height(self) -> int:
-        """Available height for layout (image_height - top_padding - bottom_padding)."""
-        return self.image_height - self.padding.top - self.padding.bottom
-
-
-LayoutConfig = FrameConfig
+    background_color: Color = (0, 0, 0, 0)
+    max_width: int = 1920
+    image_height: int = 1080
+    aspect_ratio: str = "landscape"
 
 
 @dataclass(frozen=True, slots=True)

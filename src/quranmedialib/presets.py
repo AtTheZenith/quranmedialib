@@ -3,24 +3,26 @@
 This module provides:
 - FONT_* constants: Predefined FontResource instances for shipped fonts
 - DATABASE_* constants: Predefined DatabaseConfig instances for shipped databases
-- build_preset(): Public builder function for custom configs at any resolution
-- LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Pre-built layout configurations
+- build_preset(): Public builder function for any resolution
+- LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET: Pre-built layout dictionaries
 
-The builder uses 1080p as the reference resolution. All sizing parameters
-(font sizes, spacing, padding, offsets) scale linearly with the canvas height.
-Users can call build_preset() directly to generate configs for custom resolutions.
+All layout definitions use UDim2 + AnchorPoint for resolution independence.
 """
 
 from typing import Final
 
 from quranmedialib.exceptions import ValidationError
+from quranmedialib.modules.layout_engine import LayoutEngine, LayoutGuide
 from quranmedialib.types import (
+    AnchorPoint,
     DatabaseConfig,
     FontResource,
     FrameConfig,
     Padding,
     Preset,
+    PresetLayout,
     TextConfig,
+    UDim2,
     VerseConfig,
     WbwDatabaseConfig,
     WordConfig,
@@ -31,10 +33,12 @@ TRANSPARENT: Final[tuple[int, int, int, int]] = (0, 0, 0, 0)
 WHITE: Final[tuple[int, int, int, int]] = (255, 255, 255, 255)
 ARABIC_WORD_PADDING: Final[tuple[int, int, int, int]] = (8, 8, 0, 0)
 
+
 # === Font Presets ===
 FONT_HAFS: Final = FontResource.from_packaged("hafs.otf", "Hafs")
 FONT_INTER: Final = FontResource.from_packaged("inter.ttf", "Inter")
 FONT_INTER_ITALIC: Final = FontResource.from_packaged("inter_italic.ttf", "Inter Italic")
+
 
 # === Database Presets ===
 DATABASE_QURAN: Final = DatabaseConfig.from_packaged(
@@ -60,188 +64,47 @@ DATABASE_WBW_EN: Final = WbwDatabaseConfig.from_packaged(
     word_id_col="word",
 )
 
-# === Builder Constants (1080p reference values) ===
-# These are the base values at 1080p. The builder scales them linearly
-# with the canvas height ratio (height / 1080) for any resolution.
-# To microadjust: change the _BASE values here — all presets update automatically.
 
-# --- Landscape (16:9) base at 1080p ---
-_LANDSCAPE_BASE = {
-    "default": {
-        "layout": {
-            "padding": 50,
-            "wimage_y_offset": -150,
-            "timage_y_offset": -120,
-            "wimage_vertical_align": "center",
-            "timage_vertical_align": "bottom",
-        },
-        "text": {"font_size": 36, "line_spacing": 10, "max_width_subtract": 100},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 30,
-            "max_rows_per_page": 2,
-            "verse_number_size": 110,
-            "verse_number_padding_bottom": 41,
-            "annotation_font_size": 28,
-        },
-    },
-    "arabic": {
-        "layout": {
-            "padding": 50,
-            "wimage_vertical_align": "center",
-            "wimage_horizontal_align": "center",
-        },
-        "text": {"font_size": 36, "line_spacing": 10, "color": TRANSPARENT},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 10,
-            "max_rows_per_page": 3,
-            "verse_number_size": 110,
-            "verse_number_padding_bottom": 14,
-            "annotation_font_size": 28,
-            "word_padding": ARABIC_WORD_PADDING,
-        },
-    },
-    "translation": {
-        "layout": {
-            "padding": 50,
-            "timage_vertical_align": "center",
-        },
-        "text": {"font_size": 36, "line_spacing": 10, "max_width_subtract": 100},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 30,
-            "max_rows_per_page": 5,
-            "verse_number_size": 110,
-            "verse_number_color": TRANSPARENT,
-            "verse_number_padding_bottom": 41,
-            "annotation_font_size": 28,
-            "word_color": TRANSPARENT,
-            "annotation_color": TRANSPARENT,
-        },
-    },
+# === UDim2 Layout Definitions ===
+# These are resolution-independent. One definition works at 720p, 1080p, 2160p.
+
+_ARABIC_LAYOUT: dict[str, PresetLayout] = {
+    "landscape": PresetLayout(
+        position=UDim2(0.5, 0, 0.5, -150),
+        size=UDim2(0.92, 0, 0.5, 0),
+        anchor=AnchorPoint(0.5, 0.5),
+    ),
+    "story": PresetLayout(
+        position=UDim2(0.5, 0, 0.5, 0),
+        size=UDim2(0.85, 0, 0.4, 0),
+        anchor=AnchorPoint(0.5, 0.5),
+    ),
+    "square": PresetLayout(
+        position=UDim2(0.5, 0, 0.5, -100),
+        size=UDim2(0.85, 0, 0.4, 0),
+        anchor=AnchorPoint(0.5, 0.5),
+    ),
 }
 
-# --- Story/Portrait (9:16) base at 1080p ---
-_STORY_BASE = {
-    "default": {
-        "layout": {
-            "padding": 60,
-            "timage_y_offset_formula": "height/2 + height/8",  # 960 + 240 = 1200
-            "wimage_vertical_align": "center",
-            "timage_vertical_align": "top",
-        },
-        "text": {"font_size": 36, "line_spacing": 15, "max_width_subtract": 120},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 40,
-            "max_rows_per_page": 8,
-            "verse_number_size": 110,
-            "verse_number_padding_bottom": 41,
-            "annotation_font_size": 28,
-        },
-    },
-    "arabic": {
-        "layout": {
-            "padding": 60,
-        },
-        "text": {"font_size": 36, "line_spacing": 15, "color": TRANSPARENT},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 10,
-            "max_rows_per_page": 8,
-            "verse_number_size": 110,
-            "verse_number_padding_bottom": 14,
-            "annotation_font_size": 28,
-            "word_padding": ARABIC_WORD_PADDING,
-        },
-    },
-    "translation": {
-        "layout": {
-            "padding": 60,
-            "timage_vertical_align": "center",
-        },
-        "text": {"font_size": 36, "line_spacing": 15, "max_width_subtract": 120},
-        "word": {
-            "font_size": 80,
-            "word_spacing": 20,
-            "row_spacing": 40,
-            "max_rows_per_page": 8,
-            "verse_number_size": 110,
-            "verse_number_color": TRANSPARENT,
-            "verse_number_padding_bottom": 41,
-            "annotation_font_size": 28,
-            "word_color": TRANSPARENT,
-            "annotation_color": TRANSPARENT,
-        },
-    },
+_TRANSLATION_LAYOUT: dict[str, PresetLayout] = {
+    "landscape": PresetLayout(
+        position=UDim2(0.5, 0, 0.85, -120),
+        size=UDim2(0.92, -100, 0.2, 0),
+        anchor=AnchorPoint(0.5, 1.0),
+    ),
+    "story": PresetLayout(
+        position=UDim2(0.5, 0, 0.85, 0),
+        size=UDim2(0.85, -120, 0.25, 0),
+        anchor=AnchorPoint(0.5, 1.0),
+    ),
+    "square": PresetLayout(
+        position=UDim2(0.5, 0, 0.85, 0),
+        size=UDim2(0.85, -120, 0.25, 0),
+        anchor=AnchorPoint(0.5, 1.0),
+    ),
 }
 
-# --- Square (1:1) base at 1080p ---
-_SQUARE_BASE = {
-    "default": {
-        "layout": {
-            "padding": 60,
-            "timage_y_offset_formula": "height/2 + height/9",  # 540 + 120 = 660
-            "wimage_y_offset_formula": "-height/2 + padding",  # -540 + 60 = -480
-            "wimage_vertical_align": "bottom",
-            "timage_vertical_align": "top",
-        },
-        "text": {"font_size": 28, "line_spacing": 15, "max_width_subtract": 120},
-        "word": {
-            "font_size": 60,
-            "word_spacing": 20,
-            "row_spacing": 40,
-            "max_rows_per_page": 3,
-            "verse_number_size": 83,
-            "verse_number_padding_bottom": 31,
-            "annotation_font_size": 21,
-        },
-    },
-    "arabic": {
-        "layout": {
-            "padding": 60,
-        },
-        "text": {"font_size": 36, "line_spacing": 15, "color": TRANSPARENT},
-        "word": {
-            "font_size": 60,
-            "word_spacing": 20,
-            "row_spacing": 10,
-            "max_rows_per_page": 3,
-            "verse_number_size": 83,
-            "verse_number_padding_bottom": 11,
-            "annotation_font_size": 21,
-            "word_padding": ARABIC_WORD_PADDING,
-        },
-    },
-    "translation": {
-        "layout": {
-            "padding": 60,
-            "timage_vertical_align": "center",
-        },
-        "text": {"font_size": 28, "line_spacing": 15, "max_width_subtract": 120},
-        "word": {
-            "font_size": 60,
-            "word_spacing": 20,
-            "row_spacing": 40,
-            "max_rows_per_page": 3,
-            "verse_number_size": 83,
-            "verse_number_color": TRANSPARENT,
-            "verse_number_padding_bottom": 31,
-            "annotation_font_size": 21,
-            "word_color": TRANSPARENT,
-            "annotation_color": TRANSPARENT,
-        },
-    },
-}
-
-# === Known Resolutions ===
-# Each entry maps resolution name -> (width, height) for each aspect ratio
+# Known resolutions for preset dictionary generation
 _RESOLUTIONS: dict[str, dict[str, tuple[int, int]]] = {
     "landscape": {
         "720p": (1280, 720),
@@ -263,25 +126,84 @@ _RESOLUTIONS: dict[str, dict[str, tuple[int, int]]] = {
     },
 }
 
-# Reference height for scaling (1080p)
-# For landscape: use height (1080). For story: use width (1080). For square: either (1080).
-# We normalize all presets to a "reference dimension" of 1080.
-_REFERENCE_DIM: Final = 1080
+
+# === Mode-specific overrides ===
+# These override specific fields per mode.
+
+_MODE_OVERRIDES: dict[str, dict[str, dict]] = {
+    "default": {
+        "word": {
+            "font_size": 80,
+            "verse_number_size": 110,
+            "verse_number_padding": Padding(1, 41, 1, 1),
+            "annotation_font_size": 28,
+        },
+        "text": {
+            "font_size": 36,
+            "line_spacing": 10,
+        },
+        "verse": {
+            "word_spacing": 20,
+            "row_spacing": 30,
+            "max_rows_per_page": 2,
+        },
+    },
+    "arabic": {
+        "word": {
+            "font_size": 80,
+            "word_padding": ARABIC_WORD_PADDING,
+            "verse_number_size": 110,
+            "verse_number_padding": Padding(1, 14, 1, 1),
+            "annotation_font_size": 28,
+        },
+        "text": {
+            "font_size": 36,
+            "line_spacing": 10,
+            "color": TRANSPARENT,
+        },
+        "verse": {
+            "word_spacing": 20,
+            "row_spacing": 10,
+            "max_rows_per_page": 3,
+        },
+    },
+    "translation": {
+        "word": {
+            "font_size": 80,
+            "verse_number_size": 110,
+            "verse_number_padding": Padding(1, 41, 1, 1),
+            "verse_number_color": TRANSPARENT,
+            "annotation_font_size": 28,
+            "word_color": TRANSPARENT,
+            "annotation_color": TRANSPARENT,
+            "word_padding": Padding(8, 8, 0, 0),
+        },
+        "text": {
+            "font_size": 36,
+            "line_spacing": 10,
+        },
+        "verse": {
+            "word_spacing": 20,
+            "row_spacing": 30,
+            "max_rows_per_page": 5,
+        },
+    },
+}
 
 
-def _get_reference_dimension(aspect_ratio: str, width: int, height: int) -> int:
-    """Returns the reference dimension for scaling.
-
-    Landscape: height is the reference (720, 1080, 1440, 2160).
-    Story: width is the reference (720, 1080, 1440, 2160).
-    Square: width = height, so either works.
-    """
-    return height if aspect_ratio == "landscape" else width
-
-
-def _round_scale(base: int | float, ref_dim: int) -> int:
-    """Scales a base value linearly with the reference dimension, rounded to nearest int."""
-    return round(base * ref_dim / _REFERENCE_DIM)
+_ASPECT_OVERRIDES: dict[str, dict[str, dict]] = {
+    "square": {
+        "word": {
+            "font_size": 60,
+            "verse_number_size": 83,
+            "annotation_font_size": 21,
+        },
+        "text": {
+            "font_size": 28,
+            "line_spacing": 15,
+        },
+    },
+}
 
 
 def build_preset(
@@ -311,89 +233,78 @@ def build_preset(
     if mode not in valid_modes:
         raise ValidationError(f"Invalid mode: '{mode}'. Must be {valid_modes}.")
 
-    # Select base config
-    bases = {"landscape": _LANDSCAPE_BASE, "story": _STORY_BASE, "square": _SQUARE_BASE}
-    base = bases[aspect_ratio][mode]
+    # Get mode overrides
+    mode_cfg = _MODE_OVERRIDES[mode]
+    aspect_cfg = _ASPECT_OVERRIDES.get(aspect_ratio, {})
 
-    layout_base = base["layout"]
-    text_base = base["text"]
-    word_base = base["word"]
+    # Helper to merge overrides
+    def _merge(base: dict, mode_ov: dict, aspect_ov: dict) -> dict:
+        result = dict(base)
+        result.update(mode_ov)
+        result.update(aspect_ov)
+        return result
 
-    # Determine reference dimension for scaling
-    ref_dim = _get_reference_dimension(aspect_ratio, width, height)
-
-    padding_val = _round_scale(layout_base["padding"], ref_dim)
-
-    # Build FrameConfig
-    frame_kwargs: dict = {
-        "max_width": width,
-        "image_height": height,
-        "padding": Padding(padding_val, padding_val, padding_val, padding_val),
+    # Word config
+    word_defaults = {
+        "word_spacing": 10,
+        "row_spacing": 20,
+        "max_rows_per_page": 3,
+        "balanced_wrapping": False,
+        "word_color": WHITE,
+        "annotation_color": WHITE,
+        "background_color": TRANSPARENT,
     }
-    for key in ("wimage_vertical_align", "wimage_horizontal_align", "timage_vertical_align", "timage_horizontal_align"):
-        if key in layout_base:
-            frame_kwargs[key] = layout_base[key]
-
-    # Handle y-offsets (scaled by ref_dim for fixed offsets, actual height for formulas)
-    if "wimage_y_offset" in layout_base:
-        frame_kwargs["wimage_y_offset"] = _round_scale(layout_base["wimage_y_offset"], ref_dim)
-    elif "wimage_y_offset_formula" in layout_base:
-        formula = layout_base["wimage_y_offset_formula"]
-        if formula == "-height/2 + padding":
-            frame_kwargs["wimage_y_offset"] = -height // 2 + padding_val
-
-    if "timage_y_offset" in layout_base:
-        frame_kwargs["timage_y_offset"] = _round_scale(layout_base["timage_y_offset"], ref_dim)
-    elif "timage_y_offset_formula" in layout_base:
-        formula = layout_base["timage_y_offset_formula"]
-        if formula == "height/2 + height/8":
-            frame_kwargs["timage_y_offset"] = height // 2 + height // 8
-        elif formula == "height/2 + height/9":
-            frame_kwargs["timage_y_offset"] = height // 2 + round(height / 9)
-
-    frame_config = FrameConfig(**frame_kwargs)
-
-    # Build TextConfig
-    text_kwargs: dict = {
-        "font_size": _round_scale(text_base["font_size"], ref_dim),
-        "line_spacing": _round_scale(text_base["line_spacing"], ref_dim),
-        "max_width": width - _round_scale(text_base.get("max_width_subtract", 0), ref_dim),
-    }
-    if "color" in text_base:
-        text_kwargs["color"] = text_base["color"]
-
-    text_config = TextConfig(**text_kwargs)
-
-    # Build WordConfig
-    vnp_bottom = _round_scale(word_base["verse_number_padding_bottom"], ref_dim)
-    vnp_top_side = 1 if ref_dim <= 1080 else 2
-
-    word_kwargs: dict = {
-        "font_size": _round_scale(word_base["font_size"], ref_dim),
-        "verse_number_size": _round_scale(word_base["verse_number_size"], ref_dim),
-        "verse_number_padding": Padding(vnp_top_side, vnp_bottom, vnp_top_side, vnp_top_side),
-        "annotation_font_size": _round_scale(word_base["annotation_font_size"], ref_dim),
-    }
-    for key in ("word_padding", "verse_number_color", "word_color", "annotation_color"):
-        if key in word_base:
-            word_kwargs[key] = word_base[key]
-
+    word_kwargs = _merge(word_defaults, mode_cfg.get("word", {}), aspect_cfg.get("word", {}))
     word_config = WordConfig(**word_kwargs)
 
-    # Build VerseConfig
-    verse_kwargs: dict = {
-        "word_spacing": _round_scale(word_base["word_spacing"], ref_dim),
-        "row_spacing": _round_scale(word_base["row_spacing"], ref_dim),
-        "max_rows_per_page": word_base["max_rows_per_page"],
+    # Text config
+    text_defaults = {
+        "max_width": width - 100,
         "balanced_wrapping": True,
     }
+    text_kwargs = _merge(text_defaults, mode_cfg.get("text", {}), aspect_cfg.get("text", {}))
+    text_config = TextConfig(**text_kwargs)
+
+    # Verse config
+    verse_defaults = {
+        "word_spacing": 10,
+        "row_spacing": 20,
+        "max_rows_per_page": 3,
+        "balanced_wrapping": True,
+    }
+    verse_kwargs = _merge(verse_defaults, mode_cfg.get("verse", {}), aspect_cfg.get("verse", {}))
     verse_config = VerseConfig(**verse_kwargs)
+
+    frame_config = FrameConfig(
+        background_color=TRANSPARENT,
+        max_width=width,
+        image_height=height,
+        aspect_ratio=aspect_ratio,
+    )
 
     return Preset(
         frame=frame_config,
         word=word_config,
         verse=verse_config,
         text=text_config,
+    )
+
+
+def build_layout_guide(aspect_ratio: str, canvas_width: int, canvas_height: int) -> LayoutGuide:
+    """Build a resolved LayoutGuide from the preset layout definitions.
+
+    Args:
+        aspect_ratio: One of "landscape", "story", "square".
+        canvas_width: Canvas width in pixels.
+        canvas_height: Canvas height in pixels.
+
+    Returns:
+        LayoutGuide with resolved pixel rects for arabic and translation areas.
+    """
+    engine = LayoutEngine(canvas_width, canvas_height)
+    return LayoutGuide(
+        arabic=engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio]),
+        translation=engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio]),
     )
 
 

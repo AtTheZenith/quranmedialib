@@ -1,99 +1,74 @@
 from __future__ import annotations
 
+import warnings
+
 from PIL import Image
 
-from quranmedialib.types import (
-    Color,
-    FrameConfig,
-    HorizontalAlignment,
-    Layerable,
-    VerticalAlignment,
-)
+from quranmedialib.types import Color, Layerable, ResolvedRect
 
 
 class Frame:
-    """Composition class for layering images onto a fixed-size canvas.
+    """Composition class for layering images onto a fixed-size canvas."""
 
-    Attributes:
-        config: Configuration for canvas size, padding, and default alignments.
-        image: The RGBA canvas image.
-    """
+    def __init__(self, width: int, height: int, background_color: Color = (0, 0, 0, 0)):
+        self.width = width
+        self.height = height
+        self.image = Image.new("RGBA", (width, height), self._as_rgba(background_color))
 
-    def __init__(self, config: FrameConfig):
-        """Initialize the Frame with a transparent RGBA canvas.
+    @staticmethod
+    def _as_rgba(color: Color) -> tuple[int, int, int, int]:
+        if len(color) == 3:
+            return (*color, 255)
+        return color
+
+    def layer_at(
+        self,
+        image: Image.Image | Layerable,
+        rect: ResolvedRect,
+        text_color: Color | None = None,
+        **kwargs,
+    ) -> None:
+        """Place content at a resolved pixel rectangle.
+
+        For plain Images, pastes at (rect.left, rect.top).
+        For Layerable objects, delegates with the rect position.
 
         Args:
-            config: Framing configuration.
+            image: The image or Layerable to place.
+            rect: Resolved pixel position and size.
+            text_color: Color for 'L' mode mask images.
+            **kwargs: Additional args passed to Layerable.layer().
         """
-        self.config = config
-        self.image = Image.new("RGBA", (config.max_width, config.image_height), (0, 0, 0, 0))
+        if isinstance(image, Layerable):
+            image.layer(self.image, rect.left, rect.top, **kwargs)
+        elif image.mode == "L":
+            self.image.paste(text_color or (255, 255, 255, 255), (rect.left, rect.top), mask=image)
+        elif image.mode == "RGBA":
+            self.image.alpha_composite(image, dest=(rect.left, rect.top))
+        else:
+            self.image.paste(image, (rect.left, rect.top))
 
     def layer(
         self,
         image: Image.Image | Layerable,
-        alignment: tuple[HorizontalAlignment, VerticalAlignment] | None = None,
+        alignment: tuple | None = None,
         offset: tuple[int, int] | None = None,
         text_color: Color | None = None,
         **kwargs,
     ) -> None:
-        """Layer an image or layerable object onto the canvas using specified alignment and offset.
+        """DEPRECATED: Use layer_at() with a resolved rect instead.
 
-        Args:
-            image: The image or layerable object to layer.
-            alignment: Optional override for (horizontal, vertical) alignment.
-            offset: Optional (x, y) offset to shift the image.
-            text_color: Color to use when pasting an 'L' mode mask.
-            **kwargs: Additional arguments passed to Layerable.layer().
+        Legacy compat shim. Places content at offset (0,0) with no scaling.
         """
-        # 1. Determine alignment and anchor
-        h_align = alignment[0] if alignment else self.config.wimage_horizontal_align
-        v_align = alignment[1] if alignment else self.config.wimage_vertical_align
-
-        # We need the dimensions of the object to calculate alignment
-        # For PIL Images, it's simple. For Layerables, we expect them to have .width and .height
-        # (or we assume they know how to handle their own size relative to the anchor).
-        # VImage has .width and .height.
-
-        obj_width = image.width if hasattr(image, "width") else (image.width if isinstance(image, Image.Image) else 0)
-        obj_height = (
-            image.height if hasattr(image, "height") else (image.height if isinstance(image, Image.Image) else 0)
+        warnings.warn(
+            "Frame.layer() is deprecated. Use Frame.layer_at() with a ResolvedRect instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
-
-        rendered_width = kwargs.get("rendered_width", obj_width)
-        rendered_height = kwargs.get("rendered_height", obj_height)
-
-        if h_align == HorizontalAlignment.LEFT:
-            x = self.config.padding.left
-        elif h_align == HorizontalAlignment.RIGHT:
-            x = self.config.max_width - rendered_width - self.config.padding.right
-        else:
-            x = self.config.padding.left + (self.config.content_width - rendered_width) // 2
-
-        if v_align == VerticalAlignment.TOP:
-            y = self.config.padding.top
-        elif v_align == VerticalAlignment.BOTTOM:
-            y = self.config.image_height - rendered_height - self.config.padding.bottom
-        else:
-            y = self.config.padding.top + (self.config.available_height - rendered_height) // 2
-
-        dx, dy = offset or (self.config.wimage_x_offset, self.config.wimage_y_offset)
-        x += dx
-        y += dy
-
-        # 2. Delegate rendering
-        if isinstance(image, Layerable):
-            image.layer(self.image, x, y, **kwargs)
-        elif image.mode == "L":
-            self.image.paste(text_color or (255, 255, 255, 255), (x, y), mask=image)
-        elif image.mode == "RGBA":
-            self.image.alpha_composite(image, dest=(x, y))
-        else:
-            self.image.paste(image, (x, y))
+        dx, dy = offset or (0, 0)
+        rect = ResolvedRect(left=dx, top=dy, width=0, height=0)
+        self.layer_at(image, rect, text_color, **kwargs)
 
     def render(self) -> Image.Image:
-        """Return the final composed image.
-
-        Returns:
-            The RGBA canvas image.
-        """
+        """Return the final composed image."""
         return self.image

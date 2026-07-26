@@ -21,7 +21,7 @@ Key Features:
     - Pre-configured presets for common formats (landscape, story, square)
 
 Package Structure:
-    types:         Configuration dataclasses (LayoutConfig, WordConfig, etc.)
+    types:         Configuration dataclasses (FrameConfig, WordConfig, etc.)
     presets:       Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
     database_manager:  Stateful SQLite connection manager for Quran databases
     resources:     Asset path resolution (fonts, databases) via importlib.resources
@@ -56,6 +56,7 @@ from quranmedialib.exceptions import (
     ValidationError,
     WorkflowError,
 )
+from quranmedialib.modules.layout_engine import LayoutEngine, LayoutGuide
 from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.presets import (
     DATABASE_EN_SAHIH,
@@ -67,6 +68,7 @@ from quranmedialib.presets import (
     LANDSCAPE_PRESET,
     SQUARE_PRESET,
     STORY_PRESET,
+    build_layout_guide,
 )
 from quranmedialib.types import (
     MAX_AYAH,
@@ -74,16 +76,19 @@ from quranmedialib.types import (
     MAX_SURAH,
     MIN_AYAH,
     MIN_SURAH,
+    AnchorPoint,
     AyahNumber,
     Color,
     DatabaseConfig,
     FontResource,
     FrameConfig,
     HorizontalAlignment,
-    LayoutConfig,
     Padding,
+    PresetLayout,
+    ResolvedRect,
     SurahNumber,
     TextConfig,
+    UDim2,
     VerseConfig,
     VerticalAlignment,
     WbwDatabaseConfig,
@@ -113,7 +118,6 @@ __all__ = [
     "DatabaseManager",
     # Config classes
     "WordItem",
-    "LayoutConfig",
     "FrameConfig",
     "VerseConfig",
     "WordConfig",
@@ -145,6 +149,14 @@ __all__ = [
     "LANDSCAPE_PRESET",
     "STORY_PRESET",
     "SQUARE_PRESET",
+    # Layout engine
+    "AnchorPoint",
+    "LayoutEngine",
+    "LayoutGuide",
+    "PresetLayout",
+    "ResolvedRect",
+    "UDim2",
+    "build_layout_guide",
     # Workflows
     "VerseWorkflow",
     "VerseRangeWorkflow",

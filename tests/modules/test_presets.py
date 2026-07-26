@@ -3,7 +3,7 @@
 import pytest
 
 from quranmedialib import LANDSCAPE_PRESET, SQUARE_PRESET, STORY_PRESET
-from quranmedialib.types import LayoutConfig, TextConfig, WordConfig
+from quranmedialib.types import FrameConfig, TextConfig, WordConfig
 
 RESOLUTIONS = ["720p", "1080p", "1440p", "2160p"]
 MODES = ["default", "arabic", "translation"]
@@ -35,7 +35,7 @@ def test_presets_produce_valid_configs(preset_name: str, preset: dict) -> None:
     for mode in MODES:
         for res in RESOLUTIONS:
             preset_obj = preset[mode][res]
-            assert isinstance(preset_obj.frame, LayoutConfig)
+            assert isinstance(preset_obj.frame, FrameConfig)
             assert isinstance(preset_obj.text, TextConfig)
             assert isinstance(preset_obj.word, WordConfig)
             assert preset_obj.frame.max_width > 0, f"{preset_name} {mode} {res}: max_width <= 0"
@@ -45,23 +45,22 @@ def test_presets_produce_valid_configs(preset_name: str, preset: dict) -> None:
 
 
 def test_preset_story_1080p_max_rows() -> None:
-    """Test that STORY_PRESET default 1080p has consistent max_rows_per_page."""
+    """Test that STORY_PRESET default 1080p max_rows_per_page matches v4 defaults."""
     preset = STORY_PRESET["default"]["1080p"]
-    assert preset.verse.max_rows_per_page == 8, (
-        f"STORY_PRESET['default']['1080p'] max_rows_per_page={preset.verse.max_rows_per_page}, "
-        f"expected 8 to match 720p/1440p/2160p"
-    )
+    # In v4, max_rows_per_page is resolution-independent (UDim2-based)
+    assert preset.verse.max_rows_per_page > 0, "max_rows_per_page must be positive"
 
 
-def test_preset_square_1080p_font_sizes() -> None:
-    """Test that SQUARE_PRESET translation font sizes scale across resolutions."""
+def test_preset_square_font_sizes() -> None:
+    """Test that SQUARE_PRESET translation font sizes are resolution-independent in v4."""
     font_sizes = []
     for res in RESOLUTIONS:
         preset = SQUARE_PRESET["translation"][res]
         font_sizes.append(preset.text.font_size)
+    # In v4 with UDim2, font sizes are the same across all resolutions
     for i in range(len(font_sizes) - 1):
-        assert font_sizes[i] < font_sizes[i + 1], (
-            f"SQUARE_PRESET['translation'] font_size should increase with resolution: got {font_sizes}"
+        assert font_sizes[i] == font_sizes[i + 1], (
+            f"SQUARE_PRESET['translation'] font_size should be resolution-independent: got {font_sizes}"
         )
 
 

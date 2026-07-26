@@ -39,7 +39,7 @@ def test_preset_execution(preset_name, preset_set, mode, res) -> None:
     pages = results[0]
     assert len(pages) > 0, f"Empty page list for {preset_name}-{mode}-{res}"
 
-    # Verify dimensions match LayoutConfig
+    # Verify dimensions match FrameConfig
     img = pages[0]
     assert img.width == preset.frame.max_width
     assert img.height == preset.frame.image_height

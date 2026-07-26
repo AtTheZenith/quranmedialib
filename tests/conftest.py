@@ -25,7 +25,7 @@ def word_config() -> WordConfig:
 
 @pytest.fixture(scope="session")
 def layout_config():
-    """Provide a default LayoutConfig for testing."""
+    """Provide a default FrameConfig for testing."""
     return LANDSCAPE_PRESET["default"]["1080p"].frame
 
 

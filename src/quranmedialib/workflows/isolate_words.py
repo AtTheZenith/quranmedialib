@@ -18,6 +18,7 @@ from quranmedialib.modules.timage import (
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.presets import build_layout_guide
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
@@ -137,8 +138,15 @@ class IsolateWordsWorkflow(BaseWorkflow):
             # Bundle into WordItems for layout
             items = [WordItem(img, text) for img, text in zip(isolated_images, items_text)]
 
+            # Resolve layout positions from UDim2 presets
+            guide = build_layout_guide(
+                self.frame_cfg.aspect_ratio,
+                self.frame_cfg.max_width,
+                self.frame_cfg.image_height,
+            )
+
             # Frame the isolated images
-            vimage = VImage(items, self.verse_cfg, self.frame_cfg)
+            vimage = VImage(items, self.verse_cfg, guide.arabic.width)
             pages = []
             page_index = 0
             current_index = 0
@@ -146,27 +154,25 @@ class IsolateWordsWorkflow(BaseWorkflow):
 
             while current_index < total_items:
                 current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
-                frame_obj = Frame(self.frame_cfg)
-                v_img = vimage.render(self.word_cfg, rows_to_render=current_rows)
+                frame_obj = Frame(
+                    self.frame_cfg.max_width,
+                    self.frame_cfg.image_height,
+                    self.frame_cfg.background_color,
+                )
 
-                rendered_width = max(row[1] for row in current_rows) if current_rows else 0
-                rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * self.verse_cfg.row_spacing
-
-                frame_obj.layer(
-                    v_img,
-                    alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
-                    offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
-                    rendered_width=rendered_width,
-                    rendered_height=rendered_height,
+                frame_obj.layer_at(
+                    vimage,
+                    guide.arabic,
+                    word_config=self.word_cfg,
+                    rows_to_render=current_rows,
                 )
 
                 trans_images = [t_img] if t_img else None
                 if trans_images and page_index < len(trans_images):
                     if t_image := trans_images[page_index]:
-                        frame_obj.layer(
+                        frame_obj.layer_at(
                             t_image,
-                            alignment=(self.frame_cfg.timage_horizontal_align, self.frame_cfg.timage_vertical_align),
-                            offset=(self.frame_cfg.timage_x_offset, self.frame_cfg.timage_y_offset),
+                            guide.translation,
                             text_color=self.text_cfg.color,
                         )
 

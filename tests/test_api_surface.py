@@ -32,7 +32,6 @@ def test_api_exports_completeness() -> None:
         "DatabaseManager",
         # Config classes
         "WordItem",
-        "LayoutConfig",
         "FrameConfig",
         "VerseConfig",
         "WordConfig",
@@ -64,6 +63,14 @@ def test_api_exports_completeness() -> None:
         "LANDSCAPE_PRESET",
         "STORY_PRESET",
         "SQUARE_PRESET",
+        # Layout engine
+        "AnchorPoint",
+        "LayoutEngine",
+        "LayoutGuide",
+        "PresetLayout",
+        "ResolvedRect",
+        "UDim2",
+        "build_layout_guide",
         # Workflows
         "VerseWorkflow",
         "VerseRangeWorkflow",

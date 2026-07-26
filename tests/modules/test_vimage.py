@@ -3,8 +3,6 @@ from PIL import Image
 from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
 from quranmedialib.types import (
     Color,
-    LayoutConfig,
-    Padding,
     VerseConfig,
     WordItem,
 )
@@ -16,7 +14,7 @@ def create_dummy_word(text: str, width: int, height: int, color: Color | None = 
     return WordItem(image=img, text=text, color=color)
 
 
-def test_vimage_greedy_pack(layout_config, word_config):
+def test_vimage_greedy_pack(word_config):
     """Test RTL layout and greedy row packing."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20, balanced_wrapping=False)
 
@@ -31,9 +29,7 @@ def test_vimage_greedy_pack(layout_config, word_config):
         create_dummy_word("W4", 50, 40),
     ]
 
-    narrow_layout = LayoutConfig(max_width=110, image_height=200, padding=Padding(0, 0, 0, 0))
-
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 110)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)
@@ -44,7 +40,7 @@ def test_vimage_greedy_pack(layout_config, word_config):
     assert rows[0][1] == 110
 
 
-def test_vimage_balanced_wrapping(layout_config, word_config):
+def test_vimage_balanced_wrapping(word_config):
     """Test Descending Line Balancing (inverted pyramid shape)."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20, balanced_wrapping=True)
 
@@ -54,9 +50,7 @@ def test_vimage_balanced_wrapping(layout_config, word_config):
     # Balanced: should attempt to balance.
     items = [create_dummy_word(f"W{i}", 40, 40) for i in range(5)]
 
-    narrow_layout = LayoutConfig(max_width=150, image_height=200, padding=Padding(0, 0, 0, 0))
-
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 150)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)
@@ -65,7 +59,7 @@ def test_vimage_balanced_wrapping(layout_config, word_config):
     assert sum(len(r[0]) for r in rows) == 5
 
 
-def test_vimage_stop_sign_chunking(layout_config, word_config):
+def test_vimage_stop_sign_chunking(word_config):
     """Test Quranic stop-sign aware page breaking using get_page_chunk."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
 
@@ -78,9 +72,7 @@ def test_vimage_stop_sign_chunking(layout_config, word_config):
         create_dummy_word("W5", 50, 40),
     ]
 
-    narrow_layout = LayoutConfig(max_width=110, image_height=200, padding=Padding(0, 0, 0, 0))
-
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 110)
     # Rows: [W1, W2], [W3, W4], [W5]
 
     # Request 2 rows.
@@ -102,7 +94,7 @@ def test_vimage_stop_sign_chunking(layout_config, word_config):
         create_dummy_word("W4", 50, 40),
         create_dummy_word("W5", 50, 40),
     ]
-    vimg_2 = VImage(items_2, verse_cfg, narrow_layout)
+    vimg_2 = VImage(items_2, verse_cfg, 110)
     # Rows: [W1, W2], [W3, W4], [W5]
 
     # Request 2 rows.
@@ -113,7 +105,7 @@ def test_vimage_stop_sign_chunking(layout_config, word_config):
     assert consumed == 3
 
 
-def test_vimage_bounding_box(layout_config, word_config):
+def test_vimage_bounding_box(word_config):
     """Verify bounding box (width, height) accuracy."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     items = [
@@ -121,8 +113,7 @@ def test_vimage_bounding_box(layout_config, word_config):
         create_dummy_word("W2", 50, 60),
     ]
     # content_width 200 -> [W1, W2]. width = 100 + 10 + 50 = 160. height = 60.
-    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding(0, 0, 0, 0))
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 200)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)
@@ -133,12 +124,11 @@ def test_vimage_bounding_box(layout_config, word_config):
     assert total_height == 60
 
 
-def test_vimage_render_modes(layout_config, word_config):
+def test_vimage_render_modes(word_config):
     """Test render() output for both grayscale masks and RGBA."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     items = [create_dummy_word("W1", 50, 40)]
-    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 200)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)
@@ -152,12 +142,11 @@ def test_vimage_render_modes(layout_config, word_config):
     assert img_l.mode == "L"
 
 
-def test_vimage_layer_direct(layout_config, word_config):
+def test_vimage_layer_direct(word_config):
     """Test that .layer() renders correctly onto a provided canvas."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     items = [create_dummy_word("W1", 50, 40)]
-    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 200)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)
@@ -177,15 +166,14 @@ def test_vimage_layer_direct(layout_config, word_config):
     assert canvas.getpixel((61, 11)) == (0, 0, 0, 0)
 
 
-def test_vimage_layer_vs_render_equality(layout_config, word_config):
+def test_vimage_layer_vs_render_equality(word_config):
     """Verify that .layer() produces the same pixels as .render()."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     items = [
         create_dummy_word("W1", 50, 40),
         create_dummy_word("W2", 60, 40),
     ]
-    narrow_layout = LayoutConfig(max_width=200, image_height=200, padding=Padding())
-    vimg = VImage(items, verse_cfg, narrow_layout)
+    vimg = VImage(items, verse_cfg, 200)
 
     # Rows computed on-demand via get_page_chunk
     rows, consumed = vimg.get_page_chunk(0, 10)

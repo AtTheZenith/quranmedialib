@@ -2,18 +2,12 @@ import pytest
 from PIL import Image
 
 from quranmedialib.modules.frame import Frame
-from quranmedialib.types import (
-    FrameConfig,
-    HorizontalAlignment,
-    Padding,
-    VerticalAlignment,
-)
+from quranmedialib.types import ResolvedRect
 
 
 def test_frame_initialization():
     """Test canvas initialization (size, transparency)."""
-    config = FrameConfig(max_width=1000, image_height=500, padding=Padding(10, 10, 10, 10))
-    frame = Frame(config)
+    frame = Frame(1000, 500)
 
     assert frame.image.size == (1000, 500)
     assert frame.image.mode == "RGBA"
@@ -21,169 +15,80 @@ def test_frame_initialization():
     assert frame.image.getpixel((500, 250)) == (0, 0, 0, 0)
 
 
-@pytest.mark.parametrize(
-    "h_align, v_align",
-    [
-        (HorizontalAlignment.LEFT, VerticalAlignment.TOP),
-        (HorizontalAlignment.LEFT, VerticalAlignment.CENTER),
-        (HorizontalAlignment.LEFT, VerticalAlignment.BOTTOM),
-        (HorizontalAlignment.CENTER, VerticalAlignment.TOP),
-        (HorizontalAlignment.CENTER, VerticalAlignment.CENTER),
-        (HorizontalAlignment.CENTER, VerticalAlignment.BOTTOM),
-        (HorizontalAlignment.RIGHT, VerticalAlignment.TOP),
-        (HorizontalAlignment.RIGHT, VerticalAlignment.CENTER),
-        (HorizontalAlignment.RIGHT, VerticalAlignment.BOTTOM),
-    ],
-)
-def test_frame_alignments(h_align, v_align, dummy_rgba_image):
-    """Exhaustively test HorizontalAlignment and VerticalAlignment combinations."""
-    # No padding, no offset for pure alignment test
-    config = FrameConfig(
-        max_width=1000, image_height=1000, padding=Padding(0, 0, 0, 0), wimage_x_offset=0, wimage_y_offset=0
-    )
-    frame = Frame(config)
-
-    # Use a smaller image to make calculations easy
+def test_frame_layer_at_positioning(dummy_rgba_image):
+    """Verify layer_at places content at the correct rect."""
+    frame = Frame(1000, 1000)
     img = Image.new("RGBA", (100, 100), (255, 0, 0, 255))
-
-    frame.layer(img, alignment=(h_align, v_align))
-
-    # Expected X
-    if h_align == HorizontalAlignment.LEFT:
-        expected_x = 0
-    elif h_align == HorizontalAlignment.RIGHT:
-        expected_x = 1000 - 100
-    else:
-        expected_x = (1000 - 100) // 2
-
-    # Expected Y
-    if v_align == VerticalAlignment.TOP:
-        expected_y = 0
-    elif v_align == VerticalAlignment.BOTTOM:
-        expected_y = 1000 - 100
-    else:
-        expected_y = (1000 - 100) // 2
-
-    # Check a pixel that should be colored
-    assert frame.image.getpixel((expected_x, expected_y)) == (255, 0, 0, 255)
+    rect = ResolvedRect(left=50, top=60, width=100, height=100)
+    frame.layer_at(img, rect)
+    assert frame.image.getpixel((50, 60)) == (255, 0, 0, 255)
+    assert frame.image.getpixel((49, 59)) == (0, 0, 0, 0)
 
 
-def test_frame_offset(dummy_rgba_image):
-    """Verify offset application."""
-    config = FrameConfig(
-        max_width=1000,
-        image_height=1000,
-        padding=Padding(0, 0, 0, 0),
-        wimage_horizontal_align=HorizontalAlignment.LEFT,
-        wimage_vertical_align=VerticalAlignment.TOP,
-        wimage_x_offset=10,
-        wimage_y_offset=20,
-    )
-    frame = Frame(config)
+def test_frame_layer_at_offset(dummy_rgba_image):
+    """Verify layer_at with offset rect."""
+    frame = Frame(1000, 1000)
     img = Image.new("RGBA", (100, 100), (255, 0, 0, 255))
-
-    frame.layer(img)  # Uses config offsets
+    rect = ResolvedRect(left=10, top=20, width=100, height=100)
+    frame.layer_at(img, rect)
     assert frame.image.getpixel((10, 20)) == (255, 0, 0, 255)
-
-    # Test override offset
-    frame2 = Frame(config)
-    frame2.layer(img, offset=(50, 60))
+    frame2 = Frame(1000, 1000)
+    rect2 = ResolvedRect(left=50, top=60, width=100, height=100)
+    frame2.layer_at(img, rect2)
     assert frame2.image.getpixel((50, 60)) == (255, 0, 0, 255)
 
 
-def test_frame_layering_modes():
-    """Test layering modes: 'L' masks with text_color, 'RGBA', and standard paste."""
-    config = FrameConfig(max_width=100, image_height=100)
-    frame = Frame(config)
+def test_frame_layer_at_modes():
+    """Test layering modes via layer_at."""
+    frame = Frame(100, 100)
 
     # 1. 'L' mask
     mask = Image.new("L", (20, 20), 0)
     mask.putpixel((5, 5), 255)
     text_color = (123, 234, 56, 255)
-
-    # Align to top-left, no offset
-    frame.layer(mask, alignment=(HorizontalAlignment.LEFT, VerticalAlignment.TOP), offset=(0, 0), text_color=text_color)
-    # Center of canvas is (50, 50). Alignment center is (40, 40).
-    # Left/Top is (0,0).
-    # - Wait, alignment=LEFT/TOP with offset=(0,0) and padding=0 should be at (0,0).
-    # Check pixel (5, 5) - relative to top-left
+    frame.layer_at(mask, ResolvedRect(left=0, top=0, width=20, height=20), text_color=text_color)
     assert frame.image.getpixel((5, 5)) == text_color
 
     # 2. 'RGBA'
-    rgba_img = Image.new("RGBA", (20, 20), (255, 0, 0, 128))  # Semi-transparent red
-    frame.layer(rgba_img, alignment=(HorizontalAlignment.LEFT, VerticalAlignment.TOP), offset=(20, 0))
-    # (25, 5) should be semi-transparent red
-    assert frame.image.getpixel((25, 5)) == (255, 0, 0, 128)
+    frame2 = Frame(100, 100)
+    rgba_img = Image.new("RGBA", (20, 20), (255, 0, 0, 128))
+    frame2.layer_at(rgba_img, ResolvedRect(left=20, top=0, width=20, height=20))
+    assert frame2.image.getpixel((25, 5)) == (255, 0, 0, 128)
 
-    # 3. standard paste (RGB)
-    rgb_img = Image.new("RGB", (20, 20), (0, 255, 0))  # Opaque green
-    frame.layer(rgb_img, alignment=(HorizontalAlignment.LEFT, VerticalAlignment.TOP), offset=(40, 0))
-    assert frame.image.getpixel((45, 5)) == (0, 255, 0, 255)
+    # 3. RGB paste
+    frame3 = Frame(100, 100)
+    rgb_img = Image.new("RGB", (20, 20), (0, 255, 0))
+    frame3.layer_at(rgb_img, ResolvedRect(left=40, top=0, width=20, height=20))
+    assert frame3.image.getpixel((45, 5)) == (0, 255, 0, 255)
 
 
-def test_frame_stacking_order():
+def test_frame_layer_at_stacking():
     """Verify stacking order (last layer on top)."""
-    config = FrameConfig(max_width=100, image_height=100)
-    frame = Frame(config)
-
-    img1 = Image.new("RGBA", (50, 50), (255, 0, 0, 255))  # Red
-    img2 = Image.new("RGBA", (50, 50), (0, 255, 0, 255))  # Green
-
-    # Both at the same position
-    frame.layer(img1, alignment=(HorizontalAlignment.LEFT, VerticalAlignment.TOP), offset=(0, 0))
-    frame.layer(img2, alignment=(HorizontalAlignment.LEFT, VerticalAlignment.TOP), offset=(0, 0))
-
-    # Green should be on top
+    frame = Frame(100, 100)
+    img1 = Image.new("RGBA", (50, 50), (255, 0, 0, 255))
+    img2 = Image.new("RGBA", (50, 50), (0, 255, 0, 255))
+    rect = ResolvedRect(left=0, top=0, width=50, height=50)
+    frame.layer_at(img1, rect)
+    frame.layer_at(img2, rect)
     assert frame.image.getpixel((10, 10)) == (0, 255, 0, 255)
 
 
-def test_frame_layerable_integration(dummy_rgba_image, layout_config, word_config):
-    """Verify that Frame correctly handles Layerable objects (like VImage)."""
+def test_frame_layerable_integration(word_config, layout_config):
+    """Verify Frame correctly handles Layerable objects via layer_at."""
     from quranmedialib.modules.vimage import VImage
-    from quranmedialib.types import VerseConfig
+    from quranmedialib.types import VerseConfig, WordItem, ResolvedRect
 
-    # Create a simple VImage
     verse_cfg = VerseConfig(word_spacing=0, row_spacing=0)
-    items = [
-        # 100x40 word
-        # create_dummy_word helper from test_vimage.py isn't here, let's make one
-        # we can't import it because it's not exported.
-        # so we'll just use a WordItem with a manual image.
-        # Using a white 'L' mask to be consistent with vimage rendering
-        # the logic in vimage.layer expects either 'L' or 'RGBA'
-    ]
-    # To avoid importing helpers from other tests, we just define the WordItem manually
-    from PIL import Image
-
-    from quranmedialib.types import WordItem
-
     word_img = Image.new("L", (100, 40), 255)
     items = [WordItem(image=word_img, text="Test")]
 
-    # Setup layout
-    layout_cfg = layout_config  # from fixture
-    vimg = VImage(items, verse_cfg, layout_cfg)
-
-    # Rows computed on-demand via get_page_chunk
+    content_width = 500
+    vimg = VImage(items, verse_cfg, content_width)
     rows, consumed = vimg.get_page_chunk(0, 10)
 
-    # Frame it
-    config = FrameConfig(
-        max_width=1000,
-        image_height=1000,
-        padding=Padding(0, 0, 0, 0),
-        wimage_horizontal_align=HorizontalAlignment.LEFT,
-        wimage_vertical_align=VerticalAlignment.TOP,
-    )
-    frame = Frame(config)
+    frame = Frame(1000, 1000)
+    rect = ResolvedRect(left=0, top=0, width=content_width, height=200)
+    frame.layer_at(vimg, rect, word_config=word_config, rows_to_render=rows)
 
-    # Layer the Layerable (VImage)
-    frame.layer(vimg, word_config=word_config, rows_to_render=rows)
-
-    # In VImage.layer:
-    # total_width = 100.
-    # Anchor x=0, y=0.
-    # Word 1: current_x = 0 + 100 = 100.
-    # paste(color, (current_x - w_img.width, ry)) -> (100-100, 0) = (0,0)
     assert frame.image.getpixel((0, 0)) != (0, 0, 0, 0)
     assert frame.image.getpixel((99, 0)) != (0, 0, 0, 0)
