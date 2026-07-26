@@ -232,8 +232,8 @@ def _render_pages(
     """Render the verse pages using resolved layout guide."""
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
-    canvas_w = frame_cfg.max_width
-    canvas_h = frame_cfg.image_height
+    frame_w = frame_cfg.max_width
+    frame_h = frame_cfg.image_height
     bg = frame_cfg.background_color
 
     if not separate_translations:
@@ -245,7 +245,7 @@ def _render_pages(
 
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
-            frame_obj = Frame(canvas_w, canvas_h, bg)
+            frame_obj = Frame(frame_w, frame_h, bg)
 
             frame_obj.layer_at(
                 vimage,
@@ -275,7 +275,7 @@ def _render_pages(
 
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
-        frame_obj = Frame(canvas_w, canvas_h, bg)
+        frame_obj = Frame(frame_w, frame_h, bg)
 
         frame_obj.layer_at(
             vimage,
@@ -289,7 +289,7 @@ def _render_pages(
     for t_img in trans_images:
         if not t_img:
             continue
-        frame_obj = Frame(canvas_w, canvas_h, bg)
+        frame_obj = Frame(frame_w, frame_h, bg)
         frame_obj.layer_at(
             t_img,
             guide.translation,

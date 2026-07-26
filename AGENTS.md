@@ -113,6 +113,10 @@ uv run -m pytest; uv run -m pytest --benchmark
 - Functions should describe actions clearly (`get_wimage`, `annotate_words`, `glow`, `pad`).
 - Private helpers use a leading underscore (`_normalize_items`, `_greedy_pack`).
 
+### 2.1 Frame vs Canvas
+
+"Frame" is the word for canvas in this project (multimedia-oriented — think picture frame, not UI frame). `Frame` is the RGBA surface that content layers onto. All dimension variables use `frame_*` prefix (`frame_width`, `frame_h`), never `canvas_*`. The PIL-level `canvas` parameter in Layerable methods is the exception (PIL convention).
+
 ---
 
 ## 3. Types and Signatures

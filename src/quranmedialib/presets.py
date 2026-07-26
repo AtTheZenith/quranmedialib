@@ -290,18 +290,18 @@ def build_preset(
     )
 
 
-def build_layout_guide(aspect_ratio: str, canvas_width: int, canvas_height: int) -> LayoutGuide:
+def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -> LayoutGuide:
     """Build a resolved LayoutGuide from the preset layout definitions.
 
     Args:
         aspect_ratio: One of "landscape", "story", "square".
-        canvas_width: Canvas width in pixels.
-        canvas_height: Canvas height in pixels.
+        frame_width: Frame width in pixels.
+        frame_height: Frame height in pixels.
 
     Returns:
         LayoutGuide with resolved pixel rects for arabic and translation areas.
     """
-    engine = LayoutEngine(canvas_width, canvas_height)
+    engine = LayoutEngine(frame_width, frame_height)
     return LayoutGuide(
         arabic=engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio]),
         translation=engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio]),

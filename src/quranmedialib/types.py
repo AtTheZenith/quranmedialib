@@ -136,9 +136,9 @@ class PresetLayout:
     size: UDim2 = UDim2(1, 0, 1, 0)
     anchor: AnchorPoint = AnchorPoint(0, 0)
 
-    def resolve(self, canvas_w: int, canvas_h: int) -> ResolvedRect:
-        elem_w, elem_h = self.size.resolve(canvas_w, canvas_h)
-        pos_x, pos_y = self.position.resolve(canvas_w, canvas_h)
+    def resolve(self, frame_w: int, frame_h: int) -> ResolvedRect:
+        elem_w, elem_h = self.size.resolve(frame_w, frame_h)
+        pos_x, pos_y = self.position.resolve(frame_w, frame_h)
         left = int(pos_x - elem_w * self.anchor.x)
         top = int(pos_y - elem_h * self.anchor.y)
         return ResolvedRect(left=left, top=top, width=elem_w, height=elem_h)

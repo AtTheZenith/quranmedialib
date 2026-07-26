@@ -1,7 +1,8 @@
 """Resolution-independent layout engine using UDim2 and AnchorPoint.
 
 Resolves UDim2-based layout definitions to absolute pixel positions
-for a given canvas size. All dimensions are computed at render time.
+for a given frame size. All dimensions are computed at render time
+(the term "frame" here means canvas — this is multimedia-oriented).
 """
 
 from __future__ import annotations
@@ -22,16 +23,16 @@ class LayoutEngine:
     """Resolves PresetLayout elements to absolute pixel positions.
 
     Usage:
-        engine = LayoutEngine(canvas_width, canvas_height)
+        engine = LayoutEngine(frame_width, frame_height)
         guide = LayoutGuide(
             arabic=engine.resolve_rect(arabic_layout),
             translation=engine.resolve_rect(translation_layout),
         )
     """
 
-    def __init__(self, canvas_width: int, canvas_height: int):
-        self.canvas_width = canvas_width
-        self.canvas_height = canvas_height
+    def __init__(self, frame_width: int, frame_height: int):
+        self.frame_width = frame_width
+        self.frame_height = frame_height
 
     def resolve_rect(self, elem: PresetLayout) -> ResolvedRect:
         """Resolve a PresetLayout element to pixel coordinates.
@@ -42,7 +43,7 @@ class LayoutEngine:
         Returns:
             ResolvedRect with absolute pixel positions.
         """
-        return elem.resolve(self.canvas_width, self.canvas_height)
+        return elem.resolve(self.frame_width, self.frame_height)
 
 
 __all__ = ["LayoutEngine", "LayoutGuide"]
