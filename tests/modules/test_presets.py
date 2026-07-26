@@ -52,16 +52,15 @@ def test_preset_story_1080p_max_rows() -> None:
 
 
 def test_preset_square_font_sizes() -> None:
-    """Test that SQUARE_PRESET translation font sizes are resolution-independent in v4."""
+    """Test that SQUARE_PRESET font sizes scale with resolution (matching v3 behavior)."""
     font_sizes = []
     for res in RESOLUTIONS:
         preset = SQUARE_PRESET["translation"][res]
         font_sizes.append(preset.text.font_size)
-    # In v4 with UDim2, font sizes are the same across all resolutions
-    for i in range(len(font_sizes) - 1):
-        assert font_sizes[i] == font_sizes[i + 1], (
-            f"SQUARE_PRESET['translation'] font_size should be resolution-independent: got {font_sizes}"
-        )
+    # Font sizes scale with ref_dim: round(28 * ref_dim / 1080)
+    assert font_sizes == [19, 28, 37, 56], (
+        f"SQUARE_PRESET['translation'] font_size should scale per resolution: got {font_sizes}"
+    )
 
 
 def test_presets_consistent_scaling() -> None:

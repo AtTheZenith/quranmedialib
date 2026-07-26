@@ -237,6 +237,8 @@ class VImage:
         y: int,
         word_config: WordConfig,
         rows_to_render: list[tuple[list[WordItem], int, int]] | None = None,
+        center: bool = False,
+        content_height: int = 0,
         **kwargs,
     ) -> None:
         """Renders the verse (or a subset of rows) directly onto the provided canvas.
@@ -253,6 +255,12 @@ class VImage:
             return
 
         total_width = max(row[1] for row in rows)
+        if center and self.content_width > total_width:
+            x += (self.content_width - total_width) // 2
+
+        total_render_height = sum(r[2] for r in rows) + (len(rows) - 1) * self.verse_config.row_spacing
+        if center and content_height > total_render_height:
+            y += (content_height - total_render_height) // 2
 
         word_spacing = self.verse_config.word_spacing
         row_spacing = self.verse_config.row_spacing

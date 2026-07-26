@@ -145,6 +145,8 @@ class VerseWorkflow(BaseWorkflow):
                 guide.arabic,
                 word_config=self.word_cfg,
                 rows_to_render=current_rows,
+                center=True,
+                content_height=guide.arabic.height,
             )
 
             if translation_images and page_index < len(translation_images):
@@ -153,6 +155,7 @@ class VerseWorkflow(BaseWorkflow):
                         t_image,
                         guide.translation,
                         text_color=self.text_cfg.color,
+                        keep_bottom=True,
                     )
 
             pages.append(frame_obj.render())

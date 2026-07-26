@@ -252,6 +252,8 @@ def _render_pages(
                 guide.arabic,
                 word_config=word_cfg,
                 rows_to_render=current_rows,
+                center=True,
+                content_height=guide.arabic.height,
             )
 
             if trans_images and page_index < len(trans_images):
@@ -260,6 +262,7 @@ def _render_pages(
                         t_image,
                         guide.translation,
                         text_color=text_cfg.color,
+                        keep_bottom=True,
                     )
 
             pages.append(frame_obj.render())
@@ -282,6 +285,8 @@ def _render_pages(
             guide.arabic,
             word_config=word_cfg,
             rows_to_render=current_rows,
+            center=True,
+            content_height=guide.arabic.height,
         )
         pages.append(frame_obj.render())
         current_index += items_consumed
@@ -294,6 +299,7 @@ def _render_pages(
             t_img,
             guide.translation,
             text_color=text_cfg.color,
+            keep_bottom=True,
         )
         pages.append(frame_obj.render())
     return pages

@@ -77,8 +77,7 @@ class SurahWorkflow(VerseRangeWorkflow):
         # (One page of translation per verse by default).
         translations = [[t] for t in raw_translations]
 
-        # Enable parallel processing by default for surahs with more than 10 verses
-        parallel = kwargs.get("parallel", len(arabic_verses) > 10)
+        parallel = kwargs.pop("parallel", len(arabic_verses) > 10)
 
         return self._process_range(
             surah=surah,

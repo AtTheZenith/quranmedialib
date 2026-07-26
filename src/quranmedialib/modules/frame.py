@@ -26,6 +26,7 @@ class Frame:
         image: Image.Image | Layerable,
         rect: ResolvedRect,
         text_color: Color | None = None,
+        keep_bottom: bool = False,
         **kwargs,
     ) -> None:
         """Place content at a resolved pixel rectangle.
@@ -37,16 +38,23 @@ class Frame:
             image: The image or Layerable to place.
             rect: Resolved pixel position and size.
             text_color: Color for 'L' mode mask images.
+            keep_bottom: If True, aligns image bottom with rect bottom.
             **kwargs: Additional args passed to Layerable.layer().
         """
         if isinstance(image, Layerable):
             image.layer(self.image, rect.left, rect.top, **kwargs)
-        elif image.mode == "L":
-            self.image.paste(text_color or (255, 255, 255, 255), (rect.left, rect.top), mask=image)
+            return
+        x, y = rect.left, rect.top
+        if keep_bottom:
+            y = rect.top + rect.height - image.height
+        if rect.width > image.width:
+            x = rect.left + (rect.width - image.width) // 2
+        if image.mode == "L":
+            self.image.paste(text_color or (255, 255, 255, 255), (x, y), mask=image)
         elif image.mode == "RGBA":
-            self.image.alpha_composite(image, dest=(rect.left, rect.top))
+            self.image.alpha_composite(image, dest=(x, y))
         else:
-            self.image.paste(image, (rect.left, rect.top))
+            self.image.paste(image, (x, y))
 
     def layer(
         self,

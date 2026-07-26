@@ -165,6 +165,8 @@ class IsolateWordsWorkflow(BaseWorkflow):
                     guide.arabic,
                     word_config=self.word_cfg,
                     rows_to_render=current_rows,
+                    center=True,
+                    content_height=guide.arabic.height,
                 )
 
                 trans_images = [t_img] if t_img else None
@@ -174,6 +176,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                             t_image,
                             guide.translation,
                             text_color=self.text_cfg.color,
+                            keep_bottom=True,
                         )
 
                 pages.append(frame_obj.render())

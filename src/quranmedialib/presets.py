@@ -21,6 +21,7 @@ from quranmedialib.types import (
     Padding,
     Preset,
     PresetLayout,
+    ResolvedRect,
     TextConfig,
     UDim2,
     VerseConfig,
@@ -71,7 +72,7 @@ DATABASE_WBW_EN: Final = WbwDatabaseConfig.from_packaged(
 _ARABIC_LAYOUT: dict[str, PresetLayout] = {
     "landscape": PresetLayout(
         position=UDim2(0.5, 0, 0.5, -150),
-        size=UDim2(0.92, 0, 0.5, 0),
+        size=UDim2(1.0, -100, 1.0, 0),
         anchor=AnchorPoint(0.5, 0.5),
     ),
     "story": PresetLayout(
@@ -88,7 +89,7 @@ _ARABIC_LAYOUT: dict[str, PresetLayout] = {
 
 _TRANSLATION_LAYOUT: dict[str, PresetLayout] = {
     "landscape": PresetLayout(
-        position=UDim2(0.5, 0, 0.85, -120),
+        position=UDim2(0.5, 0, 0.85, -8),
         size=UDim2(0.92, -100, 0.2, 0),
         anchor=AnchorPoint(0.5, 1.0),
     ),
@@ -233,6 +234,12 @@ def build_preset(
     if mode not in valid_modes:
         raise ValidationError(f"Invalid mode: '{mode}'. Must be {valid_modes}.")
 
+    # Determine reference dimension for resolution scaling (matches v3)
+    ref_dim = height if aspect_ratio == "landscape" else width
+
+    def _scale(val: int | float) -> int:
+        return round(val * ref_dim / 1080)
+
     # Get mode overrides
     mode_cfg = _MODE_OVERRIDES[mode]
     aspect_cfg = _ASPECT_OVERRIDES.get(aspect_ratio, {})
@@ -255,14 +262,26 @@ def build_preset(
         "background_color": TRANSPARENT,
     }
     word_kwargs = _merge(word_defaults, mode_cfg.get("word", {}), aspect_cfg.get("word", {}))
+    # Scale resolution-dependent word fields
+    for k in ("font_size", "word_spacing", "verse_number_size", "annotation_font_size"):
+        if k in word_kwargs:
+            word_kwargs[k] = _scale(word_kwargs[k])
+    # Scale verse_number_padding bottom value
+    if "verse_number_padding" in word_kwargs:
+        vnp = word_kwargs["verse_number_padding"]
+        word_kwargs["verse_number_padding"] = Padding(vnp.top, _scale(vnp.bottom), vnp.left, vnp.right)
     word_config = WordConfig(**word_kwargs)
 
     # Text config
     text_defaults = {
-        "max_width": width - 100,
+        "max_width": width - _scale(100),
         "balanced_wrapping": True,
     }
     text_kwargs = _merge(text_defaults, mode_cfg.get("text", {}), aspect_cfg.get("text", {}))
+    # Scale resolution-dependent text fields
+    for k in ("font_size", "line_spacing"):
+        if k in text_kwargs:
+            text_kwargs[k] = _scale(text_kwargs[k])
     text_config = TextConfig(**text_kwargs)
 
     # Verse config
@@ -273,6 +292,10 @@ def build_preset(
         "balanced_wrapping": True,
     }
     verse_kwargs = _merge(verse_defaults, mode_cfg.get("verse", {}), aspect_cfg.get("verse", {}))
+    # Scale resolution-dependent verse fields
+    for k in ("word_spacing", "row_spacing"):
+        if k in verse_kwargs:
+            verse_kwargs[k] = _scale(verse_kwargs[k])
     verse_config = VerseConfig(**verse_kwargs)
 
     frame_config = FrameConfig(
@@ -290,6 +313,16 @@ def build_preset(
     )
 
 
+def _v3_content_width(aspect_ratio: str, frame_width: int, frame_height: int) -> int:
+    """Compute v3-compatible content width accounting for resolution-scaled padding.
+
+    v3 padding = round(50 * ref_dim / 1080), content_width = width - 2 * padding.
+    """
+    ref_dim = frame_height if aspect_ratio == "landscape" else frame_width
+    padding = round(50 * ref_dim / 1080)
+    return frame_width - 2 * padding
+
+
 def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -> LayoutGuide:
     """Build a resolved LayoutGuide from the preset layout definitions.
 
@@ -302,10 +335,12 @@ def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -
         LayoutGuide with resolved pixel rects for arabic and translation areas.
     """
     engine = LayoutEngine(frame_width, frame_height)
-    return LayoutGuide(
-        arabic=engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio]),
-        translation=engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio]),
-    )
+    arabic = engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio])
+    translation = engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio])
+    # Override arabic rect width with v3-compatible content_width
+    # (UDim2 fixed offset only matches 1080p; v3 scaled per-resolution)
+    arabic = ResolvedRect(arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height)
+    return LayoutGuide(arabic=arabic, translation=translation)
 
 
 def _build_all_presets() -> dict:
