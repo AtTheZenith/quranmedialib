@@ -17,9 +17,11 @@ from quranmedialib.exceptions import ValidationError
 from quranmedialib.types import (
     DatabaseConfig,
     FontResource,
-    LayoutConfig,
+    FrameConfig,
     Padding,
+    Preset,
     TextConfig,
+    VerseConfig,
     WbwDatabaseConfig,
     WordConfig,
 )
@@ -287,7 +289,7 @@ def build_preset(
     mode: str,
     width: int,
     height: int,
-) -> tuple[LayoutConfig, TextConfig, WordConfig]:
+) -> Preset:
     """Builds a complete preset configuration for any resolution.
 
     Args:
@@ -296,7 +298,7 @@ def build_preset(
         width, height: Canvas dimensions in pixels.
 
     Returns:
-        tuple[LayoutConfig, TextConfig, WordConfig]
+        Preset: Unified configuration for rendering.
 
     Raises:
         ValidationError: If aspect_ratio or mode is not recognized.
@@ -322,34 +324,34 @@ def build_preset(
 
     padding_val = _round_scale(layout_base["padding"], ref_dim)
 
-    # Build LayoutConfig
-    layout_kwargs: dict = {
+    # Build FrameConfig
+    frame_kwargs: dict = {
         "max_width": width,
         "image_height": height,
         "padding": Padding(padding_val, padding_val, padding_val, padding_val),
     }
     for key in ("wimage_vertical_align", "wimage_horizontal_align", "timage_vertical_align", "timage_horizontal_align"):
         if key in layout_base:
-            layout_kwargs[key] = layout_base[key]
+            frame_kwargs[key] = layout_base[key]
 
     # Handle y-offsets (scaled by ref_dim for fixed offsets, actual height for formulas)
     if "wimage_y_offset" in layout_base:
-        layout_kwargs["wimage_y_offset"] = _round_scale(layout_base["wimage_y_offset"], ref_dim)
+        frame_kwargs["wimage_y_offset"] = _round_scale(layout_base["wimage_y_offset"], ref_dim)
     elif "wimage_y_offset_formula" in layout_base:
         formula = layout_base["wimage_y_offset_formula"]
         if formula == "-height/2 + padding":
-            layout_kwargs["wimage_y_offset"] = -height // 2 + padding_val
+            frame_kwargs["wimage_y_offset"] = -height // 2 + padding_val
 
     if "timage_y_offset" in layout_base:
-        layout_kwargs["timage_y_offset"] = _round_scale(layout_base["timage_y_offset"], ref_dim)
+        frame_kwargs["timage_y_offset"] = _round_scale(layout_base["timage_y_offset"], ref_dim)
     elif "timage_y_offset_formula" in layout_base:
         formula = layout_base["timage_y_offset_formula"]
         if formula == "height/2 + height/8":
-            layout_kwargs["timage_y_offset"] = height // 2 + height // 8
+            frame_kwargs["timage_y_offset"] = height // 2 + height // 8
         elif formula == "height/2 + height/9":
-            layout_kwargs["timage_y_offset"] = height // 2 + round(height / 9)
+            frame_kwargs["timage_y_offset"] = height // 2 + round(height / 9)
 
-    layout_config = LayoutConfig(**layout_kwargs)
+    frame_config = FrameConfig(**frame_kwargs)
 
     # Build TextConfig
     text_kwargs: dict = {
@@ -368,10 +370,6 @@ def build_preset(
 
     word_kwargs: dict = {
         "font_size": _round_scale(word_base["font_size"], ref_dim),
-        "word_spacing": _round_scale(word_base["word_spacing"], ref_dim),
-        "row_spacing": _round_scale(word_base["row_spacing"], ref_dim),
-        "max_rows_per_page": word_base["max_rows_per_page"],
-        "balanced_wrapping": True,
         "verse_number_size": _round_scale(word_base["verse_number_size"], ref_dim),
         "verse_number_padding": Padding(vnp_top_side, vnp_bottom, vnp_top_side, vnp_top_side),
         "annotation_font_size": _round_scale(word_base["annotation_font_size"], ref_dim),
@@ -382,7 +380,21 @@ def build_preset(
 
     word_config = WordConfig(**word_kwargs)
 
-    return layout_config, text_config, word_config
+    # Build VerseConfig
+    verse_kwargs: dict = {
+        "word_spacing": _round_scale(word_base["word_spacing"], ref_dim),
+        "row_spacing": _round_scale(word_base["row_spacing"], ref_dim),
+        "max_rows_per_page": word_base["max_rows_per_page"],
+        "balanced_wrapping": True,
+    }
+    verse_config = VerseConfig(**verse_kwargs)
+
+    return Preset(
+        frame=frame_config,
+        word=word_config,
+        verse=verse_config,
+        text=text_config,
+    )
 
 
 def _build_all_presets() -> dict:
@@ -399,11 +411,11 @@ def _build_all_presets() -> dict:
 _ALL_PRESETS = _build_all_presets()
 
 # === Public Preset Dictionaries ===
-#: Landscape (16:9) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+#: Landscape (16:9) presets: PRESET["mode"]["resolution"] -> Preset
 LANDSCAPE_PRESET: Final = _ALL_PRESETS["landscape"]
 
-#: Story/Portrait (9:16) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+#: Story/Portrait (9:16) presets: PRESET["mode"]["resolution"] -> Preset
 STORY_PRESET: Final = _ALL_PRESETS["story"]
 
-#: Square (1:1) presets: PRESET["mode"]["resolution"] -> (LayoutConfig, TextConfig, WordConfig)
+#: Square (1:1) presets: PRESET["mode"]["resolution"] -> Preset
 SQUARE_PRESET: Final = _ALL_PRESETS["square"]

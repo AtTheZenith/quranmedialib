@@ -30,9 +30,9 @@ def test_verse_range(request: pytest.FixtureRequest) -> None:
     # We need to wrap each string in a list because VerseRangeWorkflow expects list[list[str]]
     translations_list = [[t] for t in translations]
 
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
 
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    workflow = VerseRangeWorkflow(preset)
 
     print(f"Processing Surah {surah}, Verses {start_verse}-{end_verse}...")
 
@@ -86,8 +86,8 @@ if __name__ == "__main__":
 
 def test_verse_range_invalid_surah() -> None:
     """Test that VerseRangeWorkflow handles invalid surah numbers."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
 
     # Surah 0 doesn't exist, should handle gracefully
     try:
@@ -106,8 +106,8 @@ def test_verse_range_invalid_surah() -> None:
 
 def test_verse_range_invalid_ayah_range() -> None:
     """Test that VerseRangeWorkflow handles invalid ayah range."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
 
     # Ayah 0 doesn't exist, should handle gracefully
     try:
@@ -119,8 +119,8 @@ def test_verse_range_invalid_ayah_range() -> None:
 
 def test_verse_range_reversed_range() -> None:
     """Test that VerseRangeWorkflow raises ValueError for reversed ayah range."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
 
     # end_ayah < start_ayah should raise ValueError
     with pytest.raises(ValueError, match="start_ayah.*cannot be greater than end_ayah"):
@@ -129,8 +129,8 @@ def test_verse_range_reversed_range() -> None:
 
 def test_verse_range_empty_translations() -> None:
     """Test that VerseRangeWorkflow handles empty translations."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
 
     # Empty translations should still work
     results = list(workflow.get_iterator(surah=108, translations=[[]], start_ayah=1, end_ayah=1, annotate=False))
@@ -139,8 +139,8 @@ def test_verse_range_empty_translations() -> None:
 
 def test_verse_range_invalid_ayah() -> None:
     """Test that VerseRangeWorkflow raises ValueError for ayah outside 1-286."""
-    layout_config, text_config, word_config = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = VerseRangeWorkflow(layout_config, text_config, word_config)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
 
     with pytest.raises(ValueError, match="Ayah must be between 1 and 286"):
         list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=0, end_ayah=1, annotate=False))

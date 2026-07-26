@@ -8,7 +8,7 @@ from PIL import Image
 
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.framer import frame
+from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import (
     format_isolation_text,
     get_timage,
@@ -16,6 +16,7 @@ from quranmedialib.modules.timage import (
     prepare_translation_segments,
 )
 from quranmedialib.modules.verse_number import verse_number
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
@@ -78,7 +79,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             )
 
         # 1. Prepare base images and transparent placeholders
-        word_images = [get_wimage(word, self.word_config) for word in verse_words]
+        word_images = [get_wimage(word, self.word_cfg) for word in verse_words]
 
         if annotate:
             # Standardize: use the plural version which supports batching and caching
@@ -87,7 +88,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 surah=surah,
                 ayah=ayah or 1,
                 start=1,
-                word_config=self.word_config,
+                word_config=self.word_cfg,
                 wbw_translations=wbw_translations,
             )
         else:
@@ -96,7 +97,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
         # 2. Add verse number if provided
         items_text = list(verse_words)
         if ayah is not None:
-            v_img = verse_number(ayah, self.word_config)
+            v_img = verse_number(ayah, self.word_cfg)
             annotated_images.append(v_img)
             items_text.append("")
 
@@ -130,16 +131,47 @@ class IsolateWordsWorkflow(BaseWorkflow):
             if i < len(formatted_translations):
                 t_img = get_timage(
                     formatted_translations[i],
-                    self.text_config,
+                    self.text_cfg,
                 )
 
             # Bundle into WordItems for layout
             items = [WordItem(img, text) for img, text in zip(isolated_images, items_text)]
 
             # Frame the isolated images
-            yield frame(
-                items,
-                translation_images=[t_img] if t_img else None,
-                config=self.layout_config,
-                word_config=self.word_config,
-            )
+            vimage = VImage(items, self.verse_cfg, self.frame_cfg)
+            pages = []
+            page_index = 0
+            current_index = 0
+            total_items = len(items)
+
+            while current_index < total_items:
+                current_rows, items_consumed = vimage.get_page_chunk(current_index, self.verse_cfg.max_rows_per_page)
+                frame_obj = Frame(self.frame_cfg)
+                v_img = vimage.render(self.word_cfg, rows_to_render=current_rows)
+
+                rendered_width = max(row[1] for row in current_rows) if current_rows else 0
+                rendered_height = sum(row[2] for row in current_rows) + (len(current_rows) - 1) * self.verse_cfg.row_spacing
+
+                frame_obj.layer(
+                    v_img,
+                    alignment=(self.frame_cfg.wimage_horizontal_align, self.frame_cfg.wimage_vertical_align),
+                    offset=(self.frame_cfg.wimage_x_offset, self.frame_cfg.wimage_y_offset),
+                    rendered_width=rendered_width,
+                    rendered_height=rendered_height,
+                )
+
+                trans_images = [t_img] if t_img else None
+                if trans_images and page_index < len(trans_images):
+                    if t_image := trans_images[page_index]:
+                        frame_obj.layer(
+                            t_image,
+                            alignment=(self.frame_cfg.timage_horizontal_align, self.frame_cfg.timage_vertical_align),
+                            offset=(self.frame_cfg.timage_x_offset, self.frame_cfg.timage_y_offset),
+                            text_color=self.text_cfg.color,
+                        )
+
+                pages.append(frame_obj.render())
+                current_index += items_consumed
+                page_index += 1
+
+            yield pages

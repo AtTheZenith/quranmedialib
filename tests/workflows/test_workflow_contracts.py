@@ -26,22 +26,15 @@ def test_workflow_inheritance(workflow_class) -> None:
 
 def test_workflow_init_null_configs_rejected(workflow_class) -> None:
     """Verify that all workflows reject None configurations during init."""
-    layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
 
     with pytest.raises(ValueError, match="must not be None"):
-        workflow_class(None, text, word)
-
-    with pytest.raises(ValueError, match="must not be None"):
-        workflow_class(layout, None, word)
-
-    with pytest.raises(ValueError, match="must not be None"):
-        workflow_class(layout, text, None)
+        workflow_class(None)
 
 
 def test_workflow_iterator_contract(workflow_class) -> None:
     """Verify that get_iterator returns an Iterator of image lists (layers)."""
-    layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = workflow_class(layout, text, word)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = workflow_class(preset)
 
     # We use very basic params to avoid DB errors during contract check
     # Surah 108 is short (3 verses)
@@ -71,11 +64,11 @@ def test_workflow_iterator_contract(workflow_class) -> None:
 
 def test_workflow_repr_standardization(workflow_class) -> None:
     """Verify that workflows have a standardized __repr__ implementation."""
-    layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-    workflow = workflow_class(layout, text, word)
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = workflow_class(preset)
 
     repr_str = repr(workflow)
     assert workflow_class.__name__ in repr_str
-    assert "layout=" in repr_str
+    assert "frame=" in repr_str
     assert "text=" in repr_str
     assert "word=" in repr_str

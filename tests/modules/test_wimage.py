@@ -31,7 +31,7 @@ def test_wimage() -> None:
     os.makedirs(output_dir, exist_ok=True)
 
     print("Processing word...")
-    img = get_wimage(words[0], LANDSCAPE_PRESET["default"]["1080p"][2])
+    img = get_wimage(words[0], LANDSCAPE_PRESET["default"]["1080p"].word)
     img.save(f"{output_dir}/wimage.png")
     print("Done.")
     print("test_wimage completed successfully.")
@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
 def test_wimage_empty_text() -> None:
     """Test that get_wimage handles empty text gracefully."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     # Empty text should return a minimal image (just padding)
     img = get_wimage("", word_config)
     assert img is not None
@@ -56,7 +56,7 @@ def test_wimage_empty_text() -> None:
 
 def test_wimage_none_text() -> None:
     """Test that get_wimage handles None text gracefully."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
 
     with pytest.raises((TypeError, AttributeError)):
         get_wimage(None, word_config)  # type: ignore
@@ -74,7 +74,7 @@ def test_wimage_invalid_font_path() -> None:
 
     from quranmedialib.types import FontResource
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     invalid_config = replace(word_config, font=FontResource(name="invalid", path="/nonexistent/font.otf"))
 
     with pytest.raises(OSError):
@@ -85,7 +85,7 @@ def test_wimage_negative_padding_dimensions() -> None:
     """Test that get_wimage with extreme negative padding produces a valid image."""
     from quranmedialib.types import Padding, WordConfig
 
-    base_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    base_config = LANDSCAPE_PRESET["default"]["1080p"].word
     # Override padding with values that would produce negative dimensions
     neg_config = WordConfig(
         font=base_config.font,
@@ -105,7 +105,7 @@ def test_wimage_negative_padding_dimensions() -> None:
 
 def test_wimage_very_long_word() -> None:
     """Test that get_wimage handles very long text without crashing."""
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     long_text = "a" * 10000
     img = get_wimage(long_text, word_config)
     assert img is not None
@@ -117,7 +117,7 @@ def test_wimage_padding_variations() -> None:
     """Test various padding combinations."""
     from quranmedialib.types import Padding, WordConfig
 
-    word_config = LANDSCAPE_PRESET["default"]["1080p"][2]
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
     for padding_vals in [(0, 0, 0, 0), (10, 10, 10, 10), (50, 50, 50, 50)]:
         config = WordConfig(
             font=word_config.font,

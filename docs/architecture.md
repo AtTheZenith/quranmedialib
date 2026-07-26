@@ -35,15 +35,16 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 **Responsibility**: Positioning masks into a coherent page structure.
 
-- **Framer**: The core engine that implements Right-to-Left (RTL) logic.
+- **VImage**: The core engine that implements Right-to-Left (RTL) logic and spatial arrangement.
 - **Line Balancing**: Implements the **Descending Line Balancing** algorithm to ensure text is visually centered and aesthetically distributed across lines.
 - **Page Management**: Calculates when a verse exceeds the `max_width` and automatically handles page breaks.
 - **Output**: A coordinate map of where each image mask should be placed on the final canvas.
 
 ### 4. Composition Layer (The Final Pass)
 
-**Responsibility**: Applying aesthetics, colors, and effects.
+**Responsibility**: Applying aesthetics, colors, and effects onto a canvas.
 
+- **Frame**: The composition class that manages the RGBA canvas and handles the layering of images.
 - **Colorization**: The `'L'` mode masks are colorized using the `color` function, preserving the alpha channel.
 - **Visual Effects**: Applies high-end effects like Gaussian blurs (Glow), padding, and alpha compositing.
 - **Final Assembly**: Pastes the colorized images onto the final RGBA canvas.
@@ -55,5 +56,5 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 1. **Asset**: `DatabaseManager` fetches the Arabic word "الله" and its translation.
 2. **Rendering**: `get_wimage()` generates a grayscale mask of "الله" using the specified font.
-3. **Layout**: `frame()` determines the word should be at position `(x=100, y=50)` on Page 1.
+3. **Layout**: `VImage.get_page_chunk()` groups items into right-to-left rows and `VImage.layer()` positions each mask on the page canvas.
 4. **Composition**: `color()` applies a gold hue to the mask, `glow()` adds a soft outer radiance, and the result is pasted onto the canvas.

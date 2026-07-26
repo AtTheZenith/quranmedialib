@@ -6,8 +6,8 @@ and translations into customizable, high-quality images with professional layout
 Quick Start:
     >>> from quranmedialib import DatabaseManager, VerseWorkflow, LANDSCAPE_PRESET
     >>> db = DatabaseManager()
-    >>> layout, text_cfg, word_cfg = LANDSCAPE_PRESET["default"]["1080p"]
-    >>> workflow = VerseWorkflow(layout, text_cfg, word_cfg)
+    >>> preset = LANDSCAPE_PRESET["default"]["1080p"]
+    >>> workflow = VerseWorkflow(preset)
     >>> pages = list(workflow.get_iterator(surah=1, ayah=1, translations=["In the name of Allah"]))
     >>> pages[0][0].save("output.png")  # Save first page
     >>> db.close()
@@ -28,7 +28,8 @@ Package Structure:
     modules:       Core rendering modules
         wimage:        Arabic word rendering
         timage:        Translation text rendering with rich formatting
-        framer:        Multi-page layout engine (RTL support)
+        vimage:        Verse image layout (RTL row packing, line balancing)
+        frame:         Canvas composition and layering
         image:         Image effects (glow, color, padding)
         annotation:    Word-by-word annotation with translations
         verse_number:  Verse number badge rendering
@@ -77,11 +78,13 @@ from quranmedialib.types import (
     Color,
     DatabaseConfig,
     FontResource,
+    FrameConfig,
     HorizontalAlignment,
     LayoutConfig,
     Padding,
     SurahNumber,
     TextConfig,
+    VerseConfig,
     VerticalAlignment,
     WbwDatabaseConfig,
     WordConfig,
@@ -111,6 +114,8 @@ __all__ = [
     # Config classes
     "WordItem",
     "LayoutConfig",
+    "FrameConfig",
+    "VerseConfig",
     "WordConfig",
     "TextConfig",
     "HorizontalAlignment",
