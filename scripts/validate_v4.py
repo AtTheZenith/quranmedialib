@@ -14,11 +14,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from PIL import Image
 
 from quranmedialib import (
-    DatabaseManager,
-    IsolateWordsWorkflow,
     LANDSCAPE_PRESET,
     SQUARE_PRESET,
     STORY_PRESET,
+    DatabaseManager,
+    IsolateWordsWorkflow,
     SurahWorkflow,
     VerseRangeWorkflow,
     VerseWorkflow,

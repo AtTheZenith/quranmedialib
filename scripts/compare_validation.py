@@ -121,7 +121,7 @@ def compare_dirs(v2_dir: str, v3_dir: str, report_dir: str) -> bool:
         json.dump(report, f, indent=2)
 
     print(f"{'=' * 60}")
-    print(f"VALIDATION REPORT")
+    print("VALIDATION REPORT")
     print(f"{'=' * 60}")
     print(f"Total scenarios: {report['summary']['total']}")
     print(f"Identical:       {report['summary']['identical']}")

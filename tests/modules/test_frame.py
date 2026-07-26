@@ -1,4 +1,3 @@
-import pytest
 from PIL import Image
 
 from quranmedialib.modules.frame import Frame
@@ -76,7 +75,7 @@ def test_frame_layer_at_stacking():
 def test_frame_layerable_integration(word_config, layout_config):
     """Verify Frame correctly handles Layerable objects via layer_at."""
     from quranmedialib.modules.vimage import VImage
-    from quranmedialib.types import VerseConfig, WordItem, ResolvedRect
+    from quranmedialib.types import ResolvedRect, VerseConfig, WordItem
 
     verse_cfg = VerseConfig(word_spacing=0, row_spacing=0)
     word_img = Image.new("L", (100, 40), 255)

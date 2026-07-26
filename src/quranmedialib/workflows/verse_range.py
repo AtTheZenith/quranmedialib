@@ -24,11 +24,11 @@ from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.frame import Frame
+from quranmedialib.modules.layout_engine import LayoutGuide
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.modules.layout_engine import LayoutGuide
 from quranmedialib.presets import build_layout_guide
 from quranmedialib.types import (
     FrameConfig,
