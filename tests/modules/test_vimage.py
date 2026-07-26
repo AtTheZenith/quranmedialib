@@ -154,8 +154,8 @@ def test_vimage_layer_direct(word_config):
     # Create a blank canvas
     canvas = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
 
-    # Layer at (10, 10)
-    vimg.layer(canvas, x=10, y=10, word_config=word_config, rows_to_render=rows)
+    # Layer at (10, 10) with center=False to test RTL right-alignment
+    vimg.layer(canvas, x=10, y=10, word_config=word_config, rows_to_render=rows, center=False)
 
     # Since it's RTL, W1 (width 50) will be at x = 10 + 50 = 60.
     # The pixels for W1 should be in [10, 60)
@@ -183,9 +183,9 @@ def test_vimage_layer_vs_render_equality(word_config):
     canvas_old = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
     canvas_old.paste(img_rendered, (0, 0))
 
-    # 2. Use the new path: layer directly
+    # 2. Use the new path: layer directly (center=False to match render)
     canvas_new = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
-    vimg.layer(canvas_new, x=0, y=0, word_config=word_config, rows_to_render=rows)
+    vimg.layer(canvas_new, x=0, y=0, word_config=word_config, rows_to_render=rows, center=False)
 
     # Compare pixels
     assert list(canvas_old.getdata()) == list(canvas_new.getdata())

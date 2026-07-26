@@ -237,7 +237,7 @@ class VImage:
         y: int,
         word_config: WordConfig,
         rows_to_render: list[tuple[list[WordItem], int, int]] | None = None,
-        center: bool = False,
+        center: bool = True,
         content_height: int = 0,
         **kwargs,
     ) -> None:
@@ -249,14 +249,12 @@ class VImage:
             y: The anchor Y coordinate (top edge of the bounding box).
             word_config: Rendering rules for words.
             rows_to_render: Specific rows to render. If None, renders all self.rows.
+            center: If True, each row is individually centred within self.content_width.
+            content_height: If > 0 and center is True, vertically centres the block.
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
             return
-
-        total_width = max(row[1] for row in rows)
-        if center and self.content_width > total_width:
-            x += (self.content_width - total_width) // 2
 
         total_render_height = sum(r[2] for r in rows) + (len(rows) - 1) * self.verse_config.row_spacing
         if center and content_height > total_render_height:
@@ -268,9 +266,12 @@ class VImage:
         draw_y = y
 
         for row, row_width, max_row_height in rows:
-            # RTL anchor relative to bounding box
-            # Alignment is already handled by 'x' anchor provided by Frame
-            current_x = x + total_width
+            # Per-row centering: each row independently centred within content_width
+            if center and self.content_width > row_width:
+                row_x = x + (self.content_width - row_width) // 2
+            else:
+                row_x = x
+            current_x = row_x + row_width  # RTL anchor: right edge of this row
 
             first_color = row[0].color if row else None
             can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)
@@ -325,7 +326,7 @@ class VImage:
         total_height = sum(row[2] for row in rows) + (len(rows) - 1) * self.verse_config.row_spacing
 
         canvas = Image.new(mode, (total_width, total_height), color=(0, 0, 0, 0) if mode == "RGBA" else 0)
-        self.layer(canvas, 0, 0, word_config=word_config, rows_to_render=rows)
+        self.layer(canvas, 0, 0, word_config=word_config, rows_to_render=rows, center=False)
         return canvas
 
     @property

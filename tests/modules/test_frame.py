@@ -87,7 +87,8 @@ def test_frame_layerable_integration(word_config, layout_config):
 
     frame = Frame(1000, 1000)
     rect = ResolvedRect(left=0, top=0, width=content_width, height=200)
+    # Default center=True: 100px word centred in 500px rect => x=200
     frame.layer_at(vimg, rect, word_config=word_config, rows_to_render=rows)
 
-    assert frame.image.getpixel((0, 0)) != (0, 0, 0, 0)
-    assert frame.image.getpixel((99, 0)) != (0, 0, 0, 0)
+    assert frame.image.getpixel((200, 0)) != (0, 0, 0, 0)
+    assert frame.image.getpixel((299, 0)) != (0, 0, 0, 0)
