@@ -256,10 +256,6 @@ class VImage:
         if not rows:
             return
 
-        total_width = max(row[1] for row in rows)
-        if center and self.content_width > total_width:
-            x += (self.content_width - total_width) // 2
-
         total_render_height = sum(r[2] for r in rows) + (len(rows) - 1) * self.verse_config.row_spacing
         if center and content_height > total_render_height:
             y += (content_height - total_render_height) // 2
@@ -270,8 +266,12 @@ class VImage:
         draw_y = y
 
         for row, row_width, max_row_height in rows:
-            # RTL anchor: all rows right-aligned to the widest row
-            current_x = x + total_width
+            # Per-row centering: each row independently centred within content_width
+            if center and self.content_width > row_width:
+                row_x = x + (self.content_width - row_width) // 2
+            else:
+                row_x = x
+            current_x = row_x + row_width  # RTL anchor: right edge of this row
 
             first_color = row[0].color if row else None
             can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)
