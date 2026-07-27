@@ -316,10 +316,12 @@ def build_preset(
 def _v3_content_width(aspect_ratio: str, frame_width: int, frame_height: int) -> int:
     """Compute v3-compatible content width accounting for resolution-scaled padding.
 
-    v3 padding = round(50 * ref_dim / 1080), content_width = width - 2 * padding.
+    v3 padding = round(base_padding * ref_dim / 1080), content_width = width - 2 * padding.
+    Base padding: landscape=50, story=60, square=60.
     """
+    base_padding = {"landscape": 50, "story": 60, "square": 60}.get(aspect_ratio, 50)
     ref_dim = frame_height if aspect_ratio == "landscape" else frame_width
-    padding = round(50 * ref_dim / 1080)
+    padding = round(base_padding * ref_dim / 1080)
     return frame_width - 2 * padding
 
 
