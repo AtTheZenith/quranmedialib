@@ -325,6 +325,24 @@ def _v3_content_width(aspect_ratio: str, frame_width: int, frame_height: int) ->
     return frame_width - 2 * padding
 
 
+def _v3_arabic_padding(aspect_ratio: str, frame_width: int) -> int:
+    """Compute v3-compatible padding for a given aspect ratio and frame width."""
+    base = {"landscape": 50, "story": 60, "square": 60}.get(aspect_ratio, 50)
+    # landscape uses height as ref_dim, story/square use width
+    ref_dim = frame_width  # story and square both use width
+    return round(base * ref_dim / 1080)
+
+
+def _v3_wimage_offset(aspect_ratio: str, frame_width: int, frame_height: int) -> int:
+    """Compute v3 wimage_y_offset for story/square default mode, scaled per resolution."""
+    ref_dim = frame_width  # story and square use width
+    if aspect_ratio == "story":
+        return round(-150 * ref_dim / 1080)
+    # square: -height/2 + padding
+    padding = _v3_arabic_padding("square", frame_width)
+    return -frame_height // 2 + padding
+
+
 def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -> LayoutGuide:
     """Build a resolved LayoutGuide from the preset layout definitions.
 
@@ -339,9 +357,20 @@ def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -
     engine = LayoutEngine(frame_width, frame_height)
     arabic = engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio])
     translation = engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio])
-    # Override arabic rect width with v3-compatible content_width
-    # (UDim2 fixed offset only matches 1080p; v3 scaled per-resolution)
-    arabic = ResolvedRect(arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height)
+
+    if aspect_ratio == "landscape":
+        # For landscape the UDim2 already gives the correct position;
+        # only the width needs the v3 per-resolution override.
+        arabic = ResolvedRect(arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height)
+    else:
+        # For story and square, override the whole rect to match v3's
+        # resolution-scaled padding + offset positioning.
+        padding = _v3_arabic_padding(aspect_ratio, frame_width)
+        content_width = frame_width - 2 * padding
+        available_height = frame_height - 2 * padding
+        offset = _v3_wimage_offset(aspect_ratio, frame_width, frame_height)
+        arabic = ResolvedRect(padding, padding + offset, content_width, available_height)
+
     return LayoutGuide(arabic=arabic, translation=translation)
 
 
