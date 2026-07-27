@@ -68,12 +68,14 @@ def validate_isolate_words_workflow(db: DatabaseManager) -> int:
     """Test IsolateWordsWorkflow with square preset."""
     preset = SQUARE_PRESET["default"]["1440p"]
     workflow = IsolateWordsWorkflow(preset)
-    pages_list = list(workflow.get_iterator(
-        surah=1,
-        verse_words=["بِسْمِ", "ٱللَّهِ", "ٱلرَّحْمَـٰنِ", "ٱلرَّحِيمِ"],
-        translations=["In the name of Allah, the Most Gracious, the Most Merciful"],
-        ayah=1,
-    ))
+    pages_list = list(
+        workflow.get_iterator(
+            surah=1,
+            verse_words=["بِسْمِ", "ٱللَّهِ", "ٱلرَّحْمَـٰنِ", "ٱلرَّحِيمِ"],
+            translations=["In the name of Allah, the Most Gracious, the Most Merciful"],
+            ayah=1,
+        )
+    )
     assert len(pages_list) > 0, "IsolateWordsWorkflow should produce pages"
     return len(pages_list)
 
@@ -126,12 +128,13 @@ def main() -> int:
             except Exception as e:
                 print(f"  FAIL  {name}: {e}")
                 import traceback
+
                 traceback.print_exc()
                 failed += 1
 
         elapsed = time.perf_counter() - start_time
         total = passed + failed
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"Results: {passed}/{total} passed in {elapsed:.2f}s")
         print(f"Output: {OUTPUT_DIR}")
         return 0 if failed == 0 else 1

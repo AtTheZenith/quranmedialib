@@ -361,7 +361,9 @@ def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -
     if aspect_ratio == "landscape":
         # For landscape the UDim2 already gives the correct position;
         # only the width needs the v3 per-resolution override.
-        arabic = ResolvedRect(arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height)
+        arabic = ResolvedRect(
+            arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height
+        )
     else:
         # For story and square, override the whole rect to match v3's
         # resolution-scaled padding + offset positioning.

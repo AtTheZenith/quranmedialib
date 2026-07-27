@@ -115,8 +115,6 @@ def test_frame_config_defaults() -> None:
     assert config.image_height == 1080
 
 
-
-
 # === WordConfig Tests ===
 
 
@@ -359,7 +357,6 @@ def test_valid_ayah_boundaries(ayah: int) -> None:
 # === Round 2: types.py Edge Cases ===
 
 
-
 def test_word_config_max_rows_per_page_boundary() -> None:
     """Test that WordConfig with max_rows_per_page=1 works."""
     config = WordConfig(font_size=10, max_rows_per_page=1)
@@ -489,6 +486,3 @@ def test_line_add_word() -> None:
     assert line.width == 50 + 10 + 60
     assert line.height == 25
     assert len(line.words) == 2
-
-
-

@@ -15,6 +15,7 @@ from quranmedialib.types import PresetLayout, ResolvedRect
 @dataclass(frozen=True, slots=True)
 class LayoutGuide:
     """Resolved pixel layout for all content areas."""
+
     arabic: ResolvedRect
     translation: ResolvedRect
 

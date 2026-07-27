@@ -30,21 +30,91 @@ from quranmedialib import __version__ as qml_version
 # Scenario format: (surah, ayah_or_0, translations, annotate, aspect, mode, desc, workflow_type, resolution)
 SCENARIOS: list[tuple[int, int, list[str], bool, str, str, str, str, str]] = [
     # === VerseWorkflow ===
-    (1, 1, ["In the name of Allah, the Most Gracious, the Most Merciful."], True, "landscape", "default", "bismillah_annotated", "verse", "1080p"),
-    (1, 1, ["In the name of Allah, the Most Gracious, the Most Merciful."], False, "landscape", "arabic", "bismillah_arabic", "verse", "1080p"),
-    (108, 1, ["Indeed, We have granted you, [O Muhammad], al-Kawthar."], True, "landscape", "default", "kawthar_annotated", "verse", "1080p"),
-    (112, 1, ["Say, He is Allah, [who is] One,"], True, "landscape", "default", "ikhlas_v1_annotated", "verse", "1080p"),
-    (2, 255, ["Allah! There is no deity except Him, the Ever-Living, the Self-Sustaining."], True, "landscape", "default", "kursi_partial", "verse", "1080p"),
+    (
+        1,
+        1,
+        ["In the name of Allah, the Most Gracious, the Most Merciful."],
+        True,
+        "landscape",
+        "default",
+        "bismillah_annotated",
+        "verse",
+        "1080p",
+    ),
+    (
+        1,
+        1,
+        ["In the name of Allah, the Most Gracious, the Most Merciful."],
+        False,
+        "landscape",
+        "arabic",
+        "bismillah_arabic",
+        "verse",
+        "1080p",
+    ),
+    (
+        108,
+        1,
+        ["Indeed, We have granted you, [O Muhammad], al-Kawthar."],
+        True,
+        "landscape",
+        "default",
+        "kawthar_annotated",
+        "verse",
+        "1080p",
+    ),
+    (
+        112,
+        1,
+        ["Say, He is Allah, [who is] One,"],
+        True,
+        "landscape",
+        "default",
+        "ikhlas_v1_annotated",
+        "verse",
+        "1080p",
+    ),
+    (
+        2,
+        255,
+        ["Allah! There is no deity except Him, the Ever-Living, the Self-Sustaining."],
+        True,
+        "landscape",
+        "default",
+        "kursi_partial",
+        "verse",
+        "1080p",
+    ),
     (1, 1, [], True, "story", "default", "bismillah_story", "verse", "1080p"),
     (1, 1, [], True, "square", "default", "bismillah_square", "verse", "1080p"),
-    (1, 1, ["In the name of Allah, the Most Gracious, the Most Merciful."], True, "landscape", "default", "bismillah_720p", "verse", "720p"),
+    (
+        1,
+        1,
+        ["In the name of Allah, the Most Gracious, the Most Merciful."],
+        True,
+        "landscape",
+        "default",
+        "bismillah_720p",
+        "verse",
+        "720p",
+    ),
     # === SurahWorkflow ===
     (108, 0, [], True, "landscape", "default", "surah_kawthar", "surah", "1080p"),
     (112, 0, [], True, "landscape", "default", "surah_ikhlas", "surah", "1080p"),
     # === VerseRangeWorkflow ===
     (108, 0, [], True, "landscape", "default", "range_kawthar", "verse_range", "1080p"),
     # === IsolateWordsWorkflow ===
-    (108, 1, ["Indeed, We have granted you al-Kawthar."], True, "landscape", "default", "isolate_kawthar_v1", "isolate", "1080p"),
+    (
+        108,
+        1,
+        ["Indeed, We have granted you al-Kawthar."],
+        True,
+        "landscape",
+        "default",
+        "isolate_kawthar_v1",
+        "isolate",
+        "1080p",
+    ),
     # === SurahWorkflow with separate_translations ===
     (108, 0, [], True, "landscape", "default", "surah_kawthar_separate", "surah_separate", "1080p"),
 ]
@@ -77,7 +147,9 @@ def render_scenarios(version: str, output_dir: str) -> list[dict]:
 
             if wf_type == "verse":
                 workflow = _make_workflow(VerseWorkflow, preset_or_tuple)
-                page_groups = list(workflow.get_iterator(surah=surah, ayah=ayah, translations=translations, annotate=annotate))
+                page_groups = list(
+                    workflow.get_iterator(surah=surah, ayah=ayah, translations=translations, annotate=annotate)
+                )
                 flat_pages = page_groups[0] if page_groups else []
 
             elif wf_type == "surah":
@@ -101,7 +173,9 @@ def render_scenarios(version: str, output_dir: str) -> list[dict]:
                 tr = []
                 for v in range(1, 4):
                     tr.append([db.get_translation_from_verse(surah, v)])
-                page_groups = list(workflow.get_iterator(surah=surah, translations=tr, start_ayah=1, end_ayah=3, annotate=annotate))
+                page_groups = list(
+                    workflow.get_iterator(surah=surah, translations=tr, start_ayah=1, end_ayah=3, annotate=annotate)
+                )
                 flat_pages = []
                 for g in page_groups:
                     flat_pages.extend(g)
@@ -111,14 +185,16 @@ def render_scenarios(version: str, output_dir: str) -> list[dict]:
                 wbw_dict = db.get_wbw_grouped_by_verse(surah)
                 wbw = list(wbw_dict.get(ayah, []))
                 workflow = _make_workflow(IsolateWordsWorkflow, preset_or_tuple)
-                page_groups = list(workflow.get_iterator(
-                    surah=surah,
-                    verse_words=verse_words,
-                    translations=translations,
-                    ayah=ayah,
-                    wbw_translations=wbw,
-                    annotate=annotate,
-                ))
+                page_groups = list(
+                    workflow.get_iterator(
+                        surah=surah,
+                        verse_words=verse_words,
+                        translations=translations,
+                        ayah=ayah,
+                        wbw_translations=wbw,
+                        annotate=annotate,
+                    )
+                )
                 flat_pages = []
                 for g in page_groups:
                     flat_pages.extend(g)

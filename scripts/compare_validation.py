@@ -73,12 +73,14 @@ def compare_dirs(v2_dir: str, v3_dir: str, report_dir: str) -> bool:
             v3_img = Image.open(v3_file)
 
             if v2_img.size != v3_img.size:
-                page_diffs.append({
-                    "page": i,
-                    "issue": "size_mismatch",
-                    "v2_size": v2_img.size,
-                    "v3_size": v3_img.size,
-                })
+                page_diffs.append(
+                    {
+                        "page": i,
+                        "issue": "size_mismatch",
+                        "v2_size": v2_img.size,
+                        "v3_size": v3_img.size,
+                    }
+                )
                 scenario_pass = False
                 continue
 
@@ -93,14 +95,16 @@ def compare_dirs(v2_dir: str, v3_dir: str, report_dir: str) -> bool:
 
                 diff.save(os.path.join(report_dir, f"{scenario}_p{i}_diff.png"))
 
-                page_diffs.append({
-                    "page": i,
-                    "issue": "pixel_mismatch",
-                    "diff_pixels": diff_pixels,
-                    "total_pixels": total_pixels,
-                    "diff_percent": round(diff_pixels / total_pixels * 100, 4),
-                    "bbox": list(bbox) if bbox else None,
-                })
+                page_diffs.append(
+                    {
+                        "page": i,
+                        "issue": "pixel_mismatch",
+                        "diff_pixels": diff_pixels,
+                        "total_pixels": total_pixels,
+                        "diff_percent": round(diff_pixels / total_pixels * 100, 4),
+                        "bbox": list(bbox) if bbox else None,
+                    }
+                )
                 scenario_pass = False
             else:
                 page_diffs.append({"page": i, "status": "identical"})
@@ -137,7 +141,8 @@ def compare_dirs(v2_dir: str, v3_dir: str, report_dir: str) -> bool:
                 if "page_diffs" in s:
                     for d in s["page_diffs"]:
                         if d.get("issue") == "pixel_mismatch":
-                            print(f"  Page {d['page']}: {d['diff_pixels']}/{d['total_pixels']} pixels differ ({d['diff_percent']}%)")
+                            dp = d["diff_percent"]
+                            print(f"  Page {d['page']}: {d['diff_pixels']}/{d['total_pixels']} pixels differ ({dp}%)")
                         elif d.get("issue") == "size_mismatch":
                             print(f"  Page {d['page']}: size {d['v2_size']} vs {d['v3_size']}")
                         elif d.get("issue") == "page_count_mismatch":

@@ -89,6 +89,7 @@ class UDim2:
 
     Resolves to absolute pixels via: parent_size * scale + offset.
     """
+
     x_scale: float = 0.0
     x_offset: float = 0.0
     y_scale: float = 0.0
@@ -110,6 +111,7 @@ class AnchorPoint:
         AnchorPoint(0.5, 0.5) = center
         AnchorPoint(1, 1)   = bottom-right
     """
+
     x: float = 0.0
     y: float = 0.0
 
@@ -117,6 +119,7 @@ class AnchorPoint:
 @dataclass(frozen=True, slots=True)
 class ResolvedRect:
     """Absolute pixel rectangle for content placement."""
+
     left: int = 0
     top: int = 0
     width: int = 0
@@ -132,6 +135,7 @@ class PresetLayout:
         size: Width/height of the element.
         anchor: Which point of the element pivots at position.
     """
+
     position: UDim2 = UDim2(0, 0, 0, 0)
     size: UDim2 = UDim2(1, 0, 1, 0)
     anchor: AnchorPoint = AnchorPoint(0, 0)
@@ -484,6 +488,7 @@ class FrameConfig:
         image_height: Canvas height in pixels.
         aspect_ratio: Aspect ratio key for layout lookup ("landscape", "story", "square").
     """
+
     background_color: Color = (0, 0, 0, 0)
     max_width: int = 1920
     image_height: int = 1080
