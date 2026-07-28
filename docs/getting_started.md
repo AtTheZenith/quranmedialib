@@ -27,8 +27,8 @@ Instead of worrying about pixels, use **Presets**. A preset defines the look and
 
 ```python
 from quranmedialib import LANDSCAPE_PRESET
-# Get config for 1080p landscape in 'default' mode
-layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
+# Get preset for 1080p landscape in 'default' mode
+preset = LANDSCAPE_PRESET["default"]["1080p"]
 ```
 
 ### 2. Workflows
@@ -46,8 +46,8 @@ Here is a complete example of rendering a verse with a custom translation:
 from quranmedialib import VerseWorkflow, STORY_PRESET
 
 # 1. Setup Layout (Story mode for mobile)
-layout, text, word = STORY_PRESET["default"]["1080p"]
-workflow = VerseWorkflow(layout, text, word)
+preset = STORY_PRESET["default"]["1080p"]
+workflow = VerseWorkflow(preset)
 
 # 2. Define Verse and Translation
 translations = ["In the name of Allah,", "the Entirely Merciful, the Especially Merciful."]
@@ -67,8 +67,8 @@ For larger tasks, `SurahWorkflow` handles everything automatically:
 ```python
 from quranmedialib import SurahWorkflow, LANDSCAPE_PRESET
 
-layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-workflow = SurahWorkflow(layout, text, word)
+preset = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = SurahWorkflow(preset)
 
 # Process Surah Al-Ikhlas (112)
 for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):

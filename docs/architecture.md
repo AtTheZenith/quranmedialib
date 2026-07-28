@@ -20,7 +20,7 @@ The library operates as a linear pipeline with four distinct layers. Data flows 
 
 - **Databases**: Uses SQLite for high-performance retrieval of Quranic text and word-by-word translations.
 - **Resource Resolution**: The `FontResource` and `DatabaseConfig` classes handle the resolution of packaged assets (via `importlib.resources`) or external paths.
-- **Output**: Raw text strings, font paths, and configuration objects (`LayoutConfig`, `WordConfig`).
+- **Output**: Raw text strings, font paths, and configuration objects (`FrameConfig`, `WordConfig`).
 
 ### 2. Rendering Layer (The Mask Generator)
 

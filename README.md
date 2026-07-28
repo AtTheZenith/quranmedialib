@@ -49,9 +49,9 @@ from quranmedialib import DatabaseManager, VerseWorkflow, LANDSCAPE_PRESET
 # Initialize database manager
 db = DatabaseManager()
 
-# Configure layout using a preset (1080p Landscape Default)
-layout, text_cfg, word_cfg = LANDSCAPE_PRESET["default"]["1080p"]
-workflow = VerseWorkflow(layout, text_cfg, word_cfg)
+# Load a 1080p Landscape preset
+preset = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = VerseWorkflow(preset)
 
 # Render Surah 1, Ayah 1
 translations = ["In the name of Allah,", "the Entirely Merciful, the Especially Merciful."]
@@ -82,8 +82,8 @@ Processes an entire surah page by page.
 ```python
 from quranmedialib import SurahWorkflow, LANDSCAPE_PRESET
 
-layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-workflow = SurahWorkflow(layout, text, word)
+preset = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = SurahWorkflow(preset)
 
 for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
     for img, suffix in page_images:
@@ -95,8 +95,8 @@ Processes a range of verses with support for parallel rendering.
 ```python
 from quranmedialib import VerseRangeWorkflow, SQUARE_PRESET
 
-layout, text, word = SQUARE_PRESET["default"]["1080p"]
-workflow = VerseRangeWorkflow(layout, text, word)
+preset = SQUARE_PRESET["default"]["1080p"]
+workflow = VerseRangeWorkflow(preset)
 
 # translations: list[list[str]] -> [verse_index][page_index]
 translations = [["Trans V1"], ["Trans V2"]] 
@@ -145,7 +145,7 @@ graph TD
     Comp --> Out[Final Image]
     
     subgraph Config
-        L[LayoutConfig] -.-> Layout
+        F[FrameConfig] -.-> Layout
         W[WordConfig] -.-> Pipe
         T[TextConfig] -.-> Pipe
     end
@@ -169,7 +169,9 @@ A thread-safe singleton managing SQLite connections to Quranic databases.
 - `minimize_caches()`: Explicitly clears internal LRU caches.
 
 #### Configuration
-- `LayoutConfig`: Controls canvas dimensions, padding, and alignment.
+- `Preset`: Unified config container (`preset.frame`, `preset.word`, `preset.verse`, `preset.text`).
+- `FrameConfig`: Controls frame dimensions, background, and alignment.
+- `VerseConfig`: Controls word spacing, row spacing, max rows, and wrapping.
 - `WordConfig`: Defines Arabic font, size, colors, and spacing.
 - `TextConfig`: Defines translation font, size, and rich-text formatting.
 
@@ -185,8 +187,8 @@ Used to isolate individual words within their layout context, useful for word-by
 ```python
 from quranmedialib import IsolateWordsWorkflow, LANDSCAPE_PRESET
 
-layout, text, word = LANDSCAPE_PRESET["default"]["1080p"]
-workflow = IsolateWordsWorkflow(layout, text, word)
+preset = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = IsolateWordsWorkflow(preset)
 
 # Isolates each word of the verse
 iterator = workflow.get_iterator(
