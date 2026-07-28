@@ -152,7 +152,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 filename_prefix=filename_prefix,
             )
 
-            for result in renderer.map_batches(worker_fn, tasks):
+            for result in renderer.map_batches(worker_fn, tasks, max_batch_size=5):
                 if output_dir:
                     yield result
                 else:

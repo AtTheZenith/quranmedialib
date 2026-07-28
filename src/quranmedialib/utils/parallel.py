@@ -133,6 +133,7 @@ class ParallelRenderer:
         func: Callable[[list[T]], Iterator[R]],
         tasks: Iterable[T],
         use_monitor: bool = True,
+        max_batch_size: int | None = None,
     ) -> Iterator[R]:
         """Groups tasks into optimal batches and maps a function over them.
 
@@ -144,6 +145,10 @@ class ParallelRenderer:
             func: Function that accepts a list of tasks and yields results.
             tasks: Iterable of task arguments.
             use_monitor: Whether to enable aggregate memory monitoring.
+            max_batch_size: Maximum tasks per batch. When set, batches are
+                further subdivided to cap per-worker memory. Useful for heavy
+                workloads where a single worker handling many items would
+                exceed per-process memory limits.
 
         Yields:
             The results yielded by the worker function.
@@ -154,6 +159,8 @@ class ParallelRenderer:
 
         # Calculate chunksize to have exactly one task-list per worker
         chunk_size = max(1, (len(task_list) + self.max_workers - 1) // self.max_workers)
+        if max_batch_size is not None:
+            chunk_size = min(chunk_size, max_batch_size)
 
         # Create the batches
         batches = [task_list[i : i + chunk_size] for i in range(0, len(task_list), chunk_size)]
