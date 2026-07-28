@@ -152,7 +152,10 @@ class VerseRangeWorkflow(BaseWorkflow):
                 filename_prefix=filename_prefix,
             )
 
-            for result in renderer.map_batches(worker_fn, tasks, max_batch_size=5):
+            # Each batch = natural chunk (ceil(tasks/workers)) for even distribution.
+            # Cap at 20 to bound per-worker memory.
+            chunk = max(1, (len(tasks) + renderer.max_workers - 1) // renderer.max_workers)
+            for result in renderer.map_batches(worker_fn, tasks, max_batch_size=min(chunk, 20)):
                 if output_dir:
                     yield result
                 else:
@@ -372,11 +375,12 @@ def _render_verse_worker(
 
     with async_image_saver() as save:
         for i, (ayah, verse_translations) in enumerate(verse_data):
-            # Memory check and heartbeat every verse
-            if get_current_rss_mb() > flush_trigger:
-                clear_rendering_caches()
-                gc.collect()
-            worker_heartbeat()
+            # Throttled memory check and heartbeat (every 10 verses)
+            if i % 10 == 0:
+                if get_current_rss_mb() > flush_trigger:
+                    clear_rendering_caches()
+                    gc.collect()
+                worker_heartbeat()
 
             verse_text = arabic_map.get(ayah, "")
             if not verse_text:
