@@ -215,10 +215,10 @@ uv pip install -e ".[dev]"
 # Full test suite (pixel validation + benchmarks + unit tests)
 uv run -m quranmedialib.check test
 
-# Run with benchmarks
-uv run -m quranmedialib.check test --benchmark
+# Pixel validation only (no benchmarks)
+uv run -m quranmedialib.check test --no-benchmark
 
-# Run unit tests only
+# Unit tests only
 uv run -m quranmedialib.check test --unit
 
 # Cross-version pixel comparison

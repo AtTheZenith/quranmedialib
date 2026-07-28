@@ -372,12 +372,11 @@ def _render_verse_worker(
 
     with async_image_saver() as save:
         for i, (ayah, verse_translations) in enumerate(verse_data):
-            # Throttled memory check and heartbeat (every 10 verses)
-            if i % 10 == 0:
-                if get_current_rss_mb() > flush_trigger:
-                    clear_rendering_caches()
-                    gc.collect()
-                worker_heartbeat()
+            # Memory check and heartbeat every verse
+            if get_current_rss_mb() > flush_trigger:
+                clear_rendering_caches()
+                gc.collect()
+            worker_heartbeat()
 
             verse_text = arabic_map.get(ayah, "")
             if not verse_text:

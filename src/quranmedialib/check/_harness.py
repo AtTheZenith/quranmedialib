@@ -361,6 +361,20 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         },
         expected_pages=6,
     ),
+    # ── Full surah stress test (longest surah, 286 verses) ───────────
+    Scenario(
+        name="surah_albaqarah",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="surah",
+        params={
+            "surah": 2,
+            "annotate": True,
+            "separate_translations": False,
+        },
+        expected_pages=473,
+    ),
 ]
 
 
@@ -969,7 +983,7 @@ def cli() -> int:
     test_parser = sub.add_parser("test", help="Full test suite: pixel validation + perf benchmarks + unit tests")
     test_parser.add_argument("--version", help="Reference version (default: current)")
     test_parser.add_argument("--scenario", "-s", help="Test only a specific scenario")
-    test_parser.add_argument("--benchmark", action="store_true", help="Run benchmarks (skipped by default)")
+    test_parser.add_argument("--no-benchmark", action="store_true", help="Skip performance benchmarks")
     test_parser.add_argument("--unit", action="store_true", help="Run unit tests only, skip pixel validation")
 
     # compare
@@ -1061,8 +1075,8 @@ def cli() -> int:
                 if not all(r.passed for r in results):
                     all_pass = False
 
-            # 2. Benchmarks (opt-in with --benchmark)
-            if args.benchmark:
+            # 2. Benchmarks (always run unless --no-benchmark)
+            if not args.no_benchmark:
                 scenarios = CANONICAL_SCENARIOS
                 if args.scenario:
                     scenarios = [s for s in scenarios if s.name == args.scenario]

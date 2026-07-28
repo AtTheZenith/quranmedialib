@@ -603,8 +603,8 @@ uv run -m quranmedialib.check test
 # Quick pixel validation only
 uv run -m quranmedialib.check run
 
-# Run with benchmarks
-uv run -m quranmedialib.check test --benchmark
+# Skip benchmarks during test
+uv run -m quranmedialib.check test --no-benchmark
 
 # (Re)generate reference images for a version
 uv run -m quranmedialib.check update --version v4.1.0
