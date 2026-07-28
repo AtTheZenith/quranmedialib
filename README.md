@@ -212,11 +212,17 @@ For bulk rendering, the library provides `ParallelRenderer`, which distributes t
 # Install dev dependencies
 uv pip install -e ".[dev]"
 
-# Run all tests
-uv run -m pytest -v
+# Full test suite (pixel validation + benchmarks + unit tests)
+uv run -m quranmedialib.check test
 
-# Run benchmarks
-uv run -m pytest -v --benchmark
+# Run with benchmarks
+uv run -m quranmedialib.check test --benchmark
+
+# Run unit tests only
+uv run -m quranmedialib.check test --unit
+
+# Cross-version pixel comparison
+uv run -m quranmedialib.check compare v4.0.0 v4.1.0
 
 # Lint and Format
 uv run -m ruff check .

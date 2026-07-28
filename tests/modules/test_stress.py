@@ -1,9 +1,10 @@
 import gc
 import threading
+from pathlib import Path
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager, VerseWorkflow
 from quranmedialib.utils.memory import get_current_rss_mb
-from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer
+from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, init_worker_path
 
 
 def test_database_manager_rapid_reinit_stress():
@@ -36,7 +37,8 @@ def task_fn(batch: list[int]) -> list[int]:
 
 def test_parallel_renderer_extreme_churn():
     """Stress test ParallelRenderer with high volume of small tasks and rapid pool resets."""
-    renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
+    tests_dir = str(Path(__file__).resolve().parent.parent)
+    renderer = ParallelRenderer(mode=ExecutionMode.PROCESS, initializer=init_worker_path, initargs=(tests_dir,))
 
     # Batch of 1000 small tasks
     tasks = list(range(1000))

@@ -67,6 +67,7 @@ def test_api_exports_completeness() -> None:
         "AnchorPoint",
         "LayoutEngine",
         "LayoutGuide",
+        "Preset",
         "PresetLayout",
         "ResolvedRect",
         "UDim2",

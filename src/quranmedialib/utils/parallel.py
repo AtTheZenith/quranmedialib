@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import atexit
 import logging
+import sys
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from enum import Enum, auto
-from typing import Callable, Iterable, Iterator, TypeVar
+from typing import Any, Callable, Iterable, Iterator, TypeVar
 
 from quranmedialib.config import (
     CPU_COUNT,
@@ -46,13 +47,30 @@ class _PoolManager:
     _executors: dict[tuple[ExecutionMode, int], ProcessPoolExecutor | ThreadPoolExecutor] = {}
 
     @classmethod
-    def get_executor(cls, mode: ExecutionMode, max_workers: int) -> ProcessPoolExecutor | ThreadPoolExecutor:
-        """Returns a cached executor for the given mode and worker count."""
-        key = (mode, max_workers)
+    def get_executor(
+        cls,
+        mode: ExecutionMode,
+        max_workers: int,
+        initializer: Callable | None = None,
+        initargs: tuple[Any, ...] = (),
+    ) -> ProcessPoolExecutor | ThreadPoolExecutor:
+        """Returns a cached executor for the given mode and worker count.
+
+        Args:
+            mode: PROCESS or THREAD pool.
+            max_workers: Number of workers.
+            initializer: Optional callable invoked at worker process startup (PROCESS mode only).
+            initargs: Arguments passed to the initializer.
+        """
+        key = (mode, max_workers, initializer, initargs)
         if key not in cls._executors:
             logger.debug("Initializing persistent %s pool with %d workers", mode.name, max_workers)
             if mode == ExecutionMode.PROCESS:
-                cls._executors[key] = ProcessPoolExecutor(max_workers=max_workers)
+                cls._executors[key] = ProcessPoolExecutor(
+                    max_workers=max_workers,
+                    initializer=initializer,
+                    initargs=initargs,
+                )
             else:
                 cls._executors[key] = ThreadPoolExecutor(max_workers=max_workers)
         return cls._executors[key]
@@ -86,6 +104,8 @@ class ParallelRenderer:
         mode: ExecutionMode = ExecutionMode.PROCESS,
         memory_limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB,
         process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB,
+        initializer: Callable | None = None,
+        initargs: tuple[Any, ...] = (),
     ):
         """Initializes the parallel engine.
 
@@ -94,15 +114,19 @@ class ParallelRenderer:
             mode: PROCESS or THREAD pool.
             memory_limit_mb: Aggregate RAM limit for the entire pool.
             process_limit_mb: Individual RAM limit for each process.
+            initializer: Optional callable invoked at worker startup (PROCESS mode).
+            initargs: Arguments passed to the initializer.
         """
         self.max_workers = max_workers or CPU_COUNT
         self.mode = mode
         self.memory_limit_mb = memory_limit_mb
         self.process_limit_mb = process_limit_mb
+        self.initializer = initializer
+        self.initargs = initargs
 
     def _get_executor(self) -> ProcessPoolExecutor | ThreadPoolExecutor:
         """Retrieves a persistent executor from the PoolManager."""
-        return _PoolManager.get_executor(self.mode, self.max_workers)
+        return _PoolManager.get_executor(self.mode, self.max_workers, self.initializer, self.initargs)
 
     def map_batches(
         self,
@@ -183,6 +207,19 @@ class ParallelRenderer:
         finally:
             if monitor:
                 monitor.__exit__(None, None, None)
+
+
+def init_worker_path(path: str) -> None:
+    """Worker process initializer: ensures a directory is importable.
+
+    Pass this as the ``initializer`` to ParallelRenderer when worker functions
+    live in a non-package directory (e.g., test modules).
+
+    Args:
+        path: Absolute directory to add to sys.path in each worker.
+    """
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def worker_heartbeat(process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:

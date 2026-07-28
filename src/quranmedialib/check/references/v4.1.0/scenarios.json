@@ -1,0 +1,190 @@
+{
+  "version": "v4.1.0",
+  "qml_version": "4.1.0",
+  "created_at": "2026-07-28T09:08:21.161072+00:00",
+  "scenarios": [
+    {
+      "name": "bismillah_annotated",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 1,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "bismillah_arabic",
+      "aspect": "landscape",
+      "mode": "arabic",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 1,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "kawthar_annotated",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 108,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "ikhlas_v1_annotated",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 112,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "kursi_partial",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 2,
+        "ayah": 255,
+        "annotate": true
+      },
+      "expected_pages": 3
+    },
+    {
+      "name": "bismillah_story",
+      "aspect": "story",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 1,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "bismillah_square",
+      "aspect": "square",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 1,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "bismillah_720p",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "720p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 1,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "kursi_full",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse",
+      "params": {
+        "surah": 2,
+        "ayah": 255,
+        "annotate": true
+      },
+      "expected_pages": 3
+    },
+    {
+      "name": "surah_kawthar",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "surah",
+      "params": {
+        "surah": 108,
+        "annotate": true,
+        "separate_translations": false
+      },
+      "expected_pages": 3
+    },
+    {
+      "name": "surah_ikhlas",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "surah",
+      "params": {
+        "surah": 112,
+        "annotate": true,
+        "separate_translations": false
+      },
+      "expected_pages": 4
+    },
+    {
+      "name": "range_kawthar",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "verse_range",
+      "params": {
+        "surah": 108,
+        "start_ayah": 1,
+        "end_ayah": 3,
+        "annotate": true
+      },
+      "expected_pages": 3
+    },
+    {
+      "name": "isolate_kawthar_v1",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "isolate",
+      "params": {
+        "surah": 108,
+        "ayah": 1,
+        "annotate": true
+      },
+      "expected_pages": 4
+    },
+    {
+      "name": "surah_kawthar_separate",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "surah",
+      "params": {
+        "surah": 108,
+        "annotate": true,
+        "separate_translations": true
+      },
+      "expected_pages": 6
+    }
+  ]
+}

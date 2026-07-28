@@ -597,22 +597,29 @@ All development commands use `uv` for consistency.
 ### 16.2 Common Commands
 
 ```bash
-# Run all tests
-uv run -m pytest
+# Full test suite (pixel validation + performance + unit tests)
+uv run -m quranmedialib.check test
 
-# Run specific test file
-uv run -m pytest tests/modules/test_annotation.py
-# OR (shorthand)
-uv run tests/modules/test_annotation.py
+# Quick pixel validation only
+uv run -m quranmedialib.check run
 
-# Run tests with verbose output
-uv run -m pytest -v
+# Run with benchmarks
+uv run -m quranmedialib.check test --benchmark
 
-# Run tests matching keyword
-uv run -m pytest -k "annotation"
+# (Re)generate reference images for a version
+uv run -m quranmedialib.check update --version v4.1.0
 
-# Run benchmarks (marked tests)
-uv run -m pytest -m benchmark
+# Cross-version pixel comparison
+uv run -m quranmedialib.check compare v4.1.0 v4.2.0
+
+# Run performance benchmarks
+uv run -m quranmedialib.check benchmark
+
+# List canonical validation scenarios
+uv run -m quranmedialib.check list
+
+# Direct pytest (for unit tests, not validation):
+uv run -m pytest tests/modules/ -x -q
 
 # Lint with Ruff
 uv run -m ruff check .
@@ -625,9 +632,6 @@ uvx sourcery review . --disable low-code-quality --disable no-loop-in-tests --di
 
 # Run demo script
 uv run demo.py
-
-# Run individual test module directly
-uv run tests/modules/test_vimage.py
 ```
 
 ---
@@ -640,8 +644,9 @@ uv run tests/modules/test_vimage.py
   - `tests/modules/` — Core module tests
   - `tests/workflows/` — Workflow tests
   - `tests/test_api_surface.py` — Public API verification
+  - `tests/test_validation.py` — Versioned rendering contract tests (driven by `quranmedialib.check`)
   - `tests/conftest.py` — Shared pytest fixtures
-- Test files use `test_*.py` naming.
+- The primary test entrypoint is `uv run -m quranmedialib.check test` which wraps pixel validation + benchmarks + pytest unit tests.
 - Each test module can run standalone with `uv run tests/modules/test_*.py`.
 
 ### 17.2 Test Patterns

@@ -25,6 +25,7 @@ Package Structure:
     presets:       Pre-configured layouts (LANDSCAPE_PRESET, STORY_PRESET, etc.)
     database_manager:  Stateful SQLite connection manager for Quran databases
     resources:     Asset path resolution (fonts, databases) via importlib.resources
+    check:         Validation harness — rendering correctness, perf benchmarks, cross-version comparison
     modules:       Core rendering modules
         wimage:        Arabic word rendering
         timage:        Translation text rendering with rich formatting
@@ -84,6 +85,7 @@ from quranmedialib.types import (
     FrameConfig,
     HorizontalAlignment,
     Padding,
+    Preset,
     PresetLayout,
     ResolvedRect,
     SurahNumber,
@@ -153,6 +155,7 @@ __all__ = [
     "AnchorPoint",
     "LayoutEngine",
     "LayoutGuide",
+    "Preset",
     "PresetLayout",
     "ResolvedRect",
     "UDim2",
