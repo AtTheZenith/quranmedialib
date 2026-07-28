@@ -667,91 +667,160 @@ class ValidationHarness:
         render_fn = _RENDER_MAP[scenario.workflow_type]
         return render_fn(workflow, scenario.params, self._db)
 
+    def _iter_pages(self, scenario: Scenario) -> Iterator[Image.Image]:
+        """Yield pages one at a time from a scenario workflow, never accumulating."""
+        workflow = _build_workflow(scenario)
+        cls = _WORKFLOW_MAP[scenario.workflow_type]
+        preset = _build_preset(scenario)
+        wf = cls(preset)
+
+        if scenario.workflow_type == "verse":
+            it = wf.get_iterator(
+                surah=scenario.params["surah"],
+                ayah=scenario.params["ayah"],
+                translations=scenario.params.get("translations", []),
+                annotate=scenario.params.get("annotate", True),
+            )
+            for batch in it:
+                yield from batch
+        elif scenario.workflow_type == "surah":
+            it = wf.get_iterator(
+                surah=scenario.params["surah"],
+                annotate=scenario.params.get("annotate", True),
+                separate_translations=scenario.params.get("separate_translations", False),
+            )
+            for batch in it:
+                yield from batch
+        elif scenario.workflow_type == "verse_range":
+            surah = scenario.params["surah"]
+            start = scenario.params.get("start_ayah", 1)
+            end = scenario.params.get("end_ayah", start)
+            tr: list[list[str]] = []
+            for v in range(start, end + 1):
+                tr.append([self._db.get_translation_from_verse(surah, v)])
+            it = wf.get_iterator(
+                surah=surah,
+                translations=tr,
+                start_ayah=start,
+                end_ayah=end,
+                annotate=scenario.params.get("annotate", True),
+            )
+            for batch in it:
+                yield from batch
+        elif scenario.workflow_type == "isolate":
+            surah = scenario.params["surah"]
+            ayah = scenario.params["ayah"]
+            verse_text = self._db.get_verse(surah, ayah)
+            verse_words = verse_text.split()
+            wbw_dict = self._db.get_wbw_grouped_by_verse(surah)
+            wbw = list(wbw_dict.get(ayah, []))
+            translation = self._db.get_translation_from_verse(surah, ayah)
+            it = wf.get_iterator(
+                surah=surah,
+                verse_words=verse_words,
+                translations=[translation],
+                ayah=ayah,
+                wbw_translations=wbw,
+                annotate=scenario.params.get("annotate", True),
+            )
+            for batch in it:
+                yield from batch
+
     def benchmark_scenario(self, scenario: Scenario) -> ScenarioMetrics:
-        """Render and collect performance metrics for a single scenario."""
+        """Render and collect performance metrics without accumulating pages."""
         mem_before = _get_memory_mb()
         start = time.perf_counter()
-        pages = self.render_scenario(scenario)
+        hasher = hashlib.sha256()
+        count = 0
+        for page in self._iter_pages(scenario):
+            hasher.update(page.tobytes())
+            count += 1
         elapsed = time.perf_counter() - start
         rss = max(_get_memory_mb(), mem_before)
         return ScenarioMetrics(
             name=scenario.name,
             elapsed_s=elapsed,
-            pages=len(pages),
+            pages=count,
             peak_rss_mb=rss,
-            pixel_hash=_compute_pixel_hash(pages),
+            pixel_hash=f"sha256:{hasher.hexdigest()}",
         )
 
     # ── Validation (single scenario) ──────────────────────────────────────
 
     def validate_scenario(self, scenario: Scenario) -> ValidationResult:
-        """Render a scenario and compare against its reference images."""
+        """Render a scenario and compare against its reference images (streaming, no accumulation)."""
         start = time.perf_counter()
-        try:
-            pages = self.render_scenario(scenario)
-        except Exception as e:
-            return ValidationResult(
-                scenario=scenario.name,
-                passed=False,
-                pages_expected=scenario.expected_pages,
-                pages_actual=0,
-                error=str(e),
-                elapsed=time.perf_counter() - start,
-            )
-
-        actual = len(pages)
-        metrics = ScenarioMetrics(
-            name=scenario.name,
-            elapsed_s=time.perf_counter() - start,
-            pages=actual,
-            peak_rss_mb=_get_memory_mb(),
-            pixel_hash=_compute_pixel_hash(pages),
-        )
         ref_dir = self.reference_dir
+        hasher = hashlib.sha256()
+        page_diffs: list[PageDiff] = []
+        all_pass = True
+        i = 0
 
         if not ref_dir.exists():
             return ValidationResult(
                 scenario=scenario.name,
                 passed=False,
                 pages_expected=scenario.expected_pages,
-                pages_actual=actual,
-                metrics=metrics,
+                pages_actual=0,
                 error=f"No references at {ref_dir} (run 'update' first)",
                 elapsed=time.perf_counter() - start,
             )
 
-        page_diffs: list[PageDiff] = []
-        all_pass = True
+        try:
+            for page in self._iter_pages(scenario):
+                hasher.update(page.tobytes())
 
-        for i in range(max(scenario.expected_pages, actual)):
-            if i >= actual:
-                page_diffs.append(
-                    PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-                )
-                all_pass = False
-                continue
+                if i >= scenario.expected_pages:
+                    page_diffs.append(
+                        PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
+                    )
+                    all_pass = False
+                    i += 1
+                    continue
 
-            if i >= scenario.expected_pages:
-                page_diffs.append(
-                    PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-                )
-                all_pass = False
-                continue
+                ref_path = self.get_reference_path(scenario, i)
+                if not ref_path.exists():
+                    page_diffs.append(
+                        PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
+                    )
+                    all_pass = False
+                    i += 1
+                    continue
 
-            ref_path = self.get_reference_path(scenario, i)
-            if not ref_path.exists():
-                page_diffs.append(
-                    PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-                )
-                all_pass = False
-                continue
+                ref_img = Image.open(ref_path)
+                diff = _compare_images(ref_img, page)
+                diff.page = i
+                page_diffs.append(diff)
+                if diff.diff_pixels != 0:
+                    all_pass = False
+                i += 1
 
-            ref_img = Image.open(ref_path)
-            diff = _compare_images(ref_img, pages[i])
-            diff.page = i
-            page_diffs.append(diff)
-            if diff.diff_pixels != 0:
-                all_pass = False
+        except Exception as e:
+            return ValidationResult(
+                scenario=scenario.name,
+                passed=False,
+                pages_expected=scenario.expected_pages,
+                pages_actual=i,
+                error=str(e),
+                elapsed=time.perf_counter() - start,
+            )
+
+        actual = i
+        metrics = ScenarioMetrics(
+            name=scenario.name,
+            elapsed_s=time.perf_counter() - start,
+            pages=actual,
+            peak_rss_mb=_get_memory_mb(),
+            pixel_hash=f"sha256:{hasher.hexdigest()}",
+        )
+
+        # Handle missing pages (rendered fewer than expected)
+        while i < scenario.expected_pages:
+            page_diffs.append(
+                PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
+            )
+            all_pass = False
+            i += 1
 
         return ValidationResult(
             scenario=scenario.name,
@@ -780,7 +849,7 @@ class ValidationHarness:
     # ── Reference management ──────────────────────────────────────────────
 
     def update_references(self, scenarios: list[Scenario] | None = None) -> list[Path]:
-        """Render scenarios, save reference images + metadata."""
+        """Render scenarios, save reference images + metadata (streaming, no accumulation)."""
         if scenarios is None:
             scenarios = CANONICAL_SCENARIOS
         ref_dir = self.reference_dir
@@ -792,8 +861,7 @@ class ValidationHarness:
         for scenario in scenarios:
             m = self.benchmark_scenario(scenario)
             metrics_list.append(m)
-            pages = self.render_scenario(scenario)
-            for i, page in enumerate(pages):
+            for i, page in enumerate(self._iter_pages(scenario)):
                 if i >= scenario.expected_pages:
                     break
                 path = self.get_reference_path(scenario, i)
