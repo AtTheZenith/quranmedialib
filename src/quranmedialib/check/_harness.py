@@ -21,6 +21,7 @@ import hashlib
 import json
 import sys
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -404,87 +405,9 @@ def _build_workflow(scenario: Scenario) -> Any:
     return cls(preset)
 
 
-# ── Render helpers ──────────────────────────────────────────────────────────
-
-
-def _render_verse(workflow: VerseWorkflow, params: dict[str, Any], db: DatabaseManager) -> list[Image.Image]:
-    pages = list(
-        workflow.get_iterator(
-            surah=params["surah"],
-            ayah=params["ayah"],
-            translations=params.get("translations", []),
-            annotate=params.get("annotate", True),
-        )
-    )
-    return pages[0] if pages else []
-
-
-def _render_surah(workflow: SurahWorkflow, params: dict[str, Any], db: DatabaseManager) -> list[Image.Image]:
-    pages_list = list(
-        workflow.get_iterator(
-            surah=params["surah"],
-            annotate=params.get("annotate", True),
-            separate_translations=params.get("separate_translations", False),
-        )
-    )
-    flat: list[Image.Image] = []
-    for g in pages_list:
-        flat.extend(g)
-    return flat
-
-
-def _render_verse_range(workflow: VerseRangeWorkflow, params: dict[str, Any], db: DatabaseManager) -> list[Image.Image]:
-    surah = params["surah"]
-    start = params.get("start_ayah", 1)
-    end = params.get("end_ayah", start)
-    tr: list[list[str]] = []
-    for v in range(start, end + 1):
-        tr.append([db.get_translation_from_verse(surah, v)])
-    pages_list = list(
-        workflow.get_iterator(
-            surah=surah,
-            translations=tr,
-            start_ayah=start,
-            end_ayah=end,
-            annotate=params.get("annotate", True),
-        )
-    )
-    flat: list[Image.Image] = []
-    for g in pages_list:
-        flat.extend(g)
-    return flat
-
-
-def _render_isolate(workflow: IsolateWordsWorkflow, params: dict[str, Any], db: DatabaseManager) -> list[Image.Image]:
-    surah = params["surah"]
-    ayah = params["ayah"]
-    verse_text = db.get_verse(surah, ayah)
-    verse_words = verse_text.split()
-    wbw_dict = db.get_wbw_grouped_by_verse(surah)
-    wbw = list(wbw_dict.get(ayah, []))
-    translation = db.get_translation_from_verse(surah, ayah)
-    pages_list = list(
-        workflow.get_iterator(
-            surah=surah,
-            verse_words=verse_words,
-            translations=[translation],
-            ayah=ayah,
-            wbw_translations=wbw,
-            annotate=params.get("annotate", True),
-        )
-    )
-    flat: list[Image.Image] = []
-    for g in pages_list:
-        flat.extend(g)
-    return flat
-
-
-_RENDER_MAP: dict[str, Any] = {
-    "verse": _render_verse,
-    "surah": _render_surah,
-    "verse_range": _render_verse_range,
-    "isolate": _render_isolate,
-}
+# ── Render helpers (delegated to _iter_pages) ────────────────────────────
+# The _RENDER_MAP-based dispatch was removed in favor of _iter_pages(),
+# which streams images one page at a time without main-process accumulation.
 
 
 # ── Comparator ──────────────────────────────────────────────────────────────
@@ -500,16 +423,19 @@ def _compare_images(ref: Image.Image, rendered: Image.Image) -> PageDiff:
             size_match=False,
         )
 
-    ref_data = list(ref.getdata())
-    rendered_data = list(rendered.getdata())
-
-    if ref_data == rendered_data:
-        return PageDiff(page=0, diff_pixels=0, total_pixels=len(ref_data), diff_percent=0.0, size_match=True)
+    if ref.tobytes() == rendered.tobytes():
+        total = ref.size[0] * ref.size[1]
+        return PageDiff(page=0, diff_pixels=0, total_pixels=total, diff_percent=0.0, size_match=True)
 
     diff = ImageChops.difference(ref, rendered)
     bbox = diff.getbbox()
-
-    diff_pixels = sum(1 for p in diff.getdata() if any(c != 0 for c in (p if isinstance(p, tuple) else (p,))))
+    diff_raw = diff.tobytes()
+    stride = len(diff.getbands())
+    diff_pixels = sum(
+        1
+        for i in range(0, len(diff_raw), stride)
+        if any(b != 0 for b in diff_raw[i:i + stride])
+    )
     total = diff.size[0] * diff.size[1]
 
     return PageDiff(
@@ -662,35 +588,26 @@ class ValidationHarness:
     # ── Rendering ─────────────────────────────────────────────────────────
 
     def render_scenario(self, scenario: Scenario) -> list[Image.Image]:
-        """Render a scenario and return page images."""
-        workflow = _build_workflow(scenario)
-        render_fn = _RENDER_MAP[scenario.workflow_type]
-        return render_fn(workflow, scenario.params, self._db)
+        """Render a scenario and return page images (materializes from streaming iterator)."""
+        return list(self._iter_pages(scenario))
 
     def _iter_pages(self, scenario: Scenario) -> Iterator[Image.Image]:
-        """Yield pages one at a time from a scenario workflow, never accumulating."""
-        workflow = _build_workflow(scenario)
-        cls = _WORKFLOW_MAP[scenario.workflow_type]
-        preset = _build_preset(scenario)
-        wf = cls(preset)
+        """Render a scenario, yielding pages one at a time (never accumulates)."""
+        wf = _build_workflow(scenario)
 
-        if scenario.workflow_type == "verse":
+        if scenario.workflow_type == "surah":
+            it = wf.get_iterator(
+                surah=scenario.params["surah"],
+                annotate=scenario.params.get("annotate", True),
+                separate_translations=scenario.params.get("separate_translations", False),
+            )
+        elif scenario.workflow_type == "verse":
             it = wf.get_iterator(
                 surah=scenario.params["surah"],
                 ayah=scenario.params["ayah"],
                 translations=scenario.params.get("translations", []),
                 annotate=scenario.params.get("annotate", True),
             )
-            for batch in it:
-                yield from batch
-        elif scenario.workflow_type == "surah":
-            it = wf.get_iterator(
-                surah=scenario.params["surah"],
-                annotate=scenario.params.get("annotate", True),
-                separate_translations=scenario.params.get("separate_translations", False),
-            )
-            for batch in it:
-                yield from batch
         elif scenario.workflow_type == "verse_range":
             surah = scenario.params["surah"]
             start = scenario.params.get("start_ayah", 1)
@@ -699,50 +616,39 @@ class ValidationHarness:
             for v in range(start, end + 1):
                 tr.append([self._db.get_translation_from_verse(surah, v)])
             it = wf.get_iterator(
-                surah=surah,
-                translations=tr,
-                start_ayah=start,
-                end_ayah=end,
+                surah=surah, translations=tr, start_ayah=start, end_ayah=end,
                 annotate=scenario.params.get("annotate", True),
             )
-            for batch in it:
-                yield from batch
         elif scenario.workflow_type == "isolate":
             surah = scenario.params["surah"]
             ayah = scenario.params["ayah"]
-            verse_text = self._db.get_verse(surah, ayah)
-            verse_words = verse_text.split()
-            wbw_dict = self._db.get_wbw_grouped_by_verse(surah)
-            wbw = list(wbw_dict.get(ayah, []))
+            verse_text = self._db.get_verse(surah, ayah).split()
+            wbw = list(self._db.get_wbw_grouped_by_verse(surah).get(ayah, []))
             translation = self._db.get_translation_from_verse(surah, ayah)
             it = wf.get_iterator(
-                surah=surah,
-                verse_words=verse_words,
-                translations=[translation],
-                ayah=ayah,
-                wbw_translations=wbw,
+                surah=surah, verse_words=verse_text, translations=[translation],
+                ayah=ayah, wbw_translations=wbw,
                 annotate=scenario.params.get("annotate", True),
             )
-            for batch in it:
-                yield from batch
+        else:
+            raise ValueError(f"Unknown workflow type: {scenario.workflow_type}")
+
+        for batch in it:
+            yield from batch
 
     def benchmark_scenario(self, scenario: Scenario) -> ScenarioMetrics:
-        """Render and collect performance metrics without accumulating pages."""
+        """Render and collect performance metrics for a single scenario."""
         mem_before = _get_memory_mb()
         start = time.perf_counter()
-        hasher = hashlib.sha256()
-        count = 0
-        for page in self._iter_pages(scenario):
-            hasher.update(page.tobytes())
-            count += 1
+        pages = self.render_scenario(scenario)
         elapsed = time.perf_counter() - start
         rss = max(_get_memory_mb(), mem_before)
         return ScenarioMetrics(
             name=scenario.name,
             elapsed_s=elapsed,
-            pages=count,
+            pages=len(pages),
             peak_rss_mb=rss,
-            pixel_hash=f"sha256:{hasher.hexdigest()}",
+            pixel_hash=_compute_pixel_hash(pages),
         )
 
     # ── Validation (single scenario) ──────────────────────────────────────
