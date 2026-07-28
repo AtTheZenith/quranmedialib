@@ -145,9 +145,10 @@ graph TD
     Comp --> Out[Final Image]
     
     subgraph Config
-        F[FrameConfig] -.-> Layout
-        W[WordConfig] -.-> Pipe
-        T[TextConfig] -.-> Pipe
+        FC[FrameConfig] -.-> Comp
+        VC[VerseConfig] -.-> Layout
+        WC[WordConfig] -.-> Pipe
+        TC[TextConfig] -.-> Pipe
     end
 ```
 
