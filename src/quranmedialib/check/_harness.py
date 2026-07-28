@@ -19,8 +19,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import sys
 import time
+import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -591,6 +594,52 @@ class ValidationHarness:
         """Render a scenario and return page images (materializes from streaming iterator)."""
         return list(self._iter_pages(scenario))
 
+    def _count_pages(self, scenario: Scenario, output_dir: str) -> int:
+        """Render a scenario using file-based output to avoid IPC overhead, returns page count."""
+        wf = _build_workflow(scenario)
+
+        if scenario.workflow_type == "surah":
+            it = wf.get_iterator(
+                surah=scenario.params["surah"],
+                annotate=scenario.params.get("annotate", True),
+                separate_translations=scenario.params.get("separate_translations", False),
+                output_dir=output_dir,
+            )
+        elif scenario.workflow_type == "verse_range":
+            surah = scenario.params["surah"]
+            start = scenario.params.get("start_ayah", 1)
+            end = scenario.params.get("end_ayah", start)
+            tr: list[list[str]] = []
+            for v in range(start, end + 1):
+                tr.append([self._db.get_translation_from_verse(surah, v)])
+            it = wf.get_iterator(
+                surah=surah, translations=tr, start_ayah=start, end_ayah=end,
+                annotate=scenario.params.get("annotate", True),
+                output_dir=output_dir,
+            )
+        elif scenario.workflow_type == "verse":
+            it = wf.get_iterator(
+                surah=scenario.params["surah"],
+                ayah=scenario.params["ayah"],
+                translations=scenario.params.get("translations", []),
+                annotate=scenario.params.get("annotate", True),
+            )
+        elif scenario.workflow_type == "isolate":
+            surah = scenario.params["surah"]
+            ayah = scenario.params["ayah"]
+            verse_text = self._db.get_verse(surah, ayah).split()
+            wbw = list(self._db.get_wbw_grouped_by_verse(surah).get(ayah, []))
+            translation = self._db.get_translation_from_verse(surah, ayah)
+            it = wf.get_iterator(
+                surah=surah, verse_words=verse_text, translations=[translation],
+                ayah=ayah, wbw_translations=wbw,
+                annotate=scenario.params.get("annotate", True),
+            )
+        else:
+            raise ValueError(f"Unknown workflow type: {scenario.workflow_type}")
+
+        return sum(len(batch) for batch in it)
+
     def _iter_pages(self, scenario: Scenario) -> Iterator[Image.Image]:
         """Render a scenario, yielding pages one at a time (never accumulates)."""
         wf = _build_workflow(scenario)
@@ -636,19 +685,31 @@ class ValidationHarness:
         for batch in it:
             yield from batch
 
-    def benchmark_scenario(self, scenario: Scenario) -> ScenarioMetrics:
+    def benchmark_scenario(self, scenario: Scenario, compute_hash: bool = True) -> ScenarioMetrics:
         """Render and collect performance metrics for a single scenario."""
-        mem_before = _get_memory_mb()
-        start = time.perf_counter()
-        pages = self.render_scenario(scenario)
-        elapsed = time.perf_counter() - start
-        rss = max(_get_memory_mb(), mem_before)
+        bm_dir = os.path.join(_get_reference_root().parent, ".bm", uuid.uuid4().hex[:12])
+        os.makedirs(bm_dir, exist_ok=True)
+        try:
+            mem_before = _get_memory_mb()
+            start = time.perf_counter()
+            page_count = self._count_pages(scenario, bm_dir)
+            elapsed = time.perf_counter() - start
+            rss = max(_get_memory_mb(), mem_before)
+        finally:
+            shutil.rmtree(bm_dir, ignore_errors=True)
+
+        pixel_hash = ""
+        if compute_hash:
+            pages = list(self._iter_pages(scenario))
+            pixel_hash = _compute_pixel_hash(pages)
+            page_count = len(pages)
+
         return ScenarioMetrics(
             name=scenario.name,
             elapsed_s=elapsed,
-            pages=len(pages),
+            pages=page_count,
             peak_rss_mb=rss,
-            pixel_hash=_compute_pixel_hash(pages),
+            pixel_hash=pixel_hash,
         )
 
     # ── Validation (single scenario) ──────────────────────────────────────
@@ -750,7 +811,7 @@ class ValidationHarness:
         """Benchmark all (or given) scenarios."""
         if scenarios is None:
             scenarios = CANONICAL_SCENARIOS
-        return [self.benchmark_scenario(s) for s in scenarios]
+        return [self.benchmark_scenario(s, compute_hash=False) for s in scenarios]
 
     # ── Reference management ──────────────────────────────────────────────
 
@@ -765,7 +826,7 @@ class ValidationHarness:
         metrics_list: list[ScenarioMetrics] = []
 
         for scenario in scenarios:
-            m = self.benchmark_scenario(scenario)
+            m = self.benchmark_scenario(scenario, compute_hash=True)
             metrics_list.append(m)
             for i, page in enumerate(self._iter_pages(scenario)):
                 if i >= scenario.expected_pages:
