@@ -208,23 +208,52 @@ For bulk rendering, the library provides `ParallelRenderer`, which distributes t
 
 ### Development Suite
 
+#### `quranmedialib.check` — Validation, Benchmarking & Reference Management
+
+The `check` module is the canonical entrypoint for all regression testing. It wraps pixel validation, performance benchmarks, and unit tests into a single command.
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | Enumerate canonical validation scenarios |
+| `run` | Quick pixel validation (no benchmarks, no unit tests) |
+| `test` | Full suite: pixel validation + benchmarks + unit tests |
+| `update` | (Re)generate reference images for a specific version |
+| `compare` | Cross-version pixel comparison (e.g., v4.0.0 vs v4.1.0) |
+| `benchmark` | Standalone performance benchmarks |
+
 ```bash
 # Install dev dependencies
 uv pip install -e ".[dev]"
 
-# Full test suite (pixel validation + benchmarks + unit tests)
+# Full suite (pixel validation + benchmarks + unit tests)
 uv run -m quranmedialib.check test
 
-# Pixel validation only (no benchmarks)
+# Quick pixel validation only (no benchmarks)
 uv run -m quranmedialib.check test --no-benchmark
 
-# Unit tests only
+# Unit tests only (skip pixel validation and benchmarks)
 uv run -m quranmedialib.check test --unit
+
+# (Re)generate reference images for v4.1.0
+uv run -m quranmedialib.check update --version v4.1.0
 
 # Cross-version pixel comparison
 uv run -m quranmedialib.check compare v4.0.0 v4.1.0
 
-# Lint and Format
+# Standalone benchmark run
+uv run -m quranmedialib.check benchmark
+
+# List all canonical validation scenarios
+uv run -m quranmedialib.check list
+```
+
+**Reference pipeline**: The `update` command renders all canonical scenarios to PNG files under `src/quranmedialib/check/references/<version>/`. Each reference set includes `scenarios.json` (metadata), `sha256sums` (integrity hashes), and a `perf.json` benchmark artifact. The `compare` command performs pixel-level diffs between versions.
+
+**Performance benchmarks**: The benchmark path runs file-based rendering (saves PNGs to disk via parallel async I/O, counts pages) to avoid deserializing ~3.8GB of RGBA image bytes over IPC. Memory is checked every 10 verses. Batch sizes use natural chunking (`ceil(tasks / workers)`) rather than hardcoded caps.
+
+#### Lint and Format
+
+```bash
 uv run -m ruff check .
 uv run -m ruff format .
 ```

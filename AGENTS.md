@@ -27,6 +27,21 @@ uv run -m pytest; uv run -m pytest --benchmark
 - No regressions in security
 - No regressions in functionality (all tests pass)
 
+### Performance Baseline Protocol
+
+**Before adding any new constraint (monitoring, capping, checkpointing):**
+
+1. Check v3 baseline behavior first — it used `output_dir` (file-based render), natural chunking, every-10-verse flush, no SHA-256 in benchmark.
+2. Profile the overhead of the constraint on the full Al-Baqarah benchmark (~286 verses at 1080p) before committing.
+3. If overhead >1% of total runtime, reconsider the approach.
+
+**Known anti-patterns (do not repeat):**
+
+- `max_batch_size=5` — added ~0.5s (58 IPC rounds instead of ~12). Use `ceil(tasks / workers)` as the default.
+- Per-verse `get_current_rss_mb()` + `worker_heartbeat()` — added ~0.5s. Check every 10 verses; the extra resolution never caught a spike that the 10-verse check missed.
+- SHA-256 in `benchmark_scenario()` — added ~3s. Only compute hashes during `update_references`, from saved files, outside timing.
+- `render_scenario()` collecting all pages into a list — caused 3.7GB main-process RSS. Use `_iter_pages()` generator (yield one-at-a-time) for validate and update paths.
+
 ---
 
 ## 0. Engineering Principles
@@ -39,10 +54,11 @@ uv run -m pytest; uv run -m pytest --benchmark
   - `@lru_cache` for deterministic pure functions (database queries, font loading)
   - `@functools.cache` when arguments are hashable and memoization aids repeated calls
   - Invalidate caches explicitly when underlying data changes (`minimize_caches()`)
-- **Batch processing**: Use `map_batches()` to chunk tasks matching worker count; avoid unbounded iteration.
+- **Batch processing**: Use `map_batches()` to chunk tasks matching worker count. Default to `ceil(tasks / workers)`. Never hardcode `max_batch_size` below the natural chunk unless per-worker memory limits force it.
+- **Streaming over accumulation**: Use generators (`yield`) instead of collecting all pages into a list. A single 1080p verse is ~6MB — accumulating 286 verses in the main process causes 3.7GB RSS.
 - **Lazy evaluation**: Use `LazyTranslationImages` to defer expensive image generation until needed.
 - **SQLite tuning**: Enable `SQLITE_MMAP_SIZE` (256MB) for faster reads; use `json_group_array()` for aggregations.
-- **Throttled monitoring**: Check memory every 10 verses during bulk rendering to avoid OOM crashes.
+- **Throttled monitoring**: Check memory every 10 verses during bulk rendering to avoid OOM crashes. Per-iteration monitoring adds measurable overhead; the extra resolution has never caught a spike that the 10-verse check missed.
 
 ### 0.2 Security Considerations
 
@@ -773,6 +789,10 @@ def test_feature() -> None:
 - Skip docstrings on private helpers — all functions should be documented.
 - Hardcode magic numbers — use constants or configuration objects.
 - Use `List`/`Dict` from `typing` — use built-in generics (Python 3.13).
+- Hardcode `max_batch_size` below natural chunk — measure first, cap only if per-worker memory forces it.
+- Add per-iteration monitoring without profiling overhead — throttle to every 10 verses.
+- Compute SHA-256 hashes inside benchmark timing — only compute from saved files during reference update.
+- Accumulate all pages in a list during validate/update — use generator (`_iter_pages`) to stream one-at-a-time.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
