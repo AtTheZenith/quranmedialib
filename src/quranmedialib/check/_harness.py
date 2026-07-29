@@ -685,8 +685,11 @@ class ValidationHarness:
         for batch in it:
             yield from batch
 
-    def benchmark_scenario(self, scenario: Scenario, compute_hash: bool = True) -> ScenarioMetrics:
-        """Render and collect performance metrics for a single scenario."""
+    def benchmark_scenario(self, scenario: Scenario) -> ScenarioMetrics:
+        """Render and collect performance metrics for a single scenario.
+
+        Uses file-based output to avoid IPC deserialization overhead.
+        """
         bm_dir = os.path.join(_get_reference_root().parent, ".bm", uuid.uuid4().hex[:12])
         os.makedirs(bm_dir, exist_ok=True)
         try:
@@ -698,18 +701,12 @@ class ValidationHarness:
         finally:
             shutil.rmtree(bm_dir, ignore_errors=True)
 
-        pixel_hash = ""
-        if compute_hash:
-            pages = list(self._iter_pages(scenario))
-            pixel_hash = _compute_pixel_hash(pages)
-            page_count = len(pages)
-
         return ScenarioMetrics(
             name=scenario.name,
             elapsed_s=elapsed,
             pages=page_count,
             peak_rss_mb=rss,
-            pixel_hash=pixel_hash,
+            pixel_hash="",
         )
 
     # ── Validation (single scenario) ──────────────────────────────────────
@@ -811,7 +808,7 @@ class ValidationHarness:
         """Benchmark all (or given) scenarios."""
         if scenarios is None:
             scenarios = CANONICAL_SCENARIOS
-        return [self.benchmark_scenario(s, compute_hash=False) for s in scenarios]
+        return [self.benchmark_scenario(s) for s in scenarios]
 
     # ── Reference management ──────────────────────────────────────────────
 
@@ -826,14 +823,33 @@ class ValidationHarness:
         metrics_list: list[ScenarioMetrics] = []
 
         for scenario in scenarios:
-            m = self.benchmark_scenario(scenario, compute_hash=True)
-            metrics_list.append(m)
+            # Time the render using file-based output
+            bm_dir = os.path.join(_get_reference_root().parent, ".bm", uuid.uuid4().hex[:12])
+            os.makedirs(bm_dir, exist_ok=True)
+            mem_before = _get_memory_mb()
+            start = time.perf_counter()
+            page_count = self._count_pages(scenario, bm_dir)
+            elapsed = time.perf_counter() - start
+            rss = max(_get_memory_mb(), mem_before)
+            shutil.rmtree(bm_dir, ignore_errors=True)
+
+            # Save reference images (streaming, no accumulation)
+            hasher = hashlib.sha256()
             for i, page in enumerate(self._iter_pages(scenario)):
                 if i >= scenario.expected_pages:
                     break
+                hasher.update(page.tobytes())
                 path = self.get_reference_path(scenario, i)
                 page.save(path)
                 created.append(path)
+
+            metrics_list.append(ScenarioMetrics(
+                name=scenario.name,
+                elapsed_s=elapsed,
+                pages=page_count,
+                peak_rss_mb=rss,
+                pixel_hash=f"sha256:{hasher.hexdigest()}",
+            ))
 
         _write_json(ref_dir / "scenarios.json", _scenarios_metadata(self._version))
         _write_json(ref_dir / "perf.json", _perf_metrics(self._version, metrics_list))

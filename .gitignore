@@ -17,6 +17,7 @@ wheels/
 .coverage
 htmlcov/
 /output/
+.bm/
 
 # IDE files
 .vscode/
