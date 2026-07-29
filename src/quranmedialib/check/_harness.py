@@ -44,6 +44,10 @@ from quranmedialib import (
     VerseWorkflow,
 )
 from quranmedialib import __version__ as qml_version
+from quranmedialib.modules.timage import get_timage
+from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
+from quranmedialib.modules.wimage import get_wimage
+from quranmedialib.types import Padding, VerseConfig, WordItem
 
 type Aspect = str
 type Mode = str
@@ -379,6 +383,77 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         },
         expected_pages=473,
     ),
+    # ── Module-level: get_wimage ───────────────────────────────────────────
+    Scenario(
+        name="wimage_bismillah",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "wimage", "text": "بِسْمِ"},
+        expected_pages=1,
+    ),
+    Scenario(
+        name="wimage_allah",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "wimage", "text": "الله"},
+        expected_pages=1,
+    ),
+    # ── Module-level: get_timage ───────────────────────────────────────────
+    Scenario(
+        name="timage_simple",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "timage", "text": "In the name of Allah, the Most Gracious, the Most Merciful."},
+        expected_pages=1,
+    ),
+    Scenario(
+        name="timage_rich",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "timage", "text": "#b#Bold#b# and #ff0000#Red#ff0000# text"},
+        expected_pages=1,
+    ),
+    # ── Module-level: VImage ───────────────────────────────────────────────
+    Scenario(
+        name="vimage_layout_simple",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "vimage",
+            "items": [("W1", 50, 40), ("W2", 60, 40)],
+            "content_width": 200,
+            "word_spacing": 10,
+            "row_spacing": 20,
+            "balanced": False,
+        },
+        expected_pages=1,
+    ),
+    Scenario(
+        name="vimage_layout_balanced",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "vimage",
+            "items": [("W1", 40, 40), ("W2", 40, 40), ("W3", 40, 40), ("W4", 40, 40), ("W5", 40, 40)],
+            "content_width": 150,
+            "word_spacing": 10,
+            "row_spacing": 20,
+            "balanced": True,
+        },
+        expected_pages=1,
+    ),
 ]
 
 
@@ -408,9 +483,42 @@ def _build_workflow(scenario: Scenario) -> Any:
     return cls(preset)
 
 
-# ── Render helpers (delegated to _iter_pages) ────────────────────────────
-# The _RENDER_MAP-based dispatch was removed in favor of _iter_pages(),
-# which streams images one page at a time without main-process accumulation.
+# ── Module-level render helpers ──────────────────────────────────────────
+
+
+def _create_dummy_word_item(text: str, width: int, height: int) -> WordItem:
+    """Create a deterministic grayscale WordItem for VImage golden tests."""
+    from PIL import Image
+    return WordItem(image=Image.new("L", (width, height), 255), text=text, color=None)
+
+
+def _render_module_pages(scenario: Scenario) -> Iterator[Image.Image]:
+    """Yield one page per module-level scenario (wimage / timage / vimage)."""
+    preset = _build_preset(scenario)
+    module = scenario.params["module"]
+
+    if module == "wimage":
+        yield get_wimage(scenario.params["text"], preset.word)
+
+    elif module == "timage":
+        img = get_timage(scenario.params["text"], preset.text)
+        if img is not None:
+            yield img
+
+    elif module == "vimage":
+        items_data: list[tuple[str, int, int]] = scenario.params["items"]
+        items = [_create_dummy_word_item(t, w, h) for t, w, h in items_data]
+        cfg = VerseConfig(
+            word_spacing=scenario.params["word_spacing"],
+            row_spacing=scenario.params["row_spacing"],
+            balanced_wrapping=scenario.params["balanced"],
+        )
+        vimg = VImage(items, cfg, scenario.params["content_width"])
+        rows, _ = vimg.get_page_chunk(0, len(items))
+        yield vimg.render(preset.word, rows_to_render=rows, mode="RGBA")
+
+    else:
+        raise ValueError(f"Unknown module type: {module}")
 
 
 # ── Comparator ──────────────────────────────────────────────────────────────
@@ -596,6 +704,9 @@ class ValidationHarness:
 
     def _count_pages(self, scenario: Scenario, output_dir: str) -> int:
         """Render a scenario using file-based output to avoid IPC overhead, returns page count."""
+        if scenario.workflow_type == "module":
+            return sum(1 for _ in _render_module_pages(scenario))
+
         wf = _build_workflow(scenario)
 
         if scenario.workflow_type == "surah":
@@ -642,6 +753,10 @@ class ValidationHarness:
 
     def _iter_pages(self, scenario: Scenario) -> Iterator[Image.Image]:
         """Render a scenario, yielding pages one at a time (never accumulates)."""
+        if scenario.workflow_type == "module":
+            yield from _render_module_pages(scenario)
+            return
+
         wf = _build_workflow(scenario)
 
         if scenario.workflow_type == "surah":
@@ -1134,14 +1249,18 @@ def cli() -> int:
                 metrics = hv.benchmark_all(scenarios)
                 _print_perf_report(metrics)
 
-            # 3. Unit tests via pytest
+            # 3. Unit tests + module benchmarks via pytest
             if not args.scenario:
                 pytest_args = ["tests/", "-x", "-q", "--tb=short"]
                 if args.unit:
                     print("\n  Running unit tests only...")
                 else:
                     pytest_args.extend(["--ignore=tests/test_validation.py"])
-                    print("\n  Running unit tests...")
+                    if not args.no_benchmark:
+                        pytest_args.append("--benchmark")
+                        print("\n  Running unit tests with module benchmarks...")
+                    else:
+                        print("\n  Running unit tests...")
                 unit_ok = _pytest.main(pytest_args) == 0
                 if not unit_ok:
                     all_pass = False

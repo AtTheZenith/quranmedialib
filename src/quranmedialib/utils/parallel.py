@@ -20,7 +20,7 @@ from quranmedialib.config import (
     DEFAULT_PROCESS_LIMIT_MB,
 )
 from quranmedialib.utils.memory import (
-    MemoryMonitor,
+    check_aggregate_memory,
     check_process_memory,
 )
 
@@ -203,17 +203,11 @@ class ParallelRenderer:
                 chunksize,
             )
 
-        monitor = MemoryMonitor(limit_mb=self.memory_limit_mb) if use_monitor else None
-
-        try:
-            if monitor:
-                monitor.__enter__()
-
-            executor = self._get_executor()
-            yield from executor.map(func, task_list, chunksize=chunksize)
-        finally:
-            if monitor:
-                monitor.__exit__(None, None, None)
+        executor = self._get_executor()
+        for result in executor.map(func, task_list, chunksize=chunksize):
+            yield result
+            if use_monitor:
+                check_aggregate_memory(self.memory_limit_mb)
 
 
 def init_worker_path(path: str) -> None:

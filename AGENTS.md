@@ -520,9 +520,11 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 
 ### 12.2 Memory (`utils/memory.py`)
 
-- `MemoryMonitor` — Context manager for tracking memory usage.
+- `MemoryMonitor` — Synchronous peak-RSS tracker (enter/exit only, no background thread).
 - `get_current_rss_mb()` — Get current process RSS in MB.
 - `get_aggregate_rss_mb()` — Get total RSS of all child processes.
+- `check_process_memory()` — Raise if current process exceeds per-process limit (called by `worker_heartbeat`).
+- `check_aggregate_memory()` — Raise if aggregate RSS exceeds workers × per-process limit (synchronous, called after each batch in `ParallelRenderer.map()`).
 - `clear_rendering_caches()` — Clear LRU caches to free memory.
 - `MemoryLimitExceededError` — Raised when memory limits are exceeded (not exported at package level).
 - Memory-aware rendering with throttled checks (every 10 verses).
@@ -537,12 +539,13 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 ### 12.4 Hardware Config (`config.py`)
 
 - `CPU_COUNT` — Detected CPU count.
-- `DEFAULT_WORKERS` — Default parallel worker count.
+- `DEFAULT_WORKERS` — Default parallel worker count (= CPU_COUNT).
 - `DEFAULT_IO_THREADS` — Default I/O thread count (min(4, CPU_COUNT)).
 - `SQLITE_MMAP_SIZE` — SQLite memory-mapped read size (256MB).
-- `DEFAULT_PROCESS_LIMIT_MB` — Per-process memory limit (256MB).
-- `DEFAULT_AGGREGATE_LIMIT_MB` — Aggregate memory limit (2048MB).
+- `DEFAULT_PROCESS_LIMIT_MB` — Per-process memory limit (768MB).
+- `DEFAULT_AGGREGATE_LIMIT_MB` — Computed as `DEFAULT_WORKERS * DEFAULT_PROCESS_LIMIT_MB` (not hardcoded).
 - `MEMORY_FLUSH_THRESHOLD_RATIO` — Cache flush threshold (0.8 = 80%).
+- Memory enforcement is **synchronous**: `check_aggregate_memory()` runs in `ParallelRenderer.map()` after each batch result. No background monitor thread — no log spam. Breach raises `MemoryLimitExceededError` and kills the pipeline cleanly.
 
 ---
 

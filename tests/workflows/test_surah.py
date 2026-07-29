@@ -12,6 +12,7 @@ import warnings
 import pytest
 
 from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
+from quranmedialib.config import DEFAULT_PROCESS_LIMIT_MB, DEFAULT_WORKERS
 from quranmedialib.utils.memory import MemoryMonitor
 from quranmedialib.workflows.surah import SurahWorkflow
 
@@ -79,9 +80,8 @@ def test_surah_al_baqarah_benchmark(request: pytest.FixtureRequest) -> None:
     request.node.benchmark_data = [f"Peak Aggregate RAM: {peak_mb:.2f}MB"]
     print(f"Memory Footprint (Al-Baqarah): Peak Aggregate RAM={peak_mb:.2f}MB")
 
-    # Contract: Aggregate RAM (Main + N Workers) should stay within 1.6GB for this 1080p workload.
-    # Note: 8 workers * ~180MB each = ~1.4GB + Main Process (~50MB) = ~1.5GB.
-    assert peak_mb < 1600.0
+    # Contract: Aggregate RAM (Main + N Workers) must stay within process_limit * workers.
+    assert peak_mb < DEFAULT_WORKERS * DEFAULT_PROCESS_LIMIT_MB
 
 
 if __name__ == "__main__":

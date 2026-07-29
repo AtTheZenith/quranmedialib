@@ -65,18 +65,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Physically removes excluded tests from collection for a clean output.
+    """Filters benchmark tests unless --benchmark is passed.
 
-    If --benchmark is provided:
-        - Removes all standard tests (those NOT marked with 'benchmark').
-    If --benchmark is NOT provided:
-        - Removes all benchmark tests (those marked with 'benchmark').
+    Without --benchmark: remove all benchmark-marked tests.
+    With --benchmark: run all tests (standard + benchmark).
+    Exclusive benchmark mode: use `-k "benchmark"` with --benchmark.
     """
-    if config.getoption("--benchmark"):
-        # Exclusive Benchmark Mode: Remove standard tests
-        items[:] = [item for item in items if "benchmark" in item.keywords]
-    else:
-        # Standard Mode: Remove benchmark tests
+    if not config.getoption("--benchmark"):
         items[:] = [item for item in items if "benchmark" not in item.keywords]
 
 

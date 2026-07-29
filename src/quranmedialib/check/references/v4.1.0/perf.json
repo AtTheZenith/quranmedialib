@@ -1,123 +1,165 @@
 {
   "version": "v4.1.0",
   "qml_version": "4.1.0",
-  "created_at": "2026-07-29T10:52:12.636482+00:00",
+  "created_at": "2026-07-29T11:28:35.408106+00:00",
   "platform": {
     "system": "Windows",
     "machine": "AMD64",
     "processor": "Intel64 Family 6 Model 165 Stepping 2, GenuineIntel"
   },
   "summary": {
-    "scenarios": 15,
-    "total_elapsed_s": 11.214,
-    "avg_elapsed_s": 0.748,
-    "peak_rss_mb": 40.984375
+    "scenarios": 21,
+    "total_elapsed_s": 10.457,
+    "avg_elapsed_s": 0.498,
+    "peak_rss_mb": 50.5
   },
   "scenarios": [
     {
       "name": "bismillah_annotated",
-      "elapsed_s": 0.023,
+      "elapsed_s": 0.024,
       "pages": 1,
-      "peak_rss_mb": 32.4,
-      "pixel_hash": ""
+      "peak_rss_mb": 32.5,
+      "pixel_hash": "sha256:bb5f195dfa5cc276b983e6ad257946bc50d1c6a073f4466c0a1bfbe69f7ad727"
     },
     {
       "name": "bismillah_arabic",
-      "elapsed_s": 0.01,
+      "elapsed_s": 0.014,
       "pages": 1,
-      "peak_rss_mb": 32.8,
-      "pixel_hash": ""
+      "peak_rss_mb": 41.9,
+      "pixel_hash": "sha256:848ec276f3a060987232a493942429bd697059dfdde1c360fc04d366c47a1395"
     },
     {
       "name": "kawthar_annotated",
-      "elapsed_s": 0.014,
+      "elapsed_s": 0.021,
       "pages": 1,
-      "peak_rss_mb": 33.6,
-      "pixel_hash": ""
+      "peak_rss_mb": 42.0,
+      "pixel_hash": "sha256:acdc23ef36763b4a534702247f9484dbda18e581fb60bb6f164fedd6c1cbab44"
     },
     {
       "name": "ikhlas_v1_annotated",
-      "elapsed_s": 0.016,
+      "elapsed_s": 0.021,
       "pages": 1,
-      "peak_rss_mb": 33.6,
-      "pixel_hash": ""
+      "peak_rss_mb": 42.7,
+      "pixel_hash": "sha256:5059f6aef98cf54e56c6f4b1546d262c2195c6399e55e5b6bf76e3fab0ceba71"
     },
     {
       "name": "kursi_partial",
-      "elapsed_s": 0.099,
+      "elapsed_s": 0.127,
       "pages": 3,
-      "peak_rss_mb": 35.7,
-      "pixel_hash": ""
+      "peak_rss_mb": 44.8,
+      "pixel_hash": "sha256:06a3f062124e587e9d0eaca15833c90d94d870ce35010f04de4cb3d57e4d556c"
     },
     {
       "name": "bismillah_story",
-      "elapsed_s": 0.006,
+      "elapsed_s": 0.009,
       "pages": 1,
-      "peak_rss_mb": 35.8,
-      "pixel_hash": ""
+      "peak_rss_mb": 44.9,
+      "pixel_hash": "sha256:56e7efd6a318df7ce5cebc2328d649343d55c2d9a3fe53e5c4a9ea8f3ea6f5c9"
     },
     {
       "name": "bismillah_square",
-      "elapsed_s": 0.015,
+      "elapsed_s": 0.019,
       "pages": 1,
-      "peak_rss_mb": 36.6,
-      "pixel_hash": ""
+      "peak_rss_mb": 45.9,
+      "pixel_hash": "sha256:e695f188371aa18fd0a52df6f2fd738aa6d4687842761f369c5218e158a7ffd0"
     },
     {
       "name": "bismillah_720p",
-      "elapsed_s": 0.023,
+      "elapsed_s": 0.027,
       "pages": 1,
-      "peak_rss_mb": 37.9,
-      "pixel_hash": ""
+      "peak_rss_mb": 43.6,
+      "pixel_hash": "sha256:40b646fd4c800598d6be750cfd3ca97a39b683cc472c335f489ee5a2f6fd6245"
     },
     {
       "name": "kursi_full",
-      "elapsed_s": 0.084,
+      "elapsed_s": 0.092,
       "pages": 3,
-      "peak_rss_mb": 38.4,
-      "pixel_hash": ""
+      "peak_rss_mb": 43.3,
+      "pixel_hash": "sha256:c232c08b9e7627090c55e64a9ce6016962be5d729448b3949f3fe12ca7e93456"
     },
     {
       "name": "surah_kawthar",
-      "elapsed_s": 0.105,
+      "elapsed_s": 0.094,
       "pages": 3,
-      "peak_rss_mb": 39.6,
-      "pixel_hash": ""
+      "peak_rss_mb": 47.6,
+      "pixel_hash": "sha256:39295f74c401695cce658e062f805cebfe2ff3b28501838d808671bf8d9cfd75"
     },
     {
       "name": "surah_ikhlas",
-      "elapsed_s": 0.085,
+      "elapsed_s": 0.112,
       "pages": 4,
-      "peak_rss_mb": 40.2,
-      "pixel_hash": ""
+      "peak_rss_mb": 48.2,
+      "pixel_hash": "sha256:9a9b4468760c46c1ac465ad2abb3e4083494d9600864605b8e25ca420aafdd13"
     },
     {
       "name": "range_kawthar",
-      "elapsed_s": 1.036,
+      "elapsed_s": 1.04,
       "pages": 3,
-      "peak_rss_mb": 40.6,
-      "pixel_hash": ""
+      "peak_rss_mb": 48.9,
+      "pixel_hash": "sha256:39295f74c401695cce658e062f805cebfe2ff3b28501838d808671bf8d9cfd75"
     },
     {
       "name": "isolate_kawthar_v1",
-      "elapsed_s": 0.023,
+      "elapsed_s": 0.032,
       "pages": 4,
-      "peak_rss_mb": 40.7,
-      "pixel_hash": ""
+      "peak_rss_mb": 48.7,
+      "pixel_hash": "sha256:2a18a5a42e3ee1193e56b06c32bed09c062f6f2f8721e0503a2a90eca7711bfc"
     },
     {
       "name": "surah_kawthar_separate",
-      "elapsed_s": 0.055,
+      "elapsed_s": 0.088,
       "pages": 6,
-      "peak_rss_mb": 40.7,
-      "pixel_hash": ""
+      "peak_rss_mb": 48.9,
+      "pixel_hash": "sha256:0fe59ab8959c9f5496df6a8defc322cd84cf7b8d67cf6c4dec4490ecbd8b3998"
     },
     {
       "name": "surah_albaqarah",
-      "elapsed_s": 9.62,
+      "elapsed_s": 8.725,
       "pages": 473,
-      "peak_rss_mb": 41.0,
-      "pixel_hash": ""
+      "peak_rss_mb": 49.8,
+      "pixel_hash": "sha256:751519c12c46061e79a80deeb2fdc01dcc96a9be8d0a66bcd2149181a9fe975c"
+    },
+    {
+      "name": "wimage_bismillah",
+      "elapsed_s": 0.001,
+      "pages": 1,
+      "peak_rss_mb": 50.5,
+      "pixel_hash": "sha256:036910ff908d3e2847d6b554125009e98fd2adadb40ed7a535e5ffd6a397828f"
+    },
+    {
+      "name": "wimage_allah",
+      "elapsed_s": 0.001,
+      "pages": 1,
+      "peak_rss_mb": 42.6,
+      "pixel_hash": "sha256:c8998dc8f5dfd2b18a5ac35df43c90c56bd867b93de1258940527b7252cc45bc"
+    },
+    {
+      "name": "timage_simple",
+      "elapsed_s": 0.005,
+      "pages": 1,
+      "peak_rss_mb": 42.6,
+      "pixel_hash": "sha256:46b4e864f2b5c8f5598d57d62ffb014ce4816d988f6a881a0755df64049c71d5"
+    },
+    {
+      "name": "timage_rich",
+      "elapsed_s": 0.003,
+      "pages": 1,
+      "peak_rss_mb": 42.9,
+      "pixel_hash": "sha256:507b717f34601e3f951cb2b406c992d4fa97ecd5a4edc8800f7dd1fdc60428e9"
+    },
+    {
+      "name": "vimage_layout_simple",
+      "elapsed_s": 0.0,
+      "pages": 1,
+      "peak_rss_mb": 42.9,
+      "pixel_hash": "sha256:7d77916c5fd4b7dba9f10f6fac42e9bbe4428402bd04bd6d2852f5dae04f7927"
+    },
+    {
+      "name": "vimage_layout_balanced",
+      "elapsed_s": 0.0,
+      "pages": 1,
+      "peak_rss_mb": 42.9,
+      "pixel_hash": "sha256:639b52897b743fd747432e3dac9ba9ddfc03e976e35cbb9a974a10f1f900dec8"
     }
   ]
 }

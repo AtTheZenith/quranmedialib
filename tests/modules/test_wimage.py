@@ -41,6 +41,36 @@ if __name__ == "__main__":
     test_wimage()
 
 
+# === Benchmark Tests ===
+
+
+@pytest.mark.benchmark
+def test_wimage_benchmark_short_word() -> None:
+    """Benchmark get_wimage with a short Arabic word."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    img = get_wimage("الله", word_config)
+    assert img is not None
+    assert img.size[0] > 0
+
+
+@pytest.mark.benchmark
+def test_wimage_benchmark_long_word() -> None:
+    """Benchmark get_wimage with a long Arabic word (stress font layout)."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    img = get_wimage("فَسَيَكْفِيكَهُمُ", word_config)
+    assert img is not None
+    assert img.size[0] > 0
+
+
+@pytest.mark.benchmark
+def test_wimage_benchmark_multi_word() -> None:
+    """Benchmark get_wimage with multiple words (phrase-level layout)."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    img = get_wimage("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", word_config)
+    assert img is not None
+    assert img.size[0] > 0
+
+
 # === Validation Tests ===
 
 

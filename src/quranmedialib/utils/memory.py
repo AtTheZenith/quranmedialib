@@ -8,10 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
-import time
-from types import TracebackType
-from typing import Callable
 
 try:
     import psutil
@@ -30,7 +26,6 @@ class MemoryLimitExceededError(RuntimeError):
     """Exception raised when a process or aggregate memory limit is breached."""
 
     def __init__(self, message: str, current_mb: float = 0.0, limit_mb: float = 0.0):
-        # Ensure arguments are optional for pickling/unpickling safety across processes
         full_msg = f"{message} (Current: {current_mb:.2f}MB, Limit: {limit_mb:.2f}MB)" if current_mb else message
         super().__init__(full_msg)
         self.current_mb = current_mb
@@ -75,6 +70,33 @@ def get_aggregate_rss_mb() -> float:
     return total_rss / (1024 * 1024)
 
 
+# Backward-compatible peak-RSS tracker (replaces old background-thread monitor).
+# New code should call check_aggregate_memory() directly for enforcement.
+
+
+class MemoryMonitor:
+    """Synchronous peak-RSS tracker. No background thread, no side effects.
+
+    Drop-in replacement for the old threaded monitor. Tracks aggregate RSS
+    at enter/exit only — for continuous enforcement use check_aggregate_memory().
+    """
+
+    def __init__(self, limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB, **kwargs: object):
+        self.limit_mb = limit_mb
+        self._peak_rss = 0.0
+
+    def __enter__(self) -> MemoryMonitor:
+        self._peak_rss = get_aggregate_rss_mb()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._peak_rss = max(self._peak_rss, get_aggregate_rss_mb())
+
+    @property
+    def peak_rss(self) -> float:
+        return self._peak_rss
+
+
 def check_process_memory(limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
     """Checks current process memory and raises MemoryLimitExceededError if limit breached.
 
@@ -90,70 +112,46 @@ def check_process_memory(limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
         raise MemoryLimitExceededError("Individual process memory limit exceeded", current_mb, limit_mb)
 
 
-class MemoryMonitor:
-    """Context manager for background execution memory monitoring.
+def check_aggregate_memory(limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB) -> None:
+    """Synchronous aggregate memory check — raises immediately if limit breached.
 
-    Monitors aggregate memory usage of the current process and all its workers.
-    Can be used to wrap long-running rendering loops.
+    Call this from the main thread after significant work is done (e.g., between
+    batches). Unlike the old background-thread monitor, this gives deterministic
+    error propagation without noisy background logging.
+
+    Args:
+        limit_mb: Aggregate RSS limit in MB (default: workers x per-process limit).
+
+    Raises:
+        MemoryLimitExceededError: If aggregate RSS exceeds limit_mb.
     """
+    current_mb = get_aggregate_rss_mb()
+    if current_mb > limit_mb:
+        logger.error("Aggregate memory limit breached: %.2fMB > %.2fMB", current_mb, limit_mb)
+        raise MemoryLimitExceededError("Aggregate memory limit exceeded", current_mb, limit_mb)
 
-    def __init__(
-        self,
-        limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB,
-        interval: float = 0.5,
-        on_breach: Callable[[float, float], None] | None = None,
-    ):
-        """Initializes the monitor.
 
-        Args:
-            limit_mb: Aggregate memory limit in MB.
-            interval: Check interval in seconds.
-            on_breach: Optional callback triggered when limit is breached.
-                Receives (current_mb, limit_mb).
-        """
-        self.limit_mb = limit_mb
-        self.interval = interval
-        self.on_breach = on_breach
-        self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
-        self._peak_rss = 0.0
+def clear_rendering_caches() -> None:
+    """Clears all module-level LRU caches used during rendering.
 
-    def _monitor_loop(self) -> None:
-        """Background monitoring loop."""
-        while not self._stop_event.is_set():
-            current_rss = get_aggregate_rss_mb()
-            self._peak_rss = max(self._peak_rss, current_rss)
+    Flushes:
+    - wimage._get_wimage_cached
+    - annotation._annotate_word_cached
+    - font_cache._load_font_base
+    - DatabaseManager lru_caches (via minimize_caches)
+    """
+    from quranmedialib.database_manager import DatabaseManager
+    from quranmedialib.modules.annotation import _annotate_word_cached
+    from quranmedialib.modules.font_cache import _load_font_base
+    from quranmedialib.modules.wimage import _get_wimage_cached
 
-            if current_rss > self.limit_mb:
-                logger.error("Aggregate memory limit reached: %.2fMB > %.2fMB", current_rss, self.limit_mb)
-                if self.on_breach:
-                    self.on_breach(current_rss, self.limit_mb)
-            time.sleep(self.interval)
+    _annotate_word_cached.cache_clear()
+    _get_wimage_cached.cache_clear()
+    _load_font_base.cache_clear()
 
-    def __enter__(self) -> MemoryMonitor:
-        """Starts the background monitor thread."""
-        if psutil is not None:
-            self._stop_event.clear()
-            self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
-            self._thread.start()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Stops the background monitor thread."""
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=1.0)
-        logger.debug("Memory monitoring finished. Peak Aggregate RSS: %.2fMB", self._peak_rss)
-
-    @property
-    def peak_rss(self) -> float:
-        """Returns the peak aggregate RSS observed during the session."""
-        return self._peak_rss
+    db = DatabaseManager()
+    db.minimize_caches()
+    logger.debug("All rendering caches cleared.")
 
 
 def clear_rendering_caches() -> None:

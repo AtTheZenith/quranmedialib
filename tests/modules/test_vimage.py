@@ -1,3 +1,4 @@
+import pytest
 from PIL import Image
 
 from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
@@ -189,3 +190,42 @@ def test_vimage_layer_vs_render_equality(word_config):
 
     # Compare pixels
     assert list(canvas_old.getdata()) == list(canvas_new.getdata())
+
+
+# === Benchmark Tests ===
+
+
+@pytest.mark.benchmark
+def test_vimage_benchmark_greedy_pack(word_config) -> None:
+    """Benchmark VImage._greedy_pack with many items."""
+    items = [create_dummy_word(f"W{i}", 40, 40) for i in range(20)]
+    verse_cfg = VerseConfig(word_spacing=5, row_spacing=10, balanced_wrapping=False)
+    vimg = VImage(items, verse_cfg, 120)
+    rows, consumed = vimg.get_page_chunk(0, 10)
+    assert consumed == 20
+    assert len(rows) >= 1
+
+
+@pytest.mark.benchmark
+def test_vimage_benchmark_render(word_config) -> None:
+    """Benchmark VImage.render with multiple rows."""
+    items = [create_dummy_word(f"W{i}", 50, 40) for i in range(10)]
+    verse_cfg = VerseConfig(word_spacing=5, row_spacing=10)
+    vimg = VImage(items, verse_cfg, 150)
+    rows, consumed = vimg.get_page_chunk(0, 10)
+    img = vimg.render(word_config, rows_to_render=rows)
+    assert img is not None
+    assert img.size[0] > 0
+
+
+@pytest.mark.benchmark
+def test_vimage_benchmark_stop_sign_adjustment(word_config) -> None:
+    """Benchmark stop-sign-aware page chunking with many items."""
+    items = [
+        create_dummy_word(f"W{i}{QURANIC_STOP_SIGNS[i % len(QURANIC_STOP_SIGNS)]}", 50, 40)
+        for i in range(50)
+    ]
+    verse_cfg = VerseConfig(word_spacing=5, row_spacing=10)
+    vimg = VImage(items, verse_cfg, 150)
+    chunk, consumed = vimg.get_page_chunk(0, 5)
+    assert consumed > 0

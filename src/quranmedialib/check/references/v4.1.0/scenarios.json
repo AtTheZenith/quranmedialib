@@ -1,7 +1,7 @@
 {
   "version": "v4.1.0",
   "qml_version": "4.1.0",
-  "created_at": "2026-07-28T10:13:05.536531+00:00",
+  "created_at": "2026-07-29T11:28:35.403255+00:00",
   "scenarios": [
     {
       "name": "bismillah_annotated",
@@ -198,6 +198,123 @@
         "separate_translations": false
       },
       "expected_pages": 473
+    },
+    {
+      "name": "wimage_bismillah",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "wimage",
+        "text": "\u0628\u0650\u0633\u0652\u0645\u0650"
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "wimage_allah",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "wimage",
+        "text": "\u0627\u0644\u0644\u0647"
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "timage_simple",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "timage",
+        "text": "In the name of Allah, the Most Gracious, the Most Merciful."
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "timage_rich",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "timage",
+        "text": "#b#Bold#b# and #ff0000#Red#ff0000# text"
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "vimage_layout_simple",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "vimage",
+        "items": [
+          [
+            "W1",
+            50,
+            40
+          ],
+          [
+            "W2",
+            60,
+            40
+          ]
+        ],
+        "content_width": 200,
+        "word_spacing": 10,
+        "row_spacing": 20,
+        "balanced": false
+      },
+      "expected_pages": 1
+    },
+    {
+      "name": "vimage_layout_balanced",
+      "aspect": "landscape",
+      "mode": "default",
+      "resolution": "1080p",
+      "workflow_type": "module",
+      "params": {
+        "module": "vimage",
+        "items": [
+          [
+            "W1",
+            40,
+            40
+          ],
+          [
+            "W2",
+            40,
+            40
+          ],
+          [
+            "W3",
+            40,
+            40
+          ],
+          [
+            "W4",
+            40,
+            40
+          ],
+          [
+            "W5",
+            40,
+            40
+          ]
+        ],
+        "content_width": 150,
+        "word_spacing": 10,
+        "row_spacing": 20,
+        "balanced": true
+      },
+      "expected_pages": 1
     }
   ]
 }
