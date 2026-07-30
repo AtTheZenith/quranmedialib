@@ -36,6 +36,7 @@ exclude = [
     "**/tests/**",
     "**/test_*.py",
     "**/__pycache__/**",
+    "**/references/**",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -46,6 +47,7 @@ exclude = [
     "**/tests/**",
     "**/test_*.py",
     "**/__pycache__/**",
+    "**/references/**",
 ]
 
 [tool.ruff]
