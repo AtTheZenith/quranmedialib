@@ -797,6 +797,25 @@ def test_feature() -> None:
 - Compute SHA-256 hashes inside benchmark timing — only compute from saved files during reference update.
 - Accumulate all pages in a list during validate/update — use generator (`_iter_pages`) to stream one-at-a-time.
 
+---
+
+## 21. Commit Conventions
+
+Use standard **Conventional Commits** for all changes to this repo:
+
+| Prefix | When |
+|--------|------|
+| `feat:` | New feature or user-facing capability |
+| `fix:` | Bug fix |
+| `refactor:` | Code restructuring (no behavior change) |
+| `docs:` | Documentation only (README, changelog, wiki) |
+| `test:` | Adding or fixing tests |
+| `perf:` | Performance improvement |
+| `style:` | Formatting, lint fixes, whitespace (no logic change) |
+| `chore:` | Build config, CI, tooling, dependencies |
+
+No brackets, no cognitive state prefixes — those are for the vault repo only.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
