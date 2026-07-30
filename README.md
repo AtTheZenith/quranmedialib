@@ -204,7 +204,7 @@ iterator = workflow.get_iterator(
 For bulk rendering, the library provides `ParallelRenderer`, which distributes tasks across CPU cores.
 
 - **Execution Modes**: `ExecutionMode.PROCESS` (recommended for CPU-heavy tasks) or `ExecutionMode.THREAD`.
-- **Memory Guard**: The system monitors aggregate RSS to prevent OOM crashes during large Surah renders.
+- **Memory Guard**: Per-process RSS enforcement via `worker_heartbeat()` every 10 verses. Workers crash immediately if they exceed 256MB. Aggregate RSS ~700MB during parallel renders is safe — no aggregate monitor needed.
 
 ### Development Suite
 
@@ -249,7 +249,7 @@ uv run -m quranmedialib.check list
 
 **Reference pipeline**: The `update` command renders all canonical scenarios to PNG files under `src/quranmedialib/check/references/<version>/`. Each reference set includes `scenarios.json` (metadata), `sha256sums` (integrity hashes), and a `perf.json` benchmark artifact. The `compare` command performs pixel-level diffs between versions.
 
-**Performance benchmarks**: The benchmark path runs file-based rendering (saves PNGs to disk via parallel async I/O, counts pages) to avoid deserializing ~3.8GB of RGBA image bytes over IPC. Memory is checked every 10 verses. Batch sizes use natural chunking (`ceil(tasks / workers)`) rather than hardcoded caps.
+**Performance benchmarks**: The benchmark path runs file-based rendering (saves PNGs to disk via parallel async I/O, counts pages) to avoid deserializing ~3.8GB of RGBA image bytes over IPC. Memory is checked every 10 verses via `worker_heartbeat()` (per-process 256MB limit). Batch sizes use natural chunking (`ceil(tasks / workers)`) with adaptive down-capping in bytes IPC mode via `_bytes_mode_max_batch()`. No aggregate memory monitor — per-process enforcement catches leaks before they cascade.
 
 #### Lint and Format
 

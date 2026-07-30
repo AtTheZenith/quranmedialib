@@ -49,6 +49,26 @@ from quranmedialib.workflows.base import BaseWorkflow
 type OutputItem = str | tuple[str, tuple[int, int], bytes] | Image.Image
 logger = logging.getLogger(__name__)
 
+
+def _bytes_mode_max_batch(chunk: int, frame_cfg: FrameConfig) -> int:
+    """Max verses per batch in bytes mode to stay under per-process RSS limit.
+
+    Each page serializes to frame_width * frame_height * 4 bytes (RGBA).
+    Assume worst-case 3 pages per verse. Target 80% of per-process limit
+    to leave headroom for base Python + caches.
+
+    Args:
+        chunk: Natural chunk size (ceil(tasks / workers)).
+        frame_cfg: Frame dimensions for page byte calculation.
+
+    Returns:
+        Safe batch size for bytes mode.
+    """
+    frame_bytes = frame_cfg.max_width * frame_cfg.image_height * 4
+    budget = 0.8 * DEFAULT_PROCESS_LIMIT_MB * 1024 * 1024
+    max_verses = max(1, int(budget / (frame_bytes * 3)))
+    return min(chunk, max_verses)
+
 __all__ = ["VerseRangeWorkflow"]
 
 
@@ -153,9 +173,12 @@ class VerseRangeWorkflow(BaseWorkflow):
             )
 
             # Each batch = natural chunk (ceil(tasks/workers)) for even distribution.
-            # Cap at 20 to bound per-worker memory.
             chunk = max(1, (len(tasks) + renderer.max_workers - 1) // renderer.max_workers)
-            for result in renderer.map_batches(worker_fn, tasks, max_batch_size=min(chunk, 20)):
+            if output_dir:
+                max_batch = min(chunk, 20)
+            else:
+                max_batch = _bytes_mode_max_batch(chunk, self.frame_cfg)
+            for result in renderer.map_batches(worker_fn, tasks, max_batch_size=max_batch):
                 if output_dir:
                     yield result
                 else:

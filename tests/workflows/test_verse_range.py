@@ -8,8 +8,18 @@ import os
 
 import pytest
 
-from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
-from quranmedialib.workflows.verse_range import VerseRangeWorkflow
+from PIL import Image
+
+from quranmedialib import LANDSCAPE_PRESET, STORY_PRESET, DatabaseManager
+from quranmedialib.config import DEFAULT_PROCESS_LIMIT_MB
+from quranmedialib.presets import build_layout_guide
+from quranmedialib.types import FrameConfig
+from quranmedialib.workflows.verse_range import (
+    VerseRangeWorkflow,
+    _bytes_mode_max_batch,
+    _handle_output,
+    _render_verse_worker,
+)
 
 
 def test_verse_range(request: pytest.FixtureRequest) -> None:
@@ -147,3 +157,163 @@ def test_verse_range_invalid_ayah() -> None:
 
     with pytest.raises(ValueError, match="Ayah must be between 1 and 286"):
         list(workflow.get_iterator(surah=1, translations=[[]], start_ayah=1, end_ayah=1000, annotate=False))
+
+
+class TestBytesModeMaxBatch:
+    """Tests for _bytes_mode_max_batch() — bytes IPC memory safety."""
+
+    def test_1080p_default_chunk(self) -> None:
+        """At 1080p, ~8 verses fit within per-process budget."""
+        frame = FrameConfig(max_width=1920, image_height=1080)
+        result = _bytes_mode_max_batch(36, frame)
+        assert 1 <= result <= 36
+
+    def test_2160p_caps_tightly(self) -> None:
+        """At 2160p, only 2 verses fit — each page is ~33MB."""
+        frame = FrameConfig(max_width=3840, image_height=2160)
+        result = _bytes_mode_max_batch(36, frame)
+        assert result <= 2
+
+    def test_720p_allows_more(self) -> None:
+        """At 720p, more verses fit — each page is ~3.7MB."""
+        frame = FrameConfig(max_width=1280, image_height=720)
+        result = _bytes_mode_max_batch(36, frame)
+        assert result >= 4
+
+    def test_never_less_than_one(self) -> None:
+        """Even for absurd resolutions, must return at least 1."""
+        frame = FrameConfig(max_width=10000, image_height=10000)
+        result = _bytes_mode_max_batch(36, frame)
+        assert result >= 1
+
+    def test_respects_smaller_chunk(self) -> None:
+        """If natural chunk is smaller than calculated max, use chunk."""
+        frame = FrameConfig(max_width=1920, image_height=1080)
+        result = _bytes_mode_max_batch(3, frame)
+        assert result == 3
+
+
+class TestHandleOutput:
+    """Tests for _handle_output() bytes path."""
+
+    def test_bytes_path_returns_tuples(self) -> None:
+        """use_bytes=True with no output_dir returns (mode, size, bytes) tuples."""
+        pages = [Image.new("RGBA", (100, 50), (255, 0, 0, 255))]
+        result = _handle_output(pages, ayah=1, output_dir=None, filename_prefix="t", save_fn=lambda *a: None, use_bytes=True)
+        assert len(result) == 1
+        mode, size, data = result[0]
+        assert mode == "RGBA"
+        assert size == (100, 50)
+        assert isinstance(data, bytes)
+        assert len(data) == 100 * 50 * 4
+
+    def test_bytes_path_multi_page(self) -> None:
+        """Multi-page verses produce one tuple per page."""
+        pages = [Image.new("RGBA", (10, 10)), Image.new("RGB", (20, 20))]
+        result = _handle_output(pages, ayah=1, output_dir=None, filename_prefix="t", save_fn=lambda *a: None, use_bytes=True)
+        assert len(result) == 2
+        assert result[0][0] == "RGBA"
+        assert result[1][0] == "RGB"
+
+    def test_file_path_returns_strings(self) -> None:
+        """output_dir set returns file paths regardless of use_bytes."""
+        pages = [Image.new("RGBA", (10, 10))]
+        mock_save = lambda img, path, **kw: None
+        result = _handle_output(pages, ayah=5, output_dir="/tmp/out", filename_prefix="x", save_fn=mock_save, use_bytes=False)
+        assert isinstance(result, list)
+        assert all(isinstance(p, str) for p in result)
+
+
+class TestRenderVerseWorkerBytesPath:
+    """Integration: _render_verse_worker through the bytes IPC path.
+
+    Exercises use_bytes=True + output_dir=None — the path used by
+    parallel rendering without file output.
+    """
+
+    def test_single_verse_returns_reconstructable_bytes(self) -> None:
+        """Bytes output from a single verse can be reconstructed to images."""
+        preset = LANDSCAPE_PRESET["default"]["1080p"]
+        guide = build_layout_guide("landscape", preset.frame.max_width, preset.frame.image_height)
+
+        db = DatabaseManager()
+        translations = db.get_translation_from_surah(108)
+
+        result = _render_verse_worker(
+            verse_data=[(1, [translations[0]])],
+            surah=108,
+            frame_cfg=preset.frame,
+            guide=guide,
+            text_cfg=preset.text,
+            word_cfg=preset.word,
+            verse_cfg=preset.verse,
+            annotate=False,
+            separate_translations=False,
+            output_dir=None,
+            filename_prefix="test_bytes",
+            use_bytes=True,
+        )
+
+        assert len(result) == 1  # one verse
+        pages = result[0]
+        assert len(pages) >= 1  # at least one page
+        for entry in pages:
+            mode, size, data = entry
+            assert isinstance(mode, str)
+            assert len(size) == 2
+            assert isinstance(data, bytes)
+            img = Image.frombytes(mode, size, data)
+            assert img.size == size
+            assert img.mode == mode
+
+    def test_bytes_output_render_matches_file_output(self) -> None:
+        """Bytes-reconstructed image should match file-saved image pixel-for-pixel."""
+        preset = LANDSCAPE_PRESET["default"]["1080p"]
+        guide = build_layout_guide("landscape", preset.frame.max_width, preset.frame.image_height)
+
+        db = DatabaseManager()
+        translations = db.get_translation_from_surah(108)
+
+        result_bytes = _render_verse_worker(
+            verse_data=[(1, [translations[0]])],
+            surah=108,
+            frame_cfg=preset.frame,
+            guide=guide,
+            text_cfg=preset.text,
+            word_cfg=preset.word,
+            verse_cfg=preset.verse,
+            annotate=False,
+            separate_translations=False,
+            output_dir=None,
+            filename_prefix="test_bytes",
+            use_bytes=True,
+        )
+
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result_files = _render_verse_worker(
+                verse_data=[(1, [translations[0]])],
+                surah=108,
+                frame_cfg=preset.frame,
+                guide=guide,
+                text_cfg=preset.text,
+                word_cfg=preset.word,
+                verse_cfg=preset.verse,
+                annotate=False,
+                separate_translations=False,
+                output_dir=tmpdir,
+                filename_prefix="test_file",
+                use_bytes=False,
+            )
+
+            bytes_pages = result_bytes[0]
+            file_pages = result_files[0]
+            assert len(bytes_pages) == len(file_pages)
+
+            for (bm, bs, bd), fpath in zip(bytes_pages, file_pages):
+                file_img = Image.open(fpath)
+                assert file_img.mode == bm
+                assert file_img.size == bs
+                assert file_img.tobytes() == bd

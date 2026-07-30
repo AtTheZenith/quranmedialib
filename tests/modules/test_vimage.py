@@ -189,7 +189,7 @@ def test_vimage_layer_vs_render_equality(word_config):
     vimg.layer(canvas_new, x=0, y=0, word_config=word_config, rows_to_render=rows, center=False)
 
     # Compare pixels
-    assert list(canvas_old.getdata()) == list(canvas_new.getdata())
+    assert canvas_old.tobytes() == canvas_new.tobytes()
 
 
 # === Benchmark Tests ===

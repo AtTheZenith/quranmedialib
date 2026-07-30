@@ -70,15 +70,10 @@ def get_aggregate_rss_mb() -> float:
     return total_rss / (1024 * 1024)
 
 
-# Backward-compatible peak-RSS tracker (replaces old background-thread monitor).
-# New code should call check_aggregate_memory() directly for enforcement.
-
-
 class MemoryMonitor:
-    """Synchronous peak-RSS tracker. No background thread, no side effects.
+    """Synchronous peak aggregate-RSS tracker. No background thread.
 
-    Drop-in replacement for the old threaded monitor. Tracks aggregate RSS
-    at enter/exit only — for continuous enforcement use check_aggregate_memory().
+    Tracks peak across enter/exit. Use in tests to measure memory impact.
     """
 
     def __init__(self, limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB, **kwargs: object):
@@ -98,7 +93,7 @@ class MemoryMonitor:
 
 
 def check_process_memory(limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
-    """Checks current process memory and raises MemoryLimitExceededError if limit breached.
+    """Raise MemoryLimitExceededError if current process RSS exceeds limit_mb.
 
     Args:
         limit_mb: Memory limit in megabytes.
@@ -112,57 +107,8 @@ def check_process_memory(limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
         raise MemoryLimitExceededError("Individual process memory limit exceeded", current_mb, limit_mb)
 
 
-def check_aggregate_memory(limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB) -> None:
-    """Synchronous aggregate memory check — raises immediately if limit breached.
-
-    Call this from the main thread after significant work is done (e.g., between
-    batches). Unlike the old background-thread monitor, this gives deterministic
-    error propagation without noisy background logging.
-
-    Args:
-        limit_mb: Aggregate RSS limit in MB (default: workers x per-process limit).
-
-    Raises:
-        MemoryLimitExceededError: If aggregate RSS exceeds limit_mb.
-    """
-    current_mb = get_aggregate_rss_mb()
-    if current_mb > limit_mb:
-        logger.error("Aggregate memory limit breached: %.2fMB > %.2fMB", current_mb, limit_mb)
-        raise MemoryLimitExceededError("Aggregate memory limit exceeded", current_mb, limit_mb)
-
-
 def clear_rendering_caches() -> None:
-    """Clears all module-level LRU caches used during rendering.
-
-    Flushes:
-    - wimage._get_wimage_cached
-    - annotation._annotate_word_cached
-    - font_cache._load_font_base
-    - DatabaseManager lru_caches (via minimize_caches)
-    """
-    from quranmedialib.database_manager import DatabaseManager
-    from quranmedialib.modules.annotation import _annotate_word_cached
-    from quranmedialib.modules.font_cache import _load_font_base
-    from quranmedialib.modules.wimage import _get_wimage_cached
-
-    _annotate_word_cached.cache_clear()
-    _get_wimage_cached.cache_clear()
-    _load_font_base.cache_clear()
-
-    db = DatabaseManager()
-    db.minimize_caches()
-    logger.debug("All rendering caches cleared.")
-
-
-def clear_rendering_caches() -> None:
-    """Clears all module-level LRU caches used during rendering.
-
-    Flushes:
-    - wimage._get_wimage_cached
-    - annotation._annotate_word_cached
-    - font_cache._load_font_base
-    - DatabaseManager lru_caches (via minimize_caches)
-    """
+    """Clear all module-level LRU caches used during rendering."""
     from quranmedialib.database_manager import DatabaseManager
     from quranmedialib.modules.annotation import _annotate_word_cached
     from quranmedialib.modules.font_cache import _load_font_base

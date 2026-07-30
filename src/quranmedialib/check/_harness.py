@@ -45,9 +45,9 @@ from quranmedialib import (
 )
 from quranmedialib import __version__ as qml_version
 from quranmedialib.modules.timage import get_timage
-from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
+from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.types import Padding, VerseConfig, WordItem
+from quranmedialib.types import VerseConfig, WordItem
 
 type Aspect = str
 type Mode = str

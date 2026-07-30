@@ -90,7 +90,7 @@ uv run -m pytest; uv run -m pytest --benchmark
 
 - **Mask-First Rendering**: Render text as `'L'` mode masks first, then colorize/composite in a single pass to minimize expensive RGBA operations.
 - **Sub-pixel Precision**: Use float values for widths and positions to prevent cumulative rounding errors in long lines.
-- **Memory-Aware Parallelism**: When using `ParallelRenderer`, monitor aggregate RSS and explicitly clear caches (`clear_rendering_caches`) to avoid OOM during bulk processing.
+- **Memory-Aware Parallelism**: When using `ParallelRenderer`, per-process RSS is enforced via `worker_heartbeat()` every 10 verses (256MB limit). Aggregate RSS (~700MB during parallel render) is safe and not monitored. Caches are flushed automatically when RSS exceeds 80% of the per-process limit.
 - **Thread-Local Resources**: Use `threading.local()` for database connections and other non-thread-safe handles to ensure stability under high concurrency.
 
 ### 0.6 The libcurl Standard
@@ -524,7 +524,7 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 - `get_current_rss_mb()` — Get current process RSS in MB.
 - `get_aggregate_rss_mb()` — Get total RSS of all child processes.
 - `check_process_memory()` — Raise if current process exceeds per-process limit (called by `worker_heartbeat`).
-- `check_aggregate_memory()` — Raise if aggregate RSS exceeds workers × per-process limit (synchronous, called after each batch in `ParallelRenderer.map()`).
+- `worker_heartbeat()` — Per-process RSS check, called every 10 verses in worker. Crashes the worker if per-process limit breached. No aggregate enforcement — aggregate runs ~700MB during parallel rendering (8 workers × ~100MB), well under the computed 2048MB cap.
 - `clear_rendering_caches()` — Clear LRU caches to free memory.
 - `MemoryLimitExceededError` — Raised when memory limits are exceeded (not exported at package level).
 - Memory-aware rendering with throttled checks (every 10 verses).
@@ -534,7 +534,7 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 - `ParallelRenderer` — Process/thread parallel rendering engine with `ExecutionMode` enum.
 - `_PoolManager` — Singleton for persistent executor pools with `atexit` cleanup.
 - `map_batches()` — Batch processing that chunks tasks to match worker count.
-- `worker_heartbeat()` — Worker heartbeat signal for parent process monitoring.
+- `worker_heartbeat()` — Per-process RSS check, called every 10 verses in worker. Crashes the worker if per-process limit breached.
 
 ### 12.4 Hardware Config (`config.py`)
 
@@ -542,10 +542,10 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 - `DEFAULT_WORKERS` — Default parallel worker count (= CPU_COUNT).
 - `DEFAULT_IO_THREADS` — Default I/O thread count (min(4, CPU_COUNT)).
 - `SQLITE_MMAP_SIZE` — SQLite memory-mapped read size (256MB).
-- `DEFAULT_PROCESS_LIMIT_MB` — Per-process memory limit (768MB).
-- `DEFAULT_AGGREGATE_LIMIT_MB` — Computed as `DEFAULT_WORKERS * DEFAULT_PROCESS_LIMIT_MB` (not hardcoded).
+- `DEFAULT_PROCESS_LIMIT_MB` — Per-process memory limit (256MB). Must stay at 256MB to catch regressions. If a worker exceeds this, reduce batch sizes, don't raise the limit.
+- `DEFAULT_AGGREGATE_LIMIT_MB` — Computed as `DEFAULT_WORKERS * DEFAULT_PROCESS_LIMIT_MB` (not hardcoded). Used by `MemoryMonitor` in tests for peak tracking only — no enforcement.
 - `MEMORY_FLUSH_THRESHOLD_RATIO` — Cache flush threshold (0.8 = 80%).
-- Memory enforcement is **synchronous**: `check_aggregate_memory()` runs in `ParallelRenderer.map()` after each batch result. No background monitor thread — no log spam. Breach raises `MemoryLimitExceededError` and kills the pipeline cleanly.
+- Memory enforcement is **per-process only**: `worker_heartbeat()` in the worker calls `check_process_memory()` every 10 verses. Crashes the worker on breach. No aggregate enforcement — aggregate (runs ~700MB during parallel render) is well under the 2048MB computed cap and is not enforced because parallel workers overlap.
 
 ---
 

@@ -18,7 +18,7 @@ DEFAULT_IO_THREADS: Final = min(4, CPU_COUNT)
 SQLITE_MMAP_SIZE: Final = 256 * 1024 * 1024  # 256MB for faster memory-mapped reads
 
 # Memory and Resource Limits
-DEFAULT_PROCESS_LIMIT_MB: Final = 768.0
+DEFAULT_PROCESS_LIMIT_MB: Final = 256.0
 # Aggregate limit = max possible worker memory. Workers × per-process limit.
 # This ensures OOM is caught before swap thrash, without false positives.
 DEFAULT_AGGREGATE_LIMIT_MB: Final = DEFAULT_WORKERS * DEFAULT_PROCESS_LIMIT_MB

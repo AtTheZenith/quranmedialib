@@ -14,15 +14,8 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from enum import Enum, auto
 from typing import Any, Callable, Iterable, Iterator, TypeVar
 
-from quranmedialib.config import (
-    CPU_COUNT,
-    DEFAULT_AGGREGATE_LIMIT_MB,
-    DEFAULT_PROCESS_LIMIT_MB,
-)
-from quranmedialib.utils.memory import (
-    check_aggregate_memory,
-    check_process_memory,
-)
+from quranmedialib.config import CPU_COUNT, DEFAULT_PROCESS_LIMIT_MB
+from quranmedialib.utils.memory import check_process_memory
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +95,6 @@ class ParallelRenderer:
         self,
         max_workers: int | None = None,
         mode: ExecutionMode = ExecutionMode.PROCESS,
-        memory_limit_mb: float = DEFAULT_AGGREGATE_LIMIT_MB,
         process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB,
         initializer: Callable | None = None,
         initargs: tuple[Any, ...] = (),
@@ -112,14 +104,12 @@ class ParallelRenderer:
         Args:
             max_workers: Number of workers. Defaults to CPU_COUNT.
             mode: PROCESS or THREAD pool.
-            memory_limit_mb: Aggregate RAM limit for the entire pool.
             process_limit_mb: Individual RAM limit for each process.
             initializer: Optional callable invoked at worker startup (PROCESS mode).
             initargs: Arguments passed to the initializer.
         """
         self.max_workers = max_workers or CPU_COUNT
         self.mode = mode
-        self.memory_limit_mb = memory_limit_mb
         self.process_limit_mb = process_limit_mb
         self.initializer = initializer
         self.initargs = initargs
@@ -132,7 +122,6 @@ class ParallelRenderer:
         self,
         func: Callable[[list[T]], Iterator[R]],
         tasks: Iterable[T],
-        use_monitor: bool = True,
         max_batch_size: int | None = None,
     ) -> Iterator[R]:
         """Groups tasks into optimal batches and maps a function over them.
@@ -144,7 +133,6 @@ class ParallelRenderer:
         Args:
             func: Function that accepts a list of tasks and yields results.
             tasks: Iterable of task arguments.
-            use_monitor: Whether to enable aggregate memory monitoring.
             max_batch_size: Maximum tasks per batch. When set, batches are
                 further subdivided to cap per-worker memory. Useful for heavy
                 workloads where a single worker handling many items would
@@ -166,7 +154,7 @@ class ParallelRenderer:
         batches = [task_list[i : i + chunk_size] for i in range(0, len(task_list), chunk_size)]
 
         # Map over batches with chunksize=1 (each batch is one IPC message)
-        for batch_results in self.map(func, batches, chunksize=1, use_monitor=use_monitor):
+        for batch_results in self.map(func, batches, chunksize=1):
             yield from batch_results
 
     def map(
@@ -174,7 +162,6 @@ class ParallelRenderer:
         func: Callable[..., R],
         tasks: Iterable[T],
         chunksize: int | None = None,
-        use_monitor: bool = True,
     ) -> Iterator[R]:
         """Maps a function over tasks in parallel.
 
@@ -183,7 +170,6 @@ class ParallelRenderer:
             tasks: Iterable of task arguments.
             chunksize: Number of items per batch. If None, it is calculated
                 to ensure the number of batches matches the worker count.
-            use_monitor: Whether to enable aggregate memory monitoring.
 
         Returns:
             Iterator of results.
@@ -206,8 +192,6 @@ class ParallelRenderer:
         executor = self._get_executor()
         for result in executor.map(func, task_list, chunksize=chunksize):
             yield result
-            if use_monitor:
-                check_aggregate_memory(self.memory_limit_mb)
 
 
 def init_worker_path(path: str) -> None:
@@ -224,14 +208,8 @@ def init_worker_path(path: str) -> None:
 
 
 def worker_heartbeat(process_limit_mb: float = DEFAULT_PROCESS_LIMIT_MB) -> None:
-    """Utility for workers to check their own memory budget.
+    """Check current process RSS and raise if over limit. Must crash the worker.
 
-    Should be called inside the worker function at significant milestones.
+    Should be called at significant milestones inside the worker function.
     """
-    try:
-        check_process_memory(process_limit_mb)
-    except Exception as e:
-        logger.warning("Worker heartbeat detected memory issue: %s", e)
-        # We don't necessarily want to kill the process immediately if it can finish,
-        # but we should log it.
-        raise
+    check_process_memory(process_limit_mb)

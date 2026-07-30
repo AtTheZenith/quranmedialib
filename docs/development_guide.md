@@ -36,11 +36,22 @@ The pipeline follows: `Asset` --> `Rendering` --> `Layout` --> `Composition`.
 
 We maintain a high bar for correctness and performance. Every PR must pass the full test suite and demonstrate no performance regressions.
 
-### 1. Baseline Performance Check
-Before implementing any feature or fix, establish a baseline speed for the existing codebase to ensure no regressions are introduced.
+### 1. Canonical Test Suite
+The primary test entrypoint is `quranmedialib.check`, which wraps pixel validation, performance benchmarks, and unit tests into a single command.
+```bash
+# Full suite: pixel validation + benchmarks + unit tests
+uv run -m quranmedialib.check test
+
+# Pixel validation only (no benchmarks, no unit tests)
+uv run -m quranmedialib.check test --unit
+
+# Standalone benchmark run
+uv run -m quranmedialib.check benchmark
+```
+
+Before implementing any feature or fix, establish a baseline:
 ```powershell
-# Run all tests, then run benchmarks
-uv run -m pytest; uv run -m pytest --benchmark
+uv run -m pytest --benchmark
 ```
 
 ### 2. Writing Tests

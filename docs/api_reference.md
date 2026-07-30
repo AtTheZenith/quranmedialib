@@ -132,8 +132,18 @@ Frame composition class that manages the RGBA surface and handles layering of im
 
 ### `ParallelRenderer`
 Distributed rendering engine for CPU-intensive tasks.
-- `map(func, iterable)` $\rightarrow$ Returns a list of processed results.
+- `map(func, iterable)` $\rightarrow$ Returns an iterator of processed results.
+- `map_batches(func, tasks, max_batch_size=None)` $\rightarrow$ Groups tasks into optimal batches (natural chunking via `ceil(tasks / workers)`). Supply `max_batch_size` to cap per-worker memory (used internally by `_bytes_mode_max_batch` for the IPC bytes path).
+
+### `worker_heartbeat(process_limit_mb=256.0)`
+Per-process RSS check called every 10 verses inside worker functions. Raises `MemoryLimitExceededError` (crashes the worker) if current process RSS exceeds the per-process limit. No try/except wrapper — unhandled exception terminates the worker immediately.
+
+### `check_process_memory(limit_mb=256.0)`
+Underlying enforcement function. Raises `MemoryLimitExceededError` if `get_current_rss_mb() > limit_mb`.
 
 ### `MemoryMonitor`
-Context manager for tracking RSS memory usage during bulk processes.
+Synchronous peak aggregate-RSS tracker. Context manager; tracks peak between `__enter__` and `__exit__`. Used in tests to measure memory impact — no enforcement, no background thread.
+
+### `_bytes_mode_max_batch(chunk, frame_cfg)`
+Module-level function in `verse_range.py`. Calculates safe per-batch verse count for the bytes IPC path, bounding `batch_results` accumulation to ~80% of the per-process 256MB limit. Adapts to frame dimensions (e.g., 8 verses at 1080p, 2 at 2160p).
 
