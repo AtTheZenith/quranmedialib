@@ -2,6 +2,12 @@
 
 # QuranMediaLib
 
+[![PyPI - Version](https://img.shields.io/pypi/v/quranmedialib.svg)](https://pypi.org/project/quranmedialib/)
+[![PyPI - Python Versions](https://img.shields.io/pypi/pyversions/quranmedialib.svg)](https://pypi.org/project/quranmedialib/)
+[![PyPI - License](https://img.shields.io/pypi/l/quranmedialib.svg)](https://pypi.org/project/quranmedialib/)
+[![PyPI - Wheel](https://img.shields.io/pypi/wheel/quranmedialib.svg)](https://pypi.org/project/quranmedialib/)
+[![Code style - Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+
 </div>
 
 A high-performance media generation library for rendering Quranic Arabic text and translations into customizable, professional-grade images.
@@ -33,7 +39,10 @@ A high-performance media generation library for rendering Quranic Arabic text an
 ### Installation
 
 ```bash
-# Clone the repository
+# Install from PyPI (recommended)
+pip install quranmedialib
+
+# Or clone and install from source
 git clone https://github.com/AtTheZenith/quranmedialib.git
 cd quranmedialib
 

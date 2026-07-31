@@ -5,6 +5,11 @@ description = "A media generation library for Quranic Arabic text and translatio
 readme = "README.md"
 requires-python = ">=3.13, <3.14"
 license = "Apache-2.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+]
 dependencies = [
     "Pillow<13.0.0",
 ]
