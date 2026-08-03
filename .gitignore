@@ -19,6 +19,10 @@ htmlcov/
 /output/
 .bm/
 
+# Golden reference images — regenerated on demand via `check update`
+# (the code is the source of truth, not the images)
+src/quranmedialib/check/references/
+
 # IDE files
 .vscode/
 
