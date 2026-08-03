@@ -13,11 +13,13 @@ Security is not an afterthought; it is engineered into every layer.
 
 ## Workflow Rule: Baseline Performance Check
 
-**Before starting any feature work**, fetch the baseline speed of the existing codebase:
+**Before starting any feature work**, fetch the baseline speed of the existing codebase. The check harness (`_harness.py`) is the canonical entrypoint — it wraps pixel validation, performance benchmarks, and pytest unit tests in one run:
 
 ```powershell
-uv run -m pytest; uv run -m pytest --benchmark
+uv run -m quranmedialib.check test
 ```
+
+Use `--no-benchmark` when you only need correctness (pixel + unit) and `--unit` for unit tests alone. Direct `uv run -m pytest` invocations remain valid for focused iteration on a single test module.
 
 **Stop immediately if you encounter any errors** before proceeding with feature work.
 
