@@ -78,11 +78,11 @@ def main() -> None:
 
     try:
         # Each aspect ratio exposes all three modes at the chosen resolution.
-        # "arabic" mode keeps annotations visible (translation is transparent),
-        # matching the canonical reference scenarios.
+        # Only "default" mode annotates words with wbw translations; "arabic"
+        # mode is pure Arabic text and "translation" mode is translation only.
         for presets in (LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET):
             for mode in ("default", "arabic", "translation"):
-                annotate = mode != "translation"
+                annotate = mode == "default"
                 print(f"Rendering {mode} preset...")
                 all_results.extend(run_workflow_demo(presets[mode][RESOLUTION], annotate=annotate))
 

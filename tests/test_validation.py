@@ -10,7 +10,7 @@ import pytest
 
 from quranmedialib.check import CANONICAL_SCENARIOS, ValidationHarness
 
-SUPPORTED_VERSIONS = ["v4.1.0"]
+SUPPORTED_VERSIONS = ["v4.1.1"]
 
 
 @pytest.mark.parametrize("version", SUPPORTED_VERSIONS)

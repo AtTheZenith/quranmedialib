@@ -18,7 +18,7 @@ from quranmedialib.modules.timage import (
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.presets import build_layout_guide
+from quranmedialib.presets import arabic_vertical_alignment, build_layout_guide, translation_placement
 from quranmedialib.types import WordItem
 from quranmedialib.workflows.base import BaseWorkflow
 
@@ -143,6 +143,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 self.frame_cfg.aspect_ratio,
                 self.frame_cfg.max_width,
                 self.frame_cfg.image_height,
+                self.frame_cfg.mode,
             )
 
             # Frame the isolated images
@@ -167,16 +168,24 @@ class IsolateWordsWorkflow(BaseWorkflow):
                     rows_to_render=current_rows,
                     center=True,
                     content_height=guide.arabic.height,
+                    vertical_alignment=arabic_vertical_alignment(self.frame_cfg.aspect_ratio, self.frame_cfg.mode),
                 )
 
                 trans_images = [t_img] if t_img else None
                 if trans_images and page_index < len(trans_images):
                     if t_image := trans_images[page_index]:
+                        place_rect, keep_bottom = translation_placement(
+                            guide.translation,
+                            t_image.width,
+                            t_image.height,
+                            self.frame_cfg.aspect_ratio,
+                            self.frame_cfg.mode,
+                        )
                         frame_obj.layer_at(
                             t_image,
-                            guide.translation,
+                            place_rect,
                             text_color=self.text_cfg.color,
-                            keep_bottom=True,
+                            keep_bottom=keep_bottom,
                         )
 
                 pages.append(frame_obj.render())

@@ -4,7 +4,7 @@ import warnings
 
 from PIL import Image
 
-from quranmedialib.types import Color, Layerable, ResolvedRect
+from quranmedialib.types import Color, Layerable, ResolvedRect, VerticalAlignment
 
 
 class Frame:
@@ -27,6 +27,7 @@ class Frame:
         rect: ResolvedRect,
         text_color: Color | None = None,
         keep_bottom: bool = False,
+        vertical_alignment: VerticalAlignment = VerticalAlignment.CENTER,
         **kwargs,
     ) -> None:
         """Place content at a resolved pixel rectangle.
@@ -39,10 +40,18 @@ class Frame:
             rect: Resolved pixel position and size.
             text_color: Color for 'L' mode mask images.
             keep_bottom: If True, aligns image bottom with rect bottom.
+            vertical_alignment: Vertical anchoring for Layerable content. Ignored for
+                plain Images.
             **kwargs: Additional args passed to Layerable.layer().
         """
         if isinstance(image, Layerable):
-            image.layer(self.image, rect.left, rect.top, **kwargs)
+            image.layer(
+                self.image,
+                rect.left,
+                rect.top,
+                vertical_alignment=vertical_alignment,
+                **kwargs,
+            )
             return
         x, y = rect.left, rect.top
         if keep_bottom:

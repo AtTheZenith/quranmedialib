@@ -15,6 +15,7 @@ from PIL import Image
 from quranmedialib.modules.text_layout import balance_lines_pyramid
 from quranmedialib.types import (
     VerseConfig,
+    VerticalAlignment,
     WordConfig,
     WordItem,
 )
@@ -239,6 +240,7 @@ class VImage:
         rows_to_render: list[tuple[list[WordItem], int, int]] | None = None,
         center: bool = True,
         content_height: int = 0,
+        vertical_alignment: VerticalAlignment = VerticalAlignment.CENTER,
         **kwargs,
     ) -> None:
         """Renders the verse (or a subset of rows) directly onto the provided canvas.
@@ -250,15 +252,21 @@ class VImage:
             word_config: Rendering rules for words.
             rows_to_render: Specific rows to render. If None, renders all self.rows.
             center: If True, each row is individually centred within self.content_width.
-            content_height: If > 0 and center is True, vertically centres the block.
+            content_height: If > 0, vertically positions the block within the rect.
+            vertical_alignment: How to vertically position the block when content_height
+                exceeds the rendered height. Defaults to CENTER.
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
             return
 
         total_render_height = sum(r[2] for r in rows) + (len(rows) - 1) * self.verse_config.row_spacing
-        if center and content_height > total_render_height:
-            y += (content_height - total_render_height) // 2
+        if content_height > total_render_height:
+            if vertical_alignment == VerticalAlignment.BOTTOM:
+                y += content_height - total_render_height
+            elif vertical_alignment == VerticalAlignment.CENTER:
+                y += (content_height - total_render_height) // 2
+            # TOP: no vertical shift
 
         word_spacing = self.verse_config.word_spacing
         row_spacing = self.verse_config.row_spacing

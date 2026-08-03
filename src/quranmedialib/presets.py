@@ -25,6 +25,7 @@ from quranmedialib.types import (
     TextConfig,
     UDim2,
     VerseConfig,
+    VerticalAlignment,
     WbwDatabaseConfig,
     WordConfig,
 )
@@ -192,19 +193,59 @@ _MODE_OVERRIDES: dict[str, dict[str, dict]] = {
 }
 
 
-_ASPECT_OVERRIDES: dict[str, dict[str, dict]] = {
-    "square": {
-        "word": {
-            "font_size": 60,
-            "verse_number_size": 83,
-            "annotation_font_size": 21,
+# Per-(aspect, mode) overrides. Values match v3.0.0. Only fields that differ from
+# the mode defaults are listed (minimal overrides). Word font sizes for square are
+# common to all three square modes in v3.
+_ASPECT_OVERRIDES: dict[str, dict[str, dict[str, dict]]] = {
+    "story": {
+        "default": {
+            "text": {"line_spacing": 15},
+            "verse": {"row_spacing": 40, "max_rows_per_page": 8},
         },
-        "text": {
-            "font_size": 28,
-            "line_spacing": 15,
+        "arabic": {
+            "text": {"line_spacing": 15},
+            "verse": {"max_rows_per_page": 8},
+        },
+        "translation": {
+            "text": {"line_spacing": 15},
+            "verse": {"row_spacing": 40, "max_rows_per_page": 8},
+        },
+    },
+    "square": {
+        "default": {
+            "word": {
+                "font_size": 60,
+                "verse_number_size": 83,
+                "verse_number_padding": Padding(1, 31, 1, 1),
+                "annotation_font_size": 21,
+            },
+            "text": {"font_size": 28, "line_spacing": 15},
+            "verse": {"row_spacing": 40, "max_rows_per_page": 3},
+        },
+        "arabic": {
+            "word": {
+                "font_size": 60,
+                "verse_number_size": 83,
+                "verse_number_padding": Padding(1, 11, 1, 1),
+                "annotation_font_size": 21,
+            },
+            "text": {"line_spacing": 15},
+        },
+        "translation": {
+            "word": {
+                "font_size": 60,
+                "verse_number_size": 83,
+                "verse_number_padding": Padding(1, 31, 1, 1),
+                "annotation_font_size": 21,
+            },
+            "text": {"font_size": 28, "line_spacing": 15},
+            "verse": {"row_spacing": 40, "max_rows_per_page": 3},
         },
     },
 }
+
+# Text max_width margin at 1080p reference, per aspect ratio (v3 values).
+_MAX_WIDTH_SUBTRACT: Final[dict[str, int]] = {"landscape": 100, "story": 120, "square": 120}
 
 
 def build_preset(
@@ -242,7 +283,7 @@ def build_preset(
 
     # Get mode overrides
     mode_cfg = _MODE_OVERRIDES[mode]
-    aspect_cfg = _ASPECT_OVERRIDES.get(aspect_ratio, {})
+    aspect_cfg = _ASPECT_OVERRIDES.get(aspect_ratio, {}).get(mode, {})
 
     # Helper to merge overrides
     def _merge(base: dict, mode_ov: dict, aspect_ov: dict) -> dict:
@@ -274,7 +315,7 @@ def build_preset(
 
     # Text config
     text_defaults = {
-        "max_width": width - _scale(100),
+        "max_width": width - _scale(_MAX_WIDTH_SUBTRACT[aspect_ratio]),
         "balanced_wrapping": True,
     }
     text_kwargs = _merge(text_defaults, mode_cfg.get("text", {}), aspect_cfg.get("text", {}))
@@ -303,6 +344,7 @@ def build_preset(
         max_width=width,
         image_height=height,
         aspect_ratio=aspect_ratio,
+        mode=mode,
     )
 
     return Preset(
@@ -325,55 +367,192 @@ def _v3_content_width(aspect_ratio: str, frame_width: int, frame_height: int) ->
     return frame_width - 2 * padding
 
 
-def _v3_arabic_padding(aspect_ratio: str, frame_width: int) -> int:
-    """Compute v3-compatible padding for a given aspect ratio and frame width."""
+def _v3_arabic_padding(aspect_ratio: str, frame_width: int, frame_height: int) -> int:
+    """Compute v3-compatible padding for a given aspect ratio and frame dimensions.
+
+    Landscape scales by height (1080 at 1080p); story and square scale by width.
+
+    Args:
+        aspect_ratio: One of "landscape", "story", or "square".
+        frame_width: Frame width in pixels.
+        frame_height: Frame height in pixels.
+
+    Returns:
+        Scaled padding value in pixels.
+    """
     base = {"landscape": 50, "story": 60, "square": 60}.get(aspect_ratio, 50)
-    # landscape uses height as ref_dim, story/square use width
-    ref_dim = frame_width  # story and square both use width
+    ref_dim = frame_height if aspect_ratio == "landscape" else frame_width
     return round(base * ref_dim / 1080)
 
 
-def _v3_wimage_offset(aspect_ratio: str, frame_width: int, frame_height: int) -> int:
-    """Compute v3 wimage_y_offset for story/square default mode, scaled per resolution."""
-    ref_dim = frame_width  # story and square use width
-    if aspect_ratio == "story":
-        return round(-150 * ref_dim / 1080)
-    # square: -height/2 + padding
-    padding = _v3_arabic_padding("square", frame_width)
-    return -frame_height // 2 + padding
+def build_layout_guide(
+    aspect_ratio: str,
+    frame_width: int,
+    frame_height: int,
+    mode: str = "default",
+) -> LayoutGuide:
+    """Build a resolved LayoutGuide matching v3's per-aspect, per-mode placement.
 
-
-def build_layout_guide(aspect_ratio: str, frame_width: int, frame_height: int) -> LayoutGuide:
-    """Build a resolved LayoutGuide from the preset layout definitions.
+    The arabic rect is the box the VImage content is centred within; the
+    translation rect is where translation images are placed. v3's per-mode
+    wimage/timage y-offsets are folded into the rect top so that the layer_at
+    centring/bottom-anchoring reproduces v3's Frame.layer math exactly.
 
     Args:
-        aspect_ratio: One of "landscape", "story", "square".
+        aspect_ratio: One of "landscape", "story", or "square".
         frame_width: Frame width in pixels.
         frame_height: Frame height in pixels.
+        mode: One of "default", "arabic", or "translation".
 
     Returns:
         LayoutGuide with resolved pixel rects for arabic and translation areas.
     """
     engine = LayoutEngine(frame_width, frame_height)
-    arabic = engine.resolve_rect(_ARABIC_LAYOUT[aspect_ratio])
-    translation = engine.resolve_rect(_TRANSLATION_LAYOUT[aspect_ratio])
+    padding = _v3_arabic_padding(aspect_ratio, frame_width, frame_height)
+    content_width = frame_width - 2 * padding
+    available_height = frame_height - 2 * padding
 
-    if aspect_ratio == "landscape":
-        # For landscape the UDim2 already gives the correct position;
-        # only the width needs the v3 per-resolution override.
-        arabic = ResolvedRect(
-            arabic.left, arabic.top, _v3_content_width(aspect_ratio, frame_width, frame_height), arabic.height
-        )
-    else:
-        # For story and square, override the whole rect to match v3's
-        # resolution-scaled padding + offset positioning.
-        padding = _v3_arabic_padding(aspect_ratio, frame_width)
-        content_width = frame_width - 2 * padding
-        available_height = frame_height - 2 * padding
-        offset = _v3_wimage_offset(aspect_ratio, frame_width, frame_height)
-        arabic = ResolvedRect(padding, padding + offset, content_width, available_height)
-
+    arabic = _resolve_arabic_rect(
+        aspect_ratio, mode, engine, frame_width, frame_height, padding, content_width, available_height
+    )
+    translation = _resolve_translation_rect(
+        aspect_ratio, mode, engine, frame_height, padding, content_width, available_height
+    )
     return LayoutGuide(arabic=arabic, translation=translation)
+
+
+def translation_placement(
+    rect: ResolvedRect,
+    image_width: int,
+    image_height: int,
+    aspect_ratio: str,
+    mode: str,
+) -> tuple[ResolvedRect, bool]:
+    """Return the paste rect and keep_bottom flag for a translation image.
+
+    Reproduces v3's per-mode timage anchoring: landscape/default is
+    bottom-anchored (keep_bottom), story/square default is top-anchored, and
+    translation mode is vertically centred within the rect. Arabic mode has no
+    visible translation, so the centred placement is used harmlessly.
+
+    Args:
+        rect: The resolved translation rect from the layout guide.
+        image_width: Translation image width in pixels.
+        image_height: Translation image height in pixels.
+        aspect_ratio: One of "landscape", "story", or "square".
+        mode: One of "default", "arabic", or "translation".
+
+    Returns:
+        Tuple of the paste rect and whether to keep the image bottom-anchored.
+    """
+    if mode == "default" and aspect_ratio == "landscape":
+        return rect, True
+    x = rect.left + (rect.width - image_width) // 2
+    y = rect.top if mode == "default" else rect.top + (rect.height - image_height) // 2
+    return ResolvedRect(x, y, image_width, image_height), False
+
+
+def arabic_vertical_alignment(aspect_ratio: str, mode: str) -> VerticalAlignment:
+    """Return the vertical alignment for the arabic content block.
+
+    v3 bottom-anchors arabic content only for square/default mode; all
+    other combos are vertically centred.
+
+    Args:
+        aspect_ratio: One of "landscape", "story", or "square".
+        mode: One of "default", "arabic", or "translation".
+
+    Returns:
+        VerticalAlignment.BOTTOM for square/default, else VerticalAlignment.CENTER.
+    """
+    if aspect_ratio == "square" and mode == "default":
+        return VerticalAlignment.BOTTOM
+    return VerticalAlignment.CENTER
+
+
+def _resolve_arabic_rect(
+    aspect_ratio: str,
+    mode: str,
+    engine: LayoutEngine,
+    frame_width: int,
+    frame_height: int,
+    padding: int,
+    content_width: int,
+    available_height: int,
+) -> ResolvedRect:
+    """Resolve the arabic content rect for a given aspect and mode.
+
+    v3 wimage placement is always horizontally centred. The vertical offset is
+    baked into the rect top so that layer_at centring lands the content where
+    v3's Frame.layer math puts it.
+
+    Args:
+        aspect_ratio: One of "landscape", "story", or "square".
+        mode: One of "default", "arabic", or "translation".
+        engine: LayoutEngine for the frame dimensions.
+        frame_width: Frame width in pixels.
+        frame_height: Frame height in pixels.
+        padding: Scaled v3 padding value.
+        content_width: Frame width minus horizontal padding.
+        available_height: Frame height minus vertical padding.
+
+    Returns:
+        ResolvedRect for the arabic content area.
+    """
+    if aspect_ratio == "landscape" and mode == "default":
+        # Landscape default keeps the UDim2 layout (bakes the -150 offset);
+        # only the width needs the v3 per-resolution override.
+        arabic = engine.resolve_rect(_ARABIC_LAYOUT["landscape"])
+        return ResolvedRect(
+            arabic.left,
+            arabic.top,
+            _v3_content_width(aspect_ratio, frame_width, frame_height),
+            arabic.height,
+        )
+    if aspect_ratio == "square" and mode == "default":
+        # Square default bottom-anchors the content (-height/2 + padding).
+        offset = -frame_height // 2 + padding
+        return ResolvedRect(padding, padding + offset, content_width, available_height)
+    # Story (all modes) and non-default modes are centred with no vertical offset.
+    return ResolvedRect(padding, padding, content_width, available_height)
+
+
+def _resolve_translation_rect(
+    aspect_ratio: str,
+    mode: str,
+    engine: LayoutEngine,
+    frame_height: int,
+    padding: int,
+    content_width: int,
+    available_height: int,
+) -> ResolvedRect:
+    """Resolve the translation rect for a given aspect and mode.
+
+    Args:
+        aspect_ratio: One of "landscape", "story", or "square".
+        mode: One of "default", "arabic", or "translation".
+        engine: LayoutEngine for the frame dimensions.
+        frame_height: Frame height in pixels.
+        padding: Scaled v3 padding value.
+        content_width: Frame width minus horizontal padding.
+        available_height: Frame height minus vertical padding.
+
+    Returns:
+        ResolvedRect for the translation area.
+    """
+    if mode == "default":
+        if aspect_ratio == "landscape":
+            # Landscape default is bottom-anchored (-120 offset); keep the
+            # UDim2 layout which is already verified to match v3.
+            return engine.resolve_rect(_TRANSLATION_LAYOUT["landscape"])
+        if aspect_ratio == "story":
+            offset = round(frame_height // 2 + frame_height // 8)
+            return ResolvedRect(padding, padding + offset, content_width, available_height)
+        # Square default: height/2 + height/9.
+        offset = round(frame_height // 2 + frame_height // 9)
+        return ResolvedRect(padding, padding + offset, content_width, available_height)
+    # Arabic and translation modes: translation is either unused or centred.
+    return ResolvedRect(padding, padding, content_width, available_height)
 
 
 def _build_all_presets() -> dict:

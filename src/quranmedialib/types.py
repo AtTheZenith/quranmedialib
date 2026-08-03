@@ -487,12 +487,14 @@ class FrameConfig:
         max_width: Canvas width in pixels.
         image_height: Canvas height in pixels.
         aspect_ratio: Aspect ratio key for layout lookup ("landscape", "story", "square").
+        mode: Mode key for layout lookup ("default", "arabic", "translation").
     """
 
     background_color: Color = (0, 0, 0, 0)
     max_width: int = 1920
     image_height: int = 1080
     aspect_ratio: str = "landscape"
+    mode: str = "default"
 
 
 @dataclass(frozen=True, slots=True)
