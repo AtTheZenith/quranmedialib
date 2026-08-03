@@ -1,16 +1,14 @@
 """Demo script showcasing QuranMediaLib workflows and features.
 
 This script demonstrates various usage patterns including:
-- Running SurahWorkflow with different presets (landscape, story, square)
+- Running SurahWorkflow with every preset combination (aspect ratio x mode)
 - Processing verses with and without annotations
-- Working with Arabic-only, translation-only, and combined modes
 - Applying glow effects and saving output images
 
 Run this script to generate sample images for all preset configurations.
 """
 
 from pathlib import Path
-from typing import Literal
 
 from PIL import Image
 
@@ -19,228 +17,74 @@ from quranmedialib import (
     SQUARE_PRESET,
     STORY_PRESET,
     DatabaseManager,
-    LayoutConfig,
+    Preset,
     SurahWorkflow,
-    TextConfig,
-    WordConfig,
-    WordItem,
 )
-from quranmedialib.modules.annotation import annotate_words
-from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.image import glow
-from quranmedialib.modules.timage import get_timage
-from quranmedialib.modules.verse_number import verse_number
-from quranmedialib.modules.vimage import VImage
-from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.utils.parallel import ExecutionMode, ParallelRenderer, worker_heartbeat
 
-
-def run_workflow_demo(
-    preset_config: tuple[LayoutConfig, TextConfig, WordConfig],
-    data: dict[str, int],
-    annotate: bool = True,
-) -> list[Image.Image]:
-    """Runs a SurahWorkflow for a given preset and returns the generated images."""
-    layout_config, text_config, word_config = preset_config
-    workflow = SurahWorkflow(
-        layout_config=layout_config,
-        text_config=text_config,
-        word_config=word_config,
-    )
-    iterator = workflow.get_iterator(surah=data["surah"], annotate=annotate)
-    return [img for page in iterator for img in page]
+RESOLUTION = "1080p"
+SURAH_ID = 108
 
 
-def _process_verse_words(
-    verse_text: str,
-    surah_id: int,
-    ayah_num: int,
-    word_config: WordConfig,
-    db: DatabaseManager,
-    annotate: bool = True,
-) -> tuple[list[Image.Image], list[str]]:
-    """Helper to process words of a single verse: split, generate images, and annotate."""
-    words = verse_text.split()
-    wimages = [get_wimage(word, word_config) for word in words]
-
-    # Annotate the words
-    # Note: 'texts' argument expects the list of original word strings
-    return (
-        annotate_words(
-            wimages,
-            surah=surah_id,
-            ayah=ayah_num,
-            start=1,
-            word_config=word_config,
-            texts=words,
-            db=db,
-        )
-        if annotate
-        else (wimages, words)
-    )
-
-
-def create_square_demo(
-    db: DatabaseManager,
-    surah_id: int,
-    preset: tuple[LayoutConfig, TextConfig, WordConfig],
-    mode: Literal["default", "arabic", "translation"] = "default",
-) -> list[Image.Image]:
-    """Generates images for the Square demo.
+def run_workflow_demo(preset: Preset, annotate: bool) -> list[Image.Image]:
+    """Runs a SurahWorkflow for a given preset and returns the generated images.
 
     Args:
-        db: DatabaseManager instance.
-        surah_id: ID of the surah to process.
-        preset: Tuple of (layout_config, text_config, word_config).
-        mode: 'default' (annotated + trans), 'arabic' (annotated only), 'translation' (trans only).
+        preset: Unified configuration bundle (frame, word, verse, text).
+        annotate: Whether to annotate words with word-by-word translations.
+
+    Returns:
+        list[Image.Image]: All rendered page images for the surah.
     """
-    layout_config, text_config, word_config = preset
-
-    all_word_images: list[Image.Image] = []
-    all_words_text: list[str] = []
-
-    # 1. Process Verses (for default and arabic modes)
-    if mode in ["default", "arabic"]:
-        verses = db.get_verses_from_surah(surah_id)
-        for i, verse_text in enumerate(verses):
-            annotated_imgs, annotated_txts = _process_verse_words(
-                verse_text, surah_id, i + 1, word_config, db, annotate=(mode == "default")
-            )
-            all_word_images.extend(annotated_imgs)
-            all_words_text.extend(annotated_txts)
-
-            # Add verse number
-            v_num_img = verse_number(i + 1, word_config)
-            all_word_images.append(v_num_img)
-            all_words_text.append(str(i + 1))
-
-    elif mode == "translation":
-        # In translation mode, we use a dummy item as per original code
-        all_word_images.append(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
-        all_words_text.append("a")
-
-    # 2. Process Translation Image
-    if mode in ["default", "translation"]:
-        translations = db.get_translation_from_surah(surah_id)
-        combined_text = "\n".join(translations)
-        trans_img = get_timage(combined_text, text_config)
-    else:
-        # For 'arabic' mode, empty translation image
-        trans_img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-
-    # 3. Frame
-    all_items = [WordItem(img, text) for img, text in zip(all_word_images, all_words_text)]
-
-    # Use a default VerseConfig since one isn't provided in the demo
-    from quranmedialib.types import VerseConfig
-
-    verse_cfg = VerseConfig(word_spacing=20, row_spacing=30, max_rows_per_page=5)
-
-    vimage = VImage(all_items, verse_cfg, layout_config)
-    pages = []
-    page_index = 0
-    current_index = 0
-    total_items = len(all_items)
-
-    while current_index < total_items:
-        current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
-        frame_obj = Frame(layout_config)
-        v_img = vimage.render(word_config, rows_to_render=current_rows)
-        frame_obj.layer(
-            v_img,
-            alignment=(layout_config.wimage_horizontal_align, layout_config.wimage_vertical_align),
-            offset=(layout_config.wimage_x_offset, layout_config.wimage_y_offset),
-        )
-
-        if page_index < 1:
-            frame_obj.layer(
-                trans_img,
-                alignment=(layout_config.timage_horizontal_align, layout_config.timage_vertical_align),
-                offset=(layout_config.timage_x_offset, layout_config.timage_y_offset),
-                text_color=(255, 255, 255, 255),
-            )
-
-        pages.append(frame_obj.render())
-        current_index += items_consumed
-        page_index += 1
-
-    return pages
+    workflow = SurahWorkflow(preset)
+    iterator = workflow.get_iterator(surah=SURAH_ID, annotate=annotate)
+    return [img for page in iterator for img in page]
 
 
 def _glow_and_save(args: tuple[Image.Image, int, Path]) -> None:
     """Worker function to apply glow and save image in a separate process."""
     img, index, output_path = args
 
-    # Genius optimization: Resource safety heartbeat for post-processing
-    worker_heartbeat(process_limit_mb=192.0)
+    # Per-process memory safety heartbeat for post-processing workers.
+    worker_heartbeat()
 
     final_img = glow(img)
     filename = f"{(index + 1):02d}.png"
     final_img.save(output_path / filename)
     print(f"Saved {filename}")
 
-    # Explicit cleanup to stay within 192MB target
-    del final_img
-    del img
-
 
 def save_images(images: list[Image.Image], output_dir: str) -> None:
-    """Applies glow and saves images to the output directory in parallel."""
+    """Applies glow and saves images to the output directory in parallel.
+
+    Args:
+        images: Page images to process.
+        output_dir: Directory to write the glowing images into.
+    """
     output_path = Path(output_dir).resolve()
     output_path.mkdir(parents=True, exist_ok=True)
-    # Use ParallelRenderer for parallel glow processing
-    # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
-    renderer = ParallelRenderer(
-        mode=ExecutionMode.PROCESS,
-        process_limit_mb=192.0,
-    )
 
+    # Glow is CPU-bound (blurs), making it a perfect candidate for multi-processing.
+    renderer = ParallelRenderer(mode=ExecutionMode.PROCESS)
     tasks = [(img, i, output_path) for i, img in enumerate(images)]
-    # Map tasks to worker function.
-    # iterator consumption ensures all images are processed.
     list(renderer.map(_glow_and_save, tasks))
 
 
 def main() -> None:
     """Runs all preset combinations sequentially with parallel image post-processing."""
     db = DatabaseManager()
-    surah_id = 108
-    data = {"surah": surah_id}
-    resolution = "1080p"
     all_results: list[Image.Image] = []
 
     try:
-        # === Default ===
-        # Landscape
-        all_results.extend(run_workflow_demo(LANDSCAPE_PRESET["default"][resolution], data))
-
-        # Story
-        all_results.extend(run_workflow_demo(STORY_PRESET["default"][resolution], data))
-
-        # Square
-        all_results.extend(create_square_demo(db, surah_id, SQUARE_PRESET["default"][resolution], mode="default"))
-
-        # === Arabic ===
-        # Landscape
-        all_results.extend(run_workflow_demo(LANDSCAPE_PRESET["arabic"][resolution], data, annotate=False))
-
-        # Story
-        all_results.extend(run_workflow_demo(STORY_PRESET["arabic"][resolution], data, annotate=False))
-
-        # Square
-        all_results.extend(create_square_demo(db, surah_id, SQUARE_PRESET["arabic"][resolution], mode="arabic"))
-
-        # === Translation ===
-        # Landscape
-        all_results.extend(run_workflow_demo(LANDSCAPE_PRESET["translation"][resolution], data))
-
-        # Story
-        all_results.extend(run_workflow_demo(STORY_PRESET["translation"][resolution], data))
-
-        # Square
-        all_results.extend(
-            create_square_demo(db, surah_id, SQUARE_PRESET["translation"][resolution], mode="translation")
-        )
+        # Each aspect ratio exposes all three modes at the chosen resolution.
+        # "arabic" mode keeps annotations visible (translation is transparent),
+        # matching the canonical reference scenarios.
+        for presets in (LANDSCAPE_PRESET, STORY_PRESET, SQUARE_PRESET):
+            for mode in ("default", "arabic", "translation"):
+                annotate = mode != "translation"
+                print(f"Rendering {mode} preset...")
+                all_results.extend(run_workflow_demo(presets[mode][RESOLUTION], annotate=annotate))
 
         # Save all results (glow is applied here in parallel)
         save_images(all_results, "output/demo")
