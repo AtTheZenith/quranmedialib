@@ -497,7 +497,11 @@ def test_draw_all_styles_pairwise_distinct() -> None:
     """Normal, bold, italic, and bold-italic must each render to unique pixels.
 
     Uses pixel hashes so a style that silently fails to render (0 pixel diff
-    against another variant) is detected immediately.
+    against another variant) is detected immediately. Pairwise hash comparison is
+    RELATIVE: it catches a style regressing toward another. It cannot detect
+    absolute corruption that preserves distinctness (e.g. a broken font sheet
+    rendering tofu in every mode). The absolute non-blank guard below closes
+    that gap; the canonical pixel-diff scenarios give cross-version coverage.
     """
     cfg = TextConfig(font_size=36, max_width=500)
     word = "Distinct"
@@ -516,10 +520,31 @@ def test_draw_all_styles_pairwise_distinct() -> None:
         f"Expected all styles to render distinctly, got duplicate pixels: {hashes}"
     )
 
+    # Absolute guard: a wholesale failure must not pass just because the four
+    # styles still hash differently while rendering blank/tofu.
+    for name, img in renders.items():
+        assert _ink_count(img) > 0, f"style '{name}' rendered blank ({hashes[name][:16]})"
+
     output_dir = "./output/test/timage/styles"
     os.makedirs(output_dir, exist_ok=True)
     for name, img in renders.items():
         img.save(f"{output_dir}/{name}.png")
+
+
+def test_draw_timage_deterministic() -> None:
+    """Same input must produce byte-identical output across runs.
+
+    This is the assumption the golden pixel-diff system relies on. Non-determinism
+    here would make reference updates and cross-version `compare` reports flaky.
+    """
+    cfg = TextConfig(font_size=36, max_width=500)
+    text = "#b#ffffffff#Bold# #i#00ff00ff#Italic# #bi#0000ffff#Both#"
+
+    first = get_timage(text, cfg)
+    second = get_timage(text, cfg)
+
+    assert first is not None and second is not None
+    assert first.tobytes() == second.tobytes(), "get_timage output is not deterministic"
 
 
 def test_draw_detects_tag_color_on_canvas() -> None:
