@@ -44,10 +44,11 @@ from quranmedialib import (
     VerseWorkflow,
 )
 from quranmedialib import __version__ as qml_version
+from quranmedialib.modules.image import color, glow, pad
 from quranmedialib.modules.timage import get_timage
-from quranmedialib.modules.vimage import VImage
+from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
 from quranmedialib.modules.wimage import get_wimage
-from quranmedialib.types import VerseConfig, WordItem
+from quranmedialib.types import Padding, VerseConfig, WordItem
 
 type Aspect = str
 type Mode = str
@@ -554,6 +555,110 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         },
         expected_pages=1,
     ),
+    # ── Module-level: image primitives (color / pad / glow) ────────────────
+    # Cover the standalone utility functions in modules/image.py, which have
+    # no call sites in the render pipeline and previously had zero golden refs.
+    Scenario(
+        name="image_color",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "image",
+            "op": "color",
+            "text": "الله",
+            "color": (255, 215, 0, 255),
+        },
+        expected_pages=1,
+    ),
+    Scenario(
+        name="image_pad",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "image",
+            "op": "pad",
+            "text": "بِسْمِ",
+            "padding": [20, 20, 20, 20],
+            "color": (0, 0, 0, 0),
+        },
+        expected_pages=1,
+    ),
+    Scenario(
+        name="image_glow_default",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "image",
+            "op": "glow",
+            "text": "الله",
+            "strength": 1.0,
+            "radius": 50,
+            "quality": "balanced",
+        },
+        expected_pages=1,
+    ),
+    Scenario(
+        name="image_glow_quality",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "image",
+            "op": "glow_quality",
+            "text": "الله",
+            "strength": 1.5,
+            "radius": 30,
+        },
+        expected_pages=3,
+    ),
+    Scenario(
+        name="image_glow_comparison",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "image",
+            "op": "glow_comparison",
+            "text": "الله",
+            "strength": 1.0,
+            "radius": 50,
+        },
+        expected_pages=1,
+    ),
+    # ── Module-level: VImage Quranic stop-sign page breaks ─────────────────
+    # W3 carries a stop sign, so a 2-row page pulls the break back to W3
+    # (instead of greedy W4). Removing the stop-sign logic changes pixels.
+    Scenario(
+        name="vimage_stop_signs",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={
+            "module": "vimage",
+            "items": [
+                ("W1", 50, 40),
+                ("W2", 50, 40),
+                (f"W3{QURANIC_STOP_SIGNS[0]}", 50, 40),
+                ("W4", 50, 40),
+                ("W5", 50, 40),
+            ],
+            "content_width": 110,
+            "word_spacing": 10,
+            "row_spacing": 20,
+            "balanced": False,
+            "rows_per_page": 2,
+        },
+        expected_pages=2,
+    ),
 ]
 
 
@@ -614,8 +719,60 @@ def _render_module_pages(scenario: Scenario) -> Iterator[Image.Image]:
             balanced_wrapping=scenario.params["balanced"],
         )
         vimg = VImage(items, cfg, scenario.params["content_width"])
-        rows, _ = vimg.get_page_chunk(0, len(items))
-        yield vimg.render(preset.word, rows_to_render=rows, mode="RGBA")
+        rows_per_page = scenario.params.get("rows_per_page")
+        if rows_per_page is None:
+            rows, _ = vimg.get_page_chunk(0, len(items))
+            yield vimg.render(preset.word, rows_to_render=rows, mode="RGBA")
+            return
+        # Multi-page rendering honoring Quranic stop-sign page breaks.
+        # NOTE: get_page_chunk returns `consumed` relative to `pos`.
+        pos = 0
+        while pos < len(items):
+            rows, consumed = vimg.get_page_chunk(pos, rows_per_page)
+            yield vimg.render(preset.word, rows_to_render=rows, mode="RGBA")
+            if consumed <= 0:
+                break
+            pos += consumed
+
+    elif module == "image":
+        op = scenario.params["op"]
+        # Base is a real rendered Arabic word, padded so glow exercises the
+        # RGBA "glow behind content" composite path (transparent borders).
+        base = pad(get_wimage(scenario.params["text"], preset.word), Padding(20, 20, 20, 20))
+
+        if op == "color":
+            yield color(base, scenario.params["color"])
+        elif op == "pad":
+            yield pad(base, Padding(*scenario.params["padding"]), scenario.params["color"])
+        elif op == "glow":
+            yield glow(
+                base,
+                strength=scenario.params["strength"],
+                radius=scenario.params["radius"],
+                quality=scenario.params["quality"],
+            )
+        elif op == "glow_quality":
+            for quality in ("fast", "balanced", "quality"):
+                yield glow(
+                    base,
+                    strength=scenario.params["strength"],
+                    radius=scenario.params["radius"],
+                    quality=quality,
+                )
+        elif op == "glow_comparison":
+            comparison = Image.new("RGBA", (base.width * 4, base.height), (0, 0, 0, 0))
+            comparison.paste(base, (0, 0))
+            for i, quality in enumerate(("fast", "balanced", "quality"), start=1):
+                glowed = glow(
+                    base,
+                    strength=scenario.params["strength"],
+                    radius=scenario.params["radius"],
+                    quality=quality,
+                )
+                comparison.paste(glowed, (base.width * i, 0))
+            yield comparison
+        else:
+            raise ValueError(f"Unknown image op: {op}")
 
     else:
         raise ValueError(f"Unknown module type: {module}")
