@@ -136,6 +136,8 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "psutil" },
+    { name = "pytest" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -148,7 +150,11 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "psutil", specifier = ">=7.2.2" }]
+dev = [
+    { name = "psutil", specifier = ">=7.2.2" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "ruff", specifier = ">=0.5.0" },
+]
 
 [[package]]
 name = "ruff"
