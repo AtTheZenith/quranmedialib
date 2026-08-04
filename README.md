@@ -190,6 +190,32 @@ Custom assets can be loaded via:
 - `FontResource.from_path("path/to/font.ttf")`
 - `DatabaseConfig.from_path("path/to/db.sqlite")`
 
+#### Rich Text Formatting
+Translation text supports rich styling through inline tags.
+
+**Syntax:**: `#<style>#<color>#text#` — the closing `#` is mandatory.
+
+| Part | Value |
+|------|-------|
+| `style` | `b` (bold), `i` (italic), or `bi` (bold-italic) |
+| `color` | 6-digit (`RRGGBB`) or 8-digit (`RRGGBBAA`) hex |
+| `text` | The content to render |
+
+Examples:
+```python
+"#b#ff0000ff#Bold red text#"
+"#i#00ff00#Italic green text#"
+"#bi#0000ffff#Bold italic blue text#"
+```
+
+A `#` that does not form a valid tag (e.g. a missing color or a stray hash) is
+rendered literally and logs a `WARNING` that points out the malformed tag and the
+expected syntax. Suppress that warning with
+`TextConfig(ignore_non_token_hashtags=True)`, which still parses valid tags while
+leaving the rest as literal text.
+
+See the [`API reference`](docs/api_reference.md) for the full `TextConfig` surface.
+
 ### Advanced Workflows
 
 #### `IsolateWordsWorkflow`
