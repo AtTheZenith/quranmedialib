@@ -421,6 +421,35 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         params={"module": "timage", "text": "#b#ffffffff#Bold# and #b#ff0000ff#Red# text"},
         expected_pages=1,
     ),
+    # Granular style variants (unit-tested in test_timage.py) promoted to
+    # absolute golden refs so `compare` attributes pixel changes precisely.
+    Scenario(
+        name="timage_styles_italic",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "timage", "text": "#i#00ff00ff#Italic Green# text"},
+        expected_pages=1,
+    ),
+    Scenario(
+        name="timage_styles_bolditalic",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "timage", "text": "#bi#0000ffff#Bold Italic Blue# text"},
+        expected_pages=1,
+    ),
+    Scenario(
+        name="timage_color_six",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="module",
+        params={"module": "timage", "text": "#b#ff0000#Red 6-digit# text"},
+        expected_pages=1,
+    ),
     # ── Module-level: VImage ───────────────────────────────────────────────
     Scenario(
         name="vimage_layout_simple",
@@ -1324,6 +1353,9 @@ def cli() -> int:
             if not args.scenario:
                 pytest_args = ["tests/", "-x", "-q", "--tb=short"]
                 if args.unit:
+                    # Pure unit gate: excludes the golden-contract test, which
+                    # needs git-ignored reference images (developer-local only).
+                    pytest_args.append("--ignore=tests/test_validation.py")
                     print("\n  Running unit tests only...")
                 else:
                     pytest_args.extend(["--ignore=tests/test_validation.py"])

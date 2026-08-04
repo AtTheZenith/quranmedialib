@@ -697,6 +697,24 @@ def test_feature() -> None:
     # Save output (for image tests)
 ```
 
+### 17.5 Two-Layer Validation Philosophy
+
+Rendering correctness is guarded by **two complementary layers** — never rely on one alone.
+
+- **Relative unit assertions** (in `tests/modules/`, e.g. `test_timage.py`): pairwise-distinct pixel hashes, ink counts, exact-color presence. Fast; catch one style silently regressing toward another.
+- **Absolute golden pixel-diff** (`quranmedialib.check` canonical scenarios + `tests/test_validation.py`): snapshot known-good output per version. Catch corruption that preserves relative distinctness — e.g. a broken font sheet rendering tofu in *every* mode, or every color rendering wrong. All four modes still hash differently; only the golden ref knows they are wrong.
+
+Rules:
+
+- **Every relative render check pairs with at least one absolute bound** — a non-blank / expected-color assertion. A pairwise-distinct test that passes while every render is blank/tofu is a bug in the test.
+- **Determinism is a unit guarantee.** Same input must produce byte-identical output (`img.tobytes()`). The golden system assumes this; a non-deterministic render makes `update`/`compare` flaky. Assert it in unit tests.
+- **Canonical scenarios are granular**: one render path per scenario. `check compare vA vB` then attributes a pixel change to exactly what it affects; every scenario reporting `0.0%` is how you confirm nothing unexpected broke.
+- **Golden refs are developer-local** (git-ignored, `.gitignore` `references/`). Workflow for an intentional rendering change:
+  1. `uv run -m quranmedialib.check update` — regenerate the current version's refs.
+  2. `uv run -m quranmedialib.check compare vA vB` — review which scenarios changed and why.
+  3. Investigate any diff you did not intend.
+- **The CI / pre-push gate is ref-free.** `uv run -m quranmedialib.check test --unit` excludes `tests/test_validation.py` (it needs git-ignored refs), so a fresh checkout never fails on missing golden images. Golden validation happens locally via `check test`.
+
 ---
 
 ## 18. Public API and Exports
