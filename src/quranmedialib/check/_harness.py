@@ -418,7 +418,7 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         mode="default",
         resolution="1080p",
         workflow_type="module",
-        params={"module": "timage", "text": "#b#Bold#b# and #ff0000#Red#ff0000# text"},
+        params={"module": "timage", "text": "#b#ffffffff#Bold# and #b#ff0000ff#Red# text"},
         expected_pages=1,
     ),
     # ── Module-level: VImage ───────────────────────────────────────────────

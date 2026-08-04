@@ -614,6 +614,7 @@ class TextConfig:
     max_width: int | None = None
     alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER
     balanced_wrapping: bool = True
+    ignore_non_token_hashtags: bool = False
     highlight_font_path: Path | str | FontResource | None = None
     highlight_font_size: int | None = None
     highlight_color: Color | None = None
