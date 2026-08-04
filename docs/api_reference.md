@@ -66,7 +66,7 @@ Isolates individual words for study tools.
 - **`get_iterator(surah: int, verse_words: list[str], translations: list[str], ayah: int | None = None, wbw_translations: list[str] | None = None, **kwargs)`**
 - **Keyword Args**:
     - `annotate` (bool, default `True`).
-    - `highlight_style` (str, default `"#b#"`).
+    - `highlight_style` (str, default `"#b#ffd700ff#"`).
 - **Raises**: `ValidationError` (empty words or out of range).
 
 ## Configuration & Presets
@@ -91,7 +91,7 @@ Resolution-independent layout primitives inspired by Roblox UDim2.
 - `FrameConfig`: Frame-level settings (`background_color`, `max_width`, `image_height`, `aspect_ratio`). No layout logic — position is handled by `PresetLayout` + `LayoutEngine`.
 - `VerseConfig`: Verse-level layout settings (word spacing, row spacing, max rows per page, balanced wrapping).
 - `WordConfig`: Font size, colors, and word-level padding.
-- `TextConfig`: Translation font and style settings.
+- `TextConfig`: Translation font and style settings. Rich text tags (`#b|i|bi#<hex6|hex8>#text#`) are parsed per segment; stray `#` characters not forming a valid tag log a warning. Set `ignore_non_token_hashtags=True` to silence that warning and render stray hashtags as literal text.
 - `FontResource`: Handles font file resolution.
 
 ### Layout Engine (`modules/layout_engine.py`)

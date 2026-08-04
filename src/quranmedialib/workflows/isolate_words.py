@@ -52,7 +52,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             wbw_translations: List of word-by-word translations (optional).
             **kwargs:
                 - annotate: bool (default: True)
-                - highlight_style: str (default: "#b#")
+                - highlight_style: str (default: "#b#ffd700ff#")
 
         Yields:
             list[Image.Image]: A list of pages for each isolated state.
@@ -68,7 +68,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
             raise ValidationError("verse_words must be a non-empty list")
 
         annotate = kwargs.get("annotate", True)
-        highlight_style = kwargs.get("highlight_style", "#b#")
+        highlight_style = kwargs.get("highlight_style", "#b#ffd700ff#")
 
         # Warn about wbw_translations length mismatch
         if wbw_translations and len(wbw_translations) != len(verse_words):
@@ -119,7 +119,7 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 formatted_translations.append(format_isolation_text(parsed_trans, i, norm_highlight))
             else:
                 # No matching segment - create transparent placeholder text
-                formatted_translations.append("##00000000#(no translation)#")
+                formatted_translations.append("#b#00000000#(no translation)#")
 
         for i in range(total_items):
             # Create image list efficiently: use list comprehension with index check

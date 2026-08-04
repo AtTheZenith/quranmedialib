@@ -2,6 +2,7 @@
 Tests for the timage module.
 """
 
+import hashlib
 import os
 
 import pytest
@@ -16,7 +17,7 @@ from quranmedialib.modules.timage import (
     normalize_highlight_style,
     prepare_translation_segments,
 )
-from quranmedialib.types import TextConfig
+from quranmedialib.types import TextConfig, get_font_path
 
 
 def _verify_pyramid(text: str, max_width: int, filename: str | None = None):
@@ -277,3 +278,289 @@ def test_timage_none_max_width() -> None:
     result = get_timage("test text with no max width", config)
     assert result is not None
     assert result.size[0] > 0
+
+
+# === Rich Text Parsing: Return-Value Tests ===
+
+
+def _parse(text: str, config: TextConfig | None = None):
+    """Parse rich text into StyledWords using a throwaway draw surface."""
+    cfg = config or TextConfig(font_size=36, max_width=500)
+    dummy_img = Image.new("RGBA", (1, 1))
+    draw = ImageDraw.Draw(dummy_img)
+    return _parse_rich_text(text, cfg, draw)
+
+
+def test_parse_plain_text_default_styling() -> None:
+    """Plain text yields one StyledWord per token with default color and no bold."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("Hello world", cfg)
+
+    assert [w.text for w in words] == ["Hello", " ", "world"]
+    assert all(w.color == cfg.color for w in words)
+    assert all(not w.simulate_bold for w in words)
+    assert all(str(w.font.path) == str(cfg.font_path) for w in words)
+
+
+def test_parse_bold_tag_sets_simulate_bold() -> None:
+    """A #b# tag must produce words flagged for bold simulation with the tag color."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("#b#ff0000ff#Bold#", cfg)
+
+    assert len(words) == 1
+    assert words[0].text == "Bold"
+    assert words[0].simulate_bold is True
+    assert words[0].color == (255, 0, 0, 255)
+
+
+def test_parse_italic_tag_uses_italic_font() -> None:
+    """An #i# tag must use the configured italic font and tag color."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("#i#00ff00ff#Italic#", cfg)
+
+    assert len(words) == 1
+    assert words[0].text == "Italic"
+    assert words[0].simulate_bold is False
+    assert words[0].color == (0, 255, 0, 255)
+    assert str(words[0].font.path) == str(cfg.italic_font_path)
+
+
+def test_parse_italic_respects_custom_italic_font_path() -> None:
+    """Italic styling must honor config.italic_font_path, not a hardcoded naming rule."""
+    cfg = TextConfig(font_size=36, max_width=500, italic_font_path=str(get_font_path("inter.ttf")))
+    words = _parse("#i#00ff00ff#Italic#", cfg)
+
+    assert str(words[0].font.path) == str(cfg.italic_font_path)
+
+
+def test_parse_combined_bold_italic_tag() -> None:
+    """A #bi# tag must apply italic font plus bold simulation with the tag color."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("#bi#0000ffff#Bold Italic#", cfg)
+
+    assert [w.text for w in words] == ["Bold", " ", "Italic"]
+    assert all(w.simulate_bold for w in words)
+    assert all(w.color == (0, 0, 255, 255) for w in words)
+    assert all(str(w.font.path) == str(cfg.italic_font_path) for w in words)
+
+
+def test_parse_six_digit_hex_color() -> None:
+    """A 24-bit (6-digit) color must be accepted and rendered fully opaque."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("#b#ff0000#Red#", cfg)
+
+    assert len(words) == 1
+    assert words[0].text == "Red"
+    assert words[0].simulate_bold is True
+    assert words[0].color == (255, 0, 0, 255)
+
+
+def test_parse_mandatory_closing_tag_enforced() -> None:
+    """An unclosed tag must not be treated as a rich text tag."""
+    words = _parse("plain #b#ff0000ff#unclosed", TextConfig(font_size=36, max_width=500))
+
+    assert all(not w.simulate_bold for w in words)
+    assert "#b#ff0000ff#unclosed" in "".join(w.text for w in words)
+
+
+def test_format_isolation_text_emits_modern_tags() -> None:
+    """Isolation output must use the modern grammar: one independent tag per word."""
+    segments = prepare_translation_segments(["word1", "word2", "word3"])
+    result = format_isolation_text(segments, target_index=1, highlight_style="#b#FF0000#")
+
+    assert result == "#b#00000000#word1# #b#FF0000#word2# #b#00000000#word3#"
+
+    # The emitted string must round-trip through the parser as separate words.
+    words = _parse(result)
+    assert [w.text for w in words] == ["word1", " ", "word2", " ", "word3"]
+    assert words[0].color == (0, 0, 0, 0)  # transparent placeholder
+    assert words[2].color == (255, 0, 0, 255)  # highlighted target
+    assert words[2].simulate_bold is True
+
+
+def test_normalize_highlight_style_preserves_explicit_color() -> None:
+    """An explicit 6- or 8-digit color in the highlight style must be preserved."""
+    assert normalize_highlight_style("#b#FF0000#") == "#b#FF0000#"
+    assert normalize_highlight_style("#b#ff0000ff#") == "#b#ff0000ff#"
+    assert normalize_highlight_style("#i#00ff00#") == "#i#00ff00#"
+
+
+def test_normalize_highlight_style_defaults_to_gold() -> None:
+    """Bare or missing styles must resolve to a full modern tag with the default gold color."""
+    assert normalize_highlight_style(None) == "#b#ffd700ff#"
+    assert normalize_highlight_style("#b#") == "#b#ffd700ff#"
+    assert normalize_highlight_style("#bi#") == "#bi#ffd700ff#"
+
+
+def test_draw_combined_bold_italic_differs_from_plain() -> None:
+    """Bold-italic text must render distinct from plain and from bold alone."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    bi_img = get_timage("#bi#ffffffff#Bold Italic#", cfg)
+    plain_img = get_timage("Bold Italic", cfg)
+    bold_img = get_timage("#b#ffffffff#Bold Italic#", cfg)
+
+    assert bi_img is not None and plain_img is not None and bold_img is not None
+    assert list(bi_img.get_flattened_data()) != list(plain_img.get_flattened_data())
+    assert list(bi_img.get_flattened_data()) != list(bold_img.get_flattened_data())
+    assert _ink_count(bi_img) > _ink_count(plain_img)
+
+
+def test_draw_six_digit_hex_color_applied() -> None:
+    """A 24-bit color tag must produce the opaque color on canvas."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    img = get_timage("#b#ff0000#Red#", cfg)
+
+    assert img is not None
+    red_pixels = [p for p in img.get_flattened_data() if p[3] != 0 and p[0] > 200 and p[1] < 60 and p[2] < 60]
+    assert len(red_pixels) > 0
+
+
+def test_parse_mixed_plain_and_styled_segments() -> None:
+    """Mixed text must preserve ordering and per-segment styling."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    words = _parse("pre #b#ff0000ff#bold# #i#00ff00ff#ital# post", cfg)
+
+    assert [w.text for w in words] == ["pre", " ", "bold", " ", "ital", " ", "post"]
+    assert words[2].simulate_bold is True
+    assert words[2].color == (255, 0, 0, 255)
+    assert words[4].simulate_bold is False
+    assert words[4].color == (0, 255, 0, 255)
+    assert str(words[4].font.path) == str(cfg.italic_font_path)
+    assert words[0].color == cfg.color and words[-1].color == cfg.color
+
+
+def test_parse_tag_text_preserves_internal_whitespace() -> None:
+    """Spaces inside a tag must be preserved as explicit space tokens."""
+    words = _parse("#b#ff0000ff#Bold Red Text#")
+    assert [w.text for w in words] == ["Bold", " ", "Red", " ", "Text"]
+    assert all(w.simulate_bold for w in words)
+    assert all(w.color == (255, 0, 0, 255) for w in words)
+
+
+# === Rich Text Rendering: What Is Drawn ===
+
+
+def _ink_count(img: Image.Image) -> int:
+    """Count non-transparent pixels."""
+    return sum(1 for p in img.get_flattened_data() if p[3] != 0)
+
+
+def test_draw_bold_differs_from_plain() -> None:
+    """Bold text must render visibly bolder than the same plain text."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    bold_img = get_timage("#b#ffffffff#Bold#", cfg)
+    plain_img = get_timage("Bold", cfg)
+
+    assert bold_img is not None and plain_img is not None
+    assert bold_img.size == plain_img.size
+    assert list(bold_img.get_flattened_data()) != list(plain_img.get_flattened_data())
+    assert _ink_count(bold_img) > _ink_count(plain_img)
+
+
+def test_draw_italic_differs_from_plain() -> None:
+    """Italic text must render with slanted glyphs, distinct from plain."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    italic_img = get_timage("#i#ffffffff#Italic#", cfg)
+    plain_img = get_timage("Italic", cfg)
+
+    assert italic_img is not None and plain_img is not None
+    assert list(italic_img.get_flattened_data()) != list(plain_img.get_flattened_data())
+
+
+def test_draw_tag_color_applied_to_pixels() -> None:
+    """The tag color must be the color actually drawn on the canvas."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    img = get_timage("#b#ff0000ff#Bold#", cfg)
+
+    assert img is not None
+    red_pixels = [p for p in img.get_flattened_data() if p[3] != 0 and p[0] > 200 and p[1] < 60 and p[2] < 60]
+    assert len(red_pixels) > 0
+
+
+def test_draw_mixed_line_keeps_bold_segment_bolder() -> None:
+    """In a mixed line, the bold segment must render bolder than the plain segments."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    mixed_img = get_timage("#b#ffffffff#Bold# plain", cfg)
+    plain_img = get_timage("Bold plain", cfg)
+
+    assert mixed_img is not None and plain_img is not None
+    assert list(mixed_img.get_flattened_data()) != list(plain_img.get_flattened_data())
+    assert _ink_count(mixed_img) > _ink_count(plain_img)
+
+
+def _pixel_hash(img: Image.Image) -> str:
+    """SHA-256 of the raw pixel bytes. Fast whole-image fingerprint."""
+    return hashlib.sha256(img.tobytes()).hexdigest()
+
+
+def test_draw_all_styles_pairwise_distinct() -> None:
+    """Normal, bold, italic, and bold-italic must each render to unique pixels.
+
+    Uses pixel hashes so a style that silently fails to render (0 pixel diff
+    against another variant) is detected immediately.
+    """
+    cfg = TextConfig(font_size=36, max_width=500)
+    word = "Distinct"
+
+    renders = {
+        "plain": get_timage(word, cfg),
+        "b": get_timage("#b#ffffffff#Distinct#", cfg),
+        "i": get_timage("#i#ffffffff#Distinct#", cfg),
+        "bi": get_timage("#bi#ffffffff#Distinct#", cfg),
+    }
+
+    assert all(v is not None for v in renders.values())
+
+    hashes = {name: _pixel_hash(img) for name, img in renders.items()}
+    assert len(set(hashes.values())) == len(renders), (
+        f"Expected all styles to render distinctly, got duplicate pixels: {hashes}"
+    )
+
+    output_dir = "./output/test/timage/styles"
+    os.makedirs(output_dir, exist_ok=True)
+    for name, img in renders.items():
+        img.save(f"{output_dir}/{name}.png")
+
+
+def test_draw_detects_tag_color_on_canvas() -> None:
+    """The rendered canvas must contain pixels in the exact tag color."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    img = get_timage("#b#123456ff#Colored#", cfg)
+
+    assert img is not None
+    pixels = img.get_flattened_data()
+    exact = (0x12, 0x34, 0x56, 0xFF)
+    matching = [p for p in pixels if p == exact]
+    assert matching, "No pixel matched the exact tag color (0x123456ff)"
+
+
+def test_non_token_hashtags_warn_by_default(caplog) -> None:
+    """Stray '#' not regexed into rich tags must produce a warning by default."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    get_timage("plain #b#ff0000ff#Bold# and #ff0000#stray# text", cfg)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "not part of a rich text tag" in warnings[0].message
+
+
+def test_non_token_hashtags_suppressed_when_ignored(caplog) -> None:
+    """ignore_non_token_hashtags=True must silence the warning yet still parse tags."""
+    cfg = TextConfig(font_size=36, max_width=500, ignore_non_token_hashtags=True)
+    img = get_timage("plain #b#ff0000ff#Bold# and #ff0000#stray# text", cfg)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert not warnings, f"Expected no warnings, got: {warnings}"
+    assert img is not None
+    # Valid tags must still be parsed and rendered with their styling.
+    red_pixels = [p for p in img.get_flattened_data() if p[3] != 0 and p[0] > 200 and p[1] < 60 and p[2] < 60]
+    assert len(red_pixels) > 0
+
+
+def test_no_warning_for_clean_rich_text(caplog) -> None:
+    """Fully valid rich text must not trigger the stray-hashtag warning."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    get_timage("#b#ffffffff#Bold# and #b#ff0000ff#Red# text", cfg)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert not warnings, f"Expected no warnings, got: {warnings}"

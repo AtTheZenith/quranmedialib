@@ -34,15 +34,42 @@ __all__ = [
 def normalize_highlight_style(
     highlight_segments: str | list[str] | None,
 ) -> str:
-    """Normalizes various highlight input formats into a style string.
+    """Normalizes various highlight input formats into a valid rich text tag body.
 
-    Legacy API expects string return (e.g. '#b#').
+    Returns a style payload of the form ``#<b|i|bi>#<hex>#`` (ready to be followed
+    by text and a closing ``#``), always carrying an explicit color so downstream
+    parsing never falls back to a legacy form.
+
+    Args:
+        highlight_segments: A style string, list, or None.
+
+    Returns:
+        str: A modern tag prefix such as ``#b#ffd700ff#``.
     """
     if highlight_segments is None:
-        return "#b#"
-    if isinstance(highlight_segments, str):
-        return highlight_segments
-    return str(highlight_segments)
+        return _DEFAULT_HIGHLIGHT_PREFIX
+
+    raw = highlight_segments if isinstance(highlight_segments, str) else str(highlight_segments)
+    raw = raw.strip()
+
+    # Accept modern full tags (with or without color) and bare style prefixes.
+    m = _RE_TAG_SUFFIX.match(raw)
+    if m is None:
+        return _DEFAULT_HIGHLIGHT_PREFIX
+
+    style, color = m.group(1), m.group(2)
+    if not style:
+        style = "b"
+    if not color:
+        color = _DEFAULT_HIGHLIGHT_HEX
+    return f"#{style}#{color}#"
+
+
+# Pattern for a tag prefix: #style# or #style#color#
+_RE_TAG_SUFFIX = re.compile(r"^#([bi]*)#(?:([0-9a-fA-F]{6}|[0-9a-fA-F]{8})#)?$")
+
+_DEFAULT_HIGHLIGHT_HEX = "ffd700ff"  # matches TextConfig.highlight_color (255, 215, 0, 255)
+_DEFAULT_HIGHLIGHT_PREFIX = f"#b#{_DEFAULT_HIGHLIGHT_HEX}#"
 
 
 def prepare_translation_segments(text: str | list[str] | None) -> list[str]:
@@ -58,28 +85,47 @@ def format_isolation_text(
     *args: Any,
     **kwargs: Any,
 ) -> str:
-    """Formats verse text for word isolation. Accepts list/str and target_index kwarg."""
+    """Formats verse text for word isolation using the modern rich text grammar.
+
+    Every word is emitted as an independent tag; the target word is highlighted
+    and the remaining words are made transparent so only the target renders.
+
+    Args:
+        verse_text: The verse text as a string or list of words.
+        target_word_index: Index of the word to highlight.
+        *args: Positional highlight_style (legacy compatibility).
+        **kwargs:
+            - target_index: Alias for target_word_index.
+            - highlight_style: Modern tag prefix (e.g. ``#b#ffd700ff#``).
+
+    Returns:
+        str: A rich text string of the form ``<highlighted> <transparent> ...``.
+
+    Raises:
+        ValueError: If target_index is negative or out of bounds.
+    """
     t_idx = kwargs.get("target_index", target_word_index)
-    if t_idx == -1 and args:
+    if t_idx == -1 and args and isinstance(args[0], int):
         t_idx = args[0]
 
-    style = kwargs.get("highlight_style", "#b#")
-    if not isinstance(style, str):
-        style = "#b#"
+    style = kwargs.get("highlight_style")
+    if not isinstance(style, str) and args and isinstance(args[0], str):
+        style = args[0]
+    style = normalize_highlight_style(style)
 
-    # Handle list input
     words = verse_text if isinstance(verse_text, list) else str(verse_text).split()
     if t_idx < 0:
         raise ValueError("target_index must be non-negative")
     if t_idx >= len(words):
         raise ValueError(f"target_index {t_idx} is out of bounds for text with {len(words)} words")
 
-    # Apply brackets and style
-    words = list(words)
-    words[t_idx] = f"[{words[t_idx]}]"
-
-    result = " ".join(words)
-    return f"{style}{result}" if style not in result else result
+    parts = []
+    for i, word in enumerate(words):
+        if i == t_idx:
+            parts.append(f"{style}{word}#")
+        else:
+            parts.append(f"#b#00000000#{word}#")
+    return " ".join(parts)
 
 
 def get_timage(
@@ -165,39 +211,42 @@ def get_timage(
         batch_words = []
         last_style = None
 
-        for word in line.words:
-            f = word.font
-            c = word.color
-            style = (f, c)
-
-            if last_style is not None and style != last_style:
-                # Flush batch
-                txt = "".join(w.text for w in batch_words)
-                sf = last_style[0]
-                sa = batch_words[0].ascent
-                _draw_text(
-                    (curr_x, current_y + (max_ascent - sa)),
-                    txt,
-                    font=sf,
-                    fill=255 if use_mask else last_style[1],
-                )
-                # Use font.getlength for accurate batch advance
-                curr_x += sf.getlength(txt)
-                batch_words = []
-
-            batch_words.append(word)
-            last_style = style
-
-        if batch_words and last_style:
+        def _flush_batch() -> None:
+            """Draws the accumulated batch with its style, then advances the cursor."""
+            nonlocal curr_x
+            if not batch_words:
+                return
             txt = "".join(w.text for w in batch_words)
             sf = last_style[0]
             sa = batch_words[0].ascent
+            simulate_bold = last_style[2]
+            stroke_width = 1 if simulate_bold else 0
+            stroke_fill = 255 if (use_mask and simulate_bold) else last_style[1]
             _draw_text(
                 (curr_x, current_y + (max_ascent - sa)),
                 txt,
                 font=sf,
                 fill=255 if use_mask else last_style[1],
+                stroke_width=stroke_width,
+                stroke_fill=stroke_fill if simulate_bold else None,
             )
+            curr_x += sf.getlength(txt)
+            batch_words.clear()
+
+        for word in line.words:
+            f = word.font
+            c = word.color
+            simulate_bold = word.simulate_bold
+            style = (f, c, simulate_bold)
+
+            if last_style is not None and style != last_style:
+                _flush_batch()
+
+            batch_words.append(word)
+            last_style = style
+
+        if batch_words:
+            _flush_batch()
 
         current_y += l_height + l_spacing
 
@@ -238,18 +287,21 @@ def _get_text_metrics(token: str, font_path: str, font_size: int) -> tuple[float
     return w, h, ascent
 
 
-# Pre-compiled regex for tag stripping to avoid repeated compilation in hot path
-_RE_STRIP_TAGS = re.compile(r"#[^#]+#")
-
-
 def _hex_to_rgba(hex_str: str) -> tuple[int, int, int, int]:
-    """Converts 8-digit RGBA hex string to RGBA tuple."""
+    """Converts a 6- or 8-digit hex string to an RGBA tuple.
+
+    8-digit input is interpreted as RRGGBBAA (32-bit); 6-digit input is
+    interpreted as RRGGBB (24-bit) with full opacity.
+    """
+    if len(hex_str) == 6:
+        hex_str += "ff"
     return tuple(int(hex_str[i : i + 2], 16) for i in (0, 2, 4, 6))
 
 
 # Regex for structured tags: #style#color#text#
-# Group 1: style (b|i), Group 2: color (8 hex), Group 3: text
-_RE_RICH_TAG = re.compile(r"#(b|i)#([0-9a-fA-F]{8})#([^#]+)#")
+# Group 1: style (b, i, or combined bi), Group 2: color (6 or 8 hex), Group 3: text
+# The closing '#' is mandatory per the modern rich text spec.
+_RE_RICH_TAG = re.compile(r"#([bi]+)#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})#([^#]+)#")
 
 
 def _parse_rich_text(
@@ -259,8 +311,9 @@ def _parse_rich_text(
 ) -> list[StyledWord]:
     """Tokenizes and measures text, parsing structured #style#color#text# tags.
 
-    The parser identifies tags in the format #style#color#text#, where style is 'b' or 'i',
-    color is an 8-digit RGBA hex string, and text is the content to render.
+    The parser identifies tags in the format #style#color#text#, where style is
+    'b', 'i', or 'bi', color is a 6- or 8-digit hex string, and text is the
+    content to render. The closing '#' is mandatory.
     """
     s_text = str(text)
 
@@ -303,8 +356,20 @@ def _parse_rich_text(
     c_norm = config.color
     font_norm = _load_font_base(f_norm_path, f_norm_size)
 
+    matches = list(_RE_RICH_TAG.finditer(s_text))
+
+    # Each valid tag consumes exactly 4 '#' (opening, after style, after color,
+    # closing). Any remaining '#' was not regexed into a rich tag.
+    unconsumed_hashes = s_text.count("#") - 4 * len(matches)
+    if unconsumed_hashes > 0 and not config.ignore_non_token_hashtags:
+        logger.warning(
+            "Found %d '#' character(s) not part of a rich text tag in: %r",
+            unconsumed_hashes,
+            s_text,
+        )
+
     last_pos = 0
-    for match in _RE_RICH_TAG.finditer(s_text):
+    for match in matches:
         if plain_segment := s_text[last_pos : match.start()]:
             for s in prepare_translation_segments(plain_segment):
                 w, h, a = _metrics(s, f_norm_path, f_norm_size)
@@ -318,22 +383,18 @@ def _parse_rich_text(
         tag_color = _hex_to_rgba(color_hex)
 
         # Determine font based on style
-        if style_code == "b":
-            # For bold, we use normal font but set simulate_bold=True
-            # unless a specific bold font is provided in config (not currently in TextConfig)
-            f_tag = font_norm
-            is_bold = True
-        elif style_code == "i":
-            # For italic, we use the italic font preset if available
-            # We attempt to load the italic version of the current font
+        wants_bold = "b" in style_code
+        wants_italic = "i" in style_code
+
+        if wants_italic:
+            # Italic (and bold-italic) use the configured italic font.
             try:
-                f_tag = _load_font_base(f_norm_path.replace(".ttf", "_italic.ttf"), f_norm_size)
+                f_tag = _load_font_base(str(config.italic_font_path), f_norm_size)
             except Exception:
                 f_tag = font_norm
-            is_bold = False
         else:
             f_tag = font_norm
-            is_bold = False
+        is_bold = wants_bold
 
         # Measure and create words for the tag text
         for s in prepare_translation_segments(tag_text):
