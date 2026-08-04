@@ -15,6 +15,26 @@ def create_dummy_word(text: str, width: int, height: int, color: Color | None = 
     return WordItem(image=img, text=text, color=color)
 
 
+def _render_pages(
+    items: list[WordItem],
+    rows_per_page: int,
+    word_config,
+    content_width: int = 110,
+) -> list[Image.Image]:
+    """Render all pages for items honoring page breaks (get_page_chunk is pos-relative)."""
+    verse_cfg = VerseConfig(word_spacing=10, row_spacing=20, balanced_wrapping=False)
+    vimg = VImage(items, verse_cfg, content_width)
+    pages: list[Image.Image] = []
+    pos = 0
+    while pos < len(items):
+        rows, consumed = vimg.get_page_chunk(pos, rows_per_page)
+        pages.append(vimg.render(word_config, rows_to_render=rows, mode="RGBA"))
+        if consumed <= 0:
+            break
+        pos += consumed
+    return pages
+
+
 def test_vimage_greedy_pack(word_config):
     """Test RTL layout and greedy row packing."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20, balanced_wrapping=False)
@@ -104,6 +124,40 @@ def test_vimage_stop_sign_chunking(word_config):
     # Pull back to W3. Consumed = 3.
     chunk, consumed = vimg_2.get_page_chunk(0, 2)
     assert consumed == 3
+
+
+def test_vimage_stop_sign_render_sensitive(word_config) -> None:
+    """Ref-free guard: multi-page render must honor Quranic stop-sign page breaks.
+
+    The golden scenario `vimage_stop_signs` only runs locally (refs are
+    git-ignored). This assertion runs in the ref-free unit gate, so removing the
+    stop-sign adjustment is caught in CI too: with the adjustment the W3 stop sign
+    pulls the page break back, so page 1 holds [W1, W2, W3] and differs from the
+    greedy [W1, W2, W3, W4] layout.
+    """
+    with_stop = [
+        create_dummy_word("W1", 50, 40),
+        create_dummy_word("W2", 50, 40),
+        create_dummy_word(f"W3{QURANIC_STOP_SIGNS[0]}", 50, 40),
+        create_dummy_word("W4", 50, 40),
+        create_dummy_word("W5", 50, 40),
+    ]
+    no_stop = [create_dummy_word(f"W{i}", 50, 40) for i in range(1, 6)]
+
+    pages_with_stop = _render_pages(with_stop, rows_per_page=2, word_config=word_config)
+    pages_no_stop = _render_pages(no_stop, rows_per_page=2, word_config=word_config)
+
+    assert len(pages_with_stop) == 2
+    assert len(pages_no_stop) == 2
+    # Page 1 = rows [W1, W2], [W3] -> 2 rows (100px); page 2 = [W4, W5] -> 1 row (40px).
+    assert pages_with_stop[0].height == 100 and pages_with_stop[1].height == 40
+
+    # Core guard: the stop-sign adjustment must change rendered page-1 pixels.
+    # If removed, page 1 becomes byte-identical to the greedy no-stop layout.
+    assert pages_with_stop[0].tobytes() != pages_no_stop[0].tobytes()
+    # Determinism: same input yields byte-identical output (the golden premise).
+    pages_with_stop_repeat = _render_pages(with_stop, rows_per_page=2, word_config=word_config)
+    assert pages_with_stop[0].tobytes() == pages_with_stop_repeat[0].tobytes()
 
 
 def test_vimage_bounding_box(word_config):
