@@ -304,6 +304,34 @@ def _hex_to_rgba(hex_str: str) -> tuple[int, int, int, int]:
 _RE_RICH_TAG = re.compile(r"#([bi]+)#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})#([^#]+)#")
 
 
+def _malformed_tag_snippets(s_text: str, matches: list[re.Match[str]]) -> list[str]:
+    """Return whitespace-delimited fragments that contain stray '#' characters.
+
+    Only '#' falling outside a valid tag's span is stray. Fragments are bounded
+    by whitespace or a valid tag boundary, so a correctly nested '#b#...#text#'
+    never leaks into a reported malformed tag.
+    """
+    covered: list[tuple[int, int]] = [(m.start(), m.end()) for m in matches]
+    snippets: list[str] = []
+
+    def covered_at(pos: int) -> bool:
+        return any(start <= pos < end for start, end in covered)
+
+    for i, char in enumerate(s_text):
+        if char != "#" or covered_at(i):
+            continue
+        left = i
+        while left > 0 and s_text[left - 1] != " " and not covered_at(left - 1):
+            left -= 1
+        right = i + 1
+        while right < len(s_text) and s_text[right] != " " and not covered_at(right):
+            right += 1
+        snippet = s_text[left:right]
+        if snippet not in snippets:
+            snippets.append(snippet)
+    return snippets
+
+
 def _parse_rich_text(
     text: object,
     config: TextConfig,
@@ -362,9 +390,12 @@ def _parse_rich_text(
     # closing). Any remaining '#' was not regexed into a rich tag.
     unconsumed_hashes = s_text.count("#") - 4 * len(matches)
     if unconsumed_hashes > 0 and not config.ignore_non_token_hashtags:
+        malformed = _malformed_tag_snippets(s_text, matches)
         logger.warning(
-            "Found %d '#' character(s) not part of a rich text tag in: %r",
-            unconsumed_hashes,
+            "Malformed rich text tag(s) %s (not part of a rich text tag) in: %r. "
+            "Expected '#<style>#<color>#text#' syntax, e.g. '#b#ff0000ff#Bold#'. "
+            "To suppress this warning, set TextConfig(ignore_non_token_hashtags=True).",
+            ", ".join(f"'{s}'" for s in malformed) or f"{unconsumed_hashes} character(s)",
             s_text,
         )
 

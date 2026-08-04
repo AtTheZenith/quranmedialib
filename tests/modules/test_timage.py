@@ -535,13 +535,29 @@ def test_draw_detects_tag_color_on_canvas() -> None:
 
 
 def test_non_token_hashtags_warn_by_default(caplog) -> None:
-    """Stray '#' not regexed into rich tags must produce a warning by default."""
+    """Stray '#' must warn, point out the malformed tag, and show correct usage."""
     cfg = TextConfig(font_size=36, max_width=500)
     get_timage("plain #b#ff0000ff#Bold# and #ff0000#stray# text", cfg)
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert len(warnings) == 1
-    assert "not part of a rich text tag" in warnings[0].message
+    message = str(warnings[0].message)
+    assert "not part of a rich text tag" in message
+    assert "'#ff0000#stray#'" in message
+    assert "#<style>#<color>#text#" in message
+    assert "ignore_non_token_hashtags" in message
+
+
+def test_non_token_hashtags_warn_points_out_missing_color(caplog) -> None:
+    """A tag missing its color must be flagged with the correct syntax hint."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    get_timage("see #b#Bold# here", cfg)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    message = str(warnings[0].message)
+    assert "'#b#Bold#'" in message
+    assert "#<style>#<color>#text#" in message
 
 
 def test_non_token_hashtags_suppressed_when_ignored(caplog) -> None:
