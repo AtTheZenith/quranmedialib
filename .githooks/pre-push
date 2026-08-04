@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Quality gate before any remote push: lint + unit tests (no pixel validation,
+# no benchmarks). Pixel validation stays a developer-local step because golden
+# references are not tracked in git; regenerate with `check update` on
+# intentional rendering changes.
+# Bypass with `git push --no-verify` or `SKIP_QC=1 git push`.
+set -eu
+
+[ -n "${SKIP_QC:-}" ] && exit 0
+
+echo "==> ruff check"
+if ! uv run ruff check src/ tests/ demo.py; then
+  echo "Lint failed. Fix before pushing, or bypass with SKIP_QC=1."
+  exit 1
+fi
+
+echo "==> quranmedialib.check test --unit"
+if ! uv run -m quranmedialib.check test --unit; then
+  echo "Unit tests failed. Fix before pushing, or bypass with SKIP_QC=1."
+  exit 1
+fi

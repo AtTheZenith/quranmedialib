@@ -15,29 +15,42 @@ We treat our code as a professional asset. We prioritize:
 ## Contribution Workflow
 
 ### 1. Setup Your Environment
-Ensure you have `uv` installed for consistent dependency management.
+Ensure you have `uv` installed for consistent dependency management. `uv sync` installs the project plus the dev toolchain (`ruff`, `pytest`, `psutil`).
 ```bash
 uv sync
 ```
 
-### 2. Baseline Verification
+### 2. Install Git Hooks (recommended)
+The repo ships quality-gate hooks in `.githooks/`. Enable them once:
+```bash
+git config core.hooksPath .githooks
+```
+- `commit-msg` — enforces Conventional Commits (see `AGENTS.md` section 21).
+- `pre-commit` — runs `ruff check` on staged Python files.
+- `pre-push` — runs `ruff check` on the full tree plus `quranmedialib.check test --unit` (unit tests only; pixel validation and benchmarks are excluded).
+
+Bypass on demand with `--no-verify` or `SKIP_QC=1`. On Windows (git-bash), ensure `uv` is on the PATH the hooks inherit.
+
+> **Pixel validation is developer-local.** Golden reference images are not tracked (see `.gitignore`), so CI and the pre-push hook do not gate on them. Run `uv run -m quranmedialib.check test` locally, and regenerate refs with `uv run -m quranmedialib.check update` whenever an intentional rendering change lands.
+
+### 3. Baseline Verification
 Before starting any work, establish your performance baseline:
 ```bash
 uv run -m pytest
 uv run -m pytest -v --b
 ```
 
-### 3. Implementation
+### 4. Implementation
 - Create a descriptive feature branch.
 - Follow the patterns in `AGENTS.md`.
 - Add tests for any new functionality in `tests/`.
 
-### 4. Final Quality Check
+### 5. Final Quality Check
 Before submitting, run the full suite:
-- **Linting**: `uv run -m ruff check .`
-- **Formatting**: `uv run -m ruff format .`
-- **Refactoring**: `sourcery review`
-- **Tests**: `uv run -m pytest -v`
+- **Linting**: `uv run ruff check src/ tests/ demo.py`
+- **Formatting**: `uv run ruff format src/ tests/ demo.py`
+- **Refactoring**: `uvx sourcery review .`
+- **Tests**: `uv run -m quranmedialib.check test --unit`
 - **Benchmarks**: `uv run -m pytest -v --b`
 
 ## 📝 Pull Request Guidelines

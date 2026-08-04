@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Fast lint gate on staged Python files only. Runs on every commit.
+# Bypass with `git commit --no-verify` or `SKIP_QC=1 git commit`.
+set -eu
+
+[ -n "${SKIP_QC:-}" ] && exit 0
+
+mapfile -t pyfiles < <(git diff --cached --name-only --diff-filter=ACM -- '*.py')
+if [ "${#pyfiles[@]}" -gt 0 ]; then
+  uv run ruff check "${pyfiles[@]}"
+fi

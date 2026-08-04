@@ -257,8 +257,8 @@ The `check` module is the canonical entrypoint for all regression testing. It wr
 | `benchmark` | Standalone performance benchmarks |
 
 ```bash
-# Install dev dependencies
-uv pip install -e ".[dev]"
+# Install dev dependencies (uv sync installs the dev group: ruff, pytest, psutil)
+uv sync
 
 # Full suite (pixel validation + benchmarks + unit tests)
 uv run -m quranmedialib.check test

@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies (dev group: ruff, pytest, psutil)
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check src/ tests/ demo.py
+
+      - name: Unit tests
+        run: uv run -m quranmedialib.check test --unit
