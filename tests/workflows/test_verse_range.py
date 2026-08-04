@@ -5,13 +5,12 @@ a range of verses sequentially with Arabic text and translations.
 """
 
 import os
+import tempfile
 
 import pytest
-
 from PIL import Image
 
-from quranmedialib import LANDSCAPE_PRESET, STORY_PRESET, DatabaseManager
-from quranmedialib.config import DEFAULT_PROCESS_LIMIT_MB
+from quranmedialib import LANDSCAPE_PRESET, DatabaseManager
 from quranmedialib.presets import build_layout_guide
 from quranmedialib.types import FrameConfig
 from quranmedialib.workflows.verse_range import (
@@ -199,7 +198,14 @@ class TestHandleOutput:
     def test_bytes_path_returns_tuples(self) -> None:
         """use_bytes=True with no output_dir returns (mode, size, bytes) tuples."""
         pages = [Image.new("RGBA", (100, 50), (255, 0, 0, 255))]
-        result = _handle_output(pages, ayah=1, output_dir=None, filename_prefix="t", save_fn=lambda *a: None, use_bytes=True)
+        result = _handle_output(
+            pages,
+            ayah=1,
+            output_dir=None,
+            filename_prefix="t",
+            save_fn=lambda *a: None,
+            use_bytes=True,
+        )
         assert len(result) == 1
         mode, size, data = result[0]
         assert mode == "RGBA"
@@ -210,7 +216,14 @@ class TestHandleOutput:
     def test_bytes_path_multi_page(self) -> None:
         """Multi-page verses produce one tuple per page."""
         pages = [Image.new("RGBA", (10, 10)), Image.new("RGB", (20, 20))]
-        result = _handle_output(pages, ayah=1, output_dir=None, filename_prefix="t", save_fn=lambda *a: None, use_bytes=True)
+        result = _handle_output(
+            pages,
+            ayah=1,
+            output_dir=None,
+            filename_prefix="t",
+            save_fn=lambda *a: None,
+            use_bytes=True,
+        )
         assert len(result) == 2
         assert result[0][0] == "RGBA"
         assert result[1][0] == "RGB"
@@ -218,8 +231,18 @@ class TestHandleOutput:
     def test_file_path_returns_strings(self) -> None:
         """output_dir set returns file paths regardless of use_bytes."""
         pages = [Image.new("RGBA", (10, 10))]
-        mock_save = lambda img, path, **kw: None
-        result = _handle_output(pages, ayah=5, output_dir="/tmp/out", filename_prefix="x", save_fn=mock_save, use_bytes=False)
+
+        def mock_save(img: Image.Image, path: str, **kw: object) -> None:
+            return None
+
+        result = _handle_output(
+            pages,
+            ayah=5,
+            output_dir="/tmp/out",
+            filename_prefix="x",
+            save_fn=mock_save,
+            use_bytes=False,
+        )
         assert isinstance(result, list)
         assert all(isinstance(p, str) for p in result)
 
@@ -288,9 +311,6 @@ class TestRenderVerseWorkerBytesPath:
             filename_prefix="test_bytes",
             use_bytes=True,
         )
-
-        import tempfile
-        import os
 
         with tempfile.TemporaryDirectory() as tmpdir:
             result_files = _render_verse_worker(

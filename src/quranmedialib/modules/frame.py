@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import warnings
-
 from PIL import Image
 
 from quranmedialib.types import Color, Layerable, ResolvedRect, VerticalAlignment
@@ -64,27 +62,6 @@ class Frame:
             self.image.alpha_composite(image, dest=(x, y))
         else:
             self.image.paste(image, (x, y))
-
-    def layer(
-        self,
-        image: Image.Image | Layerable,
-        alignment: tuple | None = None,
-        offset: tuple[int, int] | None = None,
-        text_color: Color | None = None,
-        **kwargs,
-    ) -> None:
-        """DEPRECATED: Use layer_at() with a resolved rect instead.
-
-        Legacy compat shim. Places content at offset (0,0) with no scaling.
-        """
-        warnings.warn(
-            "Frame.layer() is deprecated. Use Frame.layer_at() with a ResolvedRect instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        dx, dy = offset or (0, 0)
-        rect = ResolvedRect(left=dx, top=dy, width=0, height=0)
-        self.layer_at(image, rect, text_color, **kwargs)
 
     def render(self) -> Image.Image:
         """Return the final composed image."""
