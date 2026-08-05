@@ -95,8 +95,8 @@ preset = LANDSCAPE_PRESET["default"]["1080p"]
 workflow = SurahWorkflow(preset)
 
 for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
-    for img, suffix in page_images:
-        img.save(f"surah112_p{page_num}_{suffix}.png")
+    for img in page_images:
+        img.save(f"surah112_p{page_num}.png")
 ```
 
 #### `VerseRangeWorkflow`
