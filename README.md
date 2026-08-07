@@ -216,6 +216,32 @@ leaving the rest as literal text.
 
 See the [`API reference`](docs/api_reference.md) for the full `TextConfig` surface.
 
+#### Text Balancing
+Multi-line translation now balances line lengths instead of greedy left-fill.
+`TextConfig.balancing_mode` selects the solver (default `SMOOTH`):
+
+| Mode | Solver | Use |
+|------|--------|-----|
+| `FORWARD` | Greedy max-fill | Fast, single-pass; always valid |
+| `SMOOTH` (default) | Global flattest-split pyramid | Best visual balance for paragraphs |
+| `KNUTH_PLASS` | Optimized guarded quadratic-slack DP | The global optimum at higher CPU cost |
+| `TEX` | Micro-optimized faithful TeX port | Byte-identical to TeX for small inputs |
+
+A word wider than the container always lands on its own line, and **greedy is the
+unconditional fallback**: if the chosen solver cannot satisfy the constraints, the
+library logs a reason (with a short text preview) and renders greedy. It returns
+an infeasible layout only when greedy itself is unsatisfiable.
+
+#### Output & Input Limits
+To keep rendering robust against untrusted input, every text input is bounded
+before measurement:
+- `MAX_TEXT_CHARS` (10,000) — rejects a single text string longer than this.
+- `MAX_TEXT_WORDS` (1,000) — rejects a text string with more tokens than this.
+- `MAX_CANVAS_DIMENSION` (5,000) — a rendered canvas is clamped to this, so a
+  single over-wide word cannot force an unbounded image allocation.
+
+Violations raise `ValueError` (char/word) or clamp with a `WARNING` (canvas).
+
 ### Advanced Workflows
 
 #### `IsolateWordsWorkflow`

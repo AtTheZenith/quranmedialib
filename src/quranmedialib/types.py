@@ -37,6 +37,17 @@ MAX_FONT_SIZE: Final = 2000
 MAX_CANVAS_DIMENSION: Final = 5000
 # Maximum glow radius for image effects to prevent excessive blurring computation
 MAX_GLOW_RADIUS: Final = 200
+# Maximum characters accepted for a single rendered text input. Bounds every
+# downstream cost (tokenization, measurement cache, layout solvers, canvas size)
+# so untrusted strings cannot trigger a DoS. Generous enough for any real
+# translation paragraph or isolated-word payload.
+MAX_TEXT_CHARS: Final = 10_000
+# Maximum whitespace-delimited words/segments accepted for a single text input.
+# Char-limit alone already bounds memory, but a pathological string of tiny
+# tokens (e.g. "a a a ...") would otherwise explode the layout solver input.
+# Set below the char-limit ceiling (MAX_TEXT_CHARS / 2) so the bound is actually
+# reachable and independently enforced.
+MAX_TEXT_WORDS: Final = 1_000
 
 # Cached working directory — resolved lazily on first use to avoid stale os.getcwd()
 _working_dir_cache: Path | None = None
@@ -196,6 +207,27 @@ class VerticalAlignment(Enum):
     TOP = "top"
     CENTER = "center"
     BOTTOM = "bottom"
+
+
+class BalancingMode(Enum):
+    """Line-breaking solver for balanced wrapping.
+
+    SMOOTH is the default. When a chosen solver cannot produce a layout, the
+    greedy max-fill solver (FORWARD) is the unconditional direct fallback and a
+    warning is logged with the reason.
+
+    Attributes:
+        FORWARD: Single-pass greedy max-fill (O(n), minimal lines). Also serves
+            as the direct fallback for the other three solvers.
+        SMOOTH: Global minimal-line, flattest-split pyramid (default).
+        KNUTH_PLASS: Optimized guarded quadratic-slack DP.
+        TEX: Micro-optimized faithful TeX port (byte-identical for small inputs).
+    """
+
+    FORWARD = "forward"
+    SMOOTH = "smooth"
+    KNUTH_PLASS = "knuth_plass"
+    TEX = "tex"
 
 
 # === Type Aliases ===
@@ -506,15 +538,19 @@ class VerseConfig:
         row_spacing: Vertical space between rows.
         max_rows_per_page: Maximum number of rows before starting a new page.
         balanced_wrapping: Whether to use balanced line wrapping.
+        balancing_mode: Which balanced-wrapping solver to use (default SMOOTH).
     """
 
     word_spacing: int = 10
     row_spacing: int = 20
     max_rows_per_page: int = 5
     balanced_wrapping: bool = False
+    balancing_mode: BalancingMode | str = BalancingMode.SMOOTH
 
     def __post_init__(self):
         """Validate layout parameters."""
+        if isinstance(self.balancing_mode, str):
+            object.__setattr__(self, "balancing_mode", BalancingMode(self.balancing_mode.lower()))
         if self.word_spacing < 0:
             raise ValidationError(f"word_spacing cannot be negative, got {self.word_spacing}")
         if self.row_spacing < 0:
@@ -614,6 +650,7 @@ class TextConfig:
     max_width: int | None = None
     alignment: HorizontalAlignment | str = HorizontalAlignment.CENTER
     balanced_wrapping: bool = True
+    balancing_mode: BalancingMode | str = BalancingMode.SMOOTH
     ignore_non_token_hashtags: bool = False
     highlight_font_path: Path | str | FontResource | None = None
     highlight_font_size: int | None = None
@@ -630,6 +667,10 @@ class TextConfig:
         # Coerce alignment
         if isinstance(self.alignment, str):
             object.__setattr__(self, "alignment", HorizontalAlignment(self.alignment.lower()))
+
+        # Coerce balancing mode
+        if isinstance(self.balancing_mode, str):
+            object.__setattr__(self, "balancing_mode", BalancingMode(self.balancing_mode.lower()))
 
         # Validate font_size
         if self.font_size <= 0:

@@ -110,6 +110,8 @@ class VImage:
             spacing=self.verse_config.word_spacing,
             target_k=target_num_rows,
             max_width=max_width,
+            mode=self.verse_config.balancing_mode,
+            text=" ".join((it.text or "") for it in items),
         )
 
         if best_breaks is None:
@@ -121,12 +123,12 @@ class VImage:
         current_width = 0
         break_set = set(best_breaks)
         for i, item in enumerate(items):
-            spacing = self.verse_config.word_spacing if current_row else 0
             if i in break_set:
                 final_rows.append((current_row, current_width, max_row_height))
                 current_row = []
                 current_width = 0
                 max_row_height = 0
+            spacing = self.verse_config.word_spacing if current_row else 0
             current_row.append(item)
             current_width += item.width + spacing
             max_row_height = max(max_row_height, item.height)

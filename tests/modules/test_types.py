@@ -13,6 +13,7 @@ import pytest
 
 from quranmedialib.modules.text_layout import Line, StyledWord
 from quranmedialib.types import (
+    BalancingMode,
     DatabaseConfig,
     FontResource,
     FrameConfig,
@@ -188,6 +189,35 @@ def test_text_config_invalid_alignment_string() -> None:
     """Test that TextConfig raises ValueError for invalid alignment strings."""
     with pytest.raises(ValueError):
         TextConfig(alignment="invalid_align")
+
+
+def test_balancing_mode_enum_values() -> None:
+    """Test BalancingMode enum values."""
+    assert BalancingMode.FORWARD.value == "forward"
+    assert BalancingMode.SMOOTH.value == "smooth"
+    assert BalancingMode.KNUTH_PLASS.value == "knuth_plass"
+    assert BalancingMode.TEX.value == "tex"
+
+
+def test_balancing_mode_invalid_string() -> None:
+    """Test that BalancingMode raises ValueError for invalid string."""
+    with pytest.raises(ValueError):
+        BalancingMode("invalid")
+
+
+def test_text_config_balancing_mode_string_coercion() -> None:
+    """Test that TextConfig coerces balancing_mode strings to the enum."""
+    config = TextConfig(balancing_mode="knuth_plass")
+    assert config.balancing_mode == BalancingMode.KNUTH_PLASS
+
+    config = TextConfig(balancing_mode="tex")
+    assert config.balancing_mode == BalancingMode.TEX
+
+
+def test_text_config_balancing_mode_default() -> None:
+    """Test that TextConfig defaults balancing_mode to SMOOTH."""
+    config = TextConfig()
+    assert config.balancing_mode == BalancingMode.SMOOTH
 
 
 def test_text_config_default_values() -> None:

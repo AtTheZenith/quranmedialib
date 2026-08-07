@@ -38,7 +38,10 @@ def test_api_exports_completeness() -> None:
         "TextConfig",
         "HorizontalAlignment",
         "VerticalAlignment",
+        "BalancingMode",
         "MAX_FONT_SIZE",
+        "MAX_TEXT_CHARS",
+        "MAX_TEXT_WORDS",
         "MIN_SURAH",
         "MAX_SURAH",
         "MIN_AYAH",
@@ -100,10 +103,11 @@ def test_api_types_resolvable() -> None:
     assert MAX_FONT_SIZE > 0
 
     # Ensure alignment enums are reachable
-    from quranmedialib import HorizontalAlignment, VerticalAlignment
+    from quranmedialib import BalancingMode, HorizontalAlignment, VerticalAlignment
 
     assert HorizontalAlignment.CENTER.value == "center"
     assert VerticalAlignment.CENTER.value == "center"
+    assert BalancingMode.SMOOTH.value == "smooth"
 
 
 def test_api_workflows_resolvable() -> None:

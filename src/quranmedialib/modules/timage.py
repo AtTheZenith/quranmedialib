@@ -4,21 +4,13 @@ import logging
 import math
 import re
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import Any, Sequence
 
 from PIL import Image, ImageDraw
 
 from quranmedialib.modules.font_cache import _load_font_base
-from quranmedialib.modules.text_layout import (
-    StyledWord,
-    wrap_rich_text_balanced,
-    wrap_rich_text_greedy,
-)
-from quranmedialib.types import TextConfig
-
-if TYPE_CHECKING:
-    from quranmedialib.modules.text_layout import StyledWord
-    from quranmedialib.types import TextConfig
+from quranmedialib.modules.text_layout import StyledWord, wrap_rich_text_balanced, wrap_rich_text_greedy
+from quranmedialib.types import MAX_CANVAS_DIMENSION, MAX_TEXT_CHARS, MAX_TEXT_WORDS, TextConfig
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +62,11 @@ _RE_TAG_SUFFIX = re.compile(r"^#([bi]*)#(?:([0-9a-fA-F]{6}|[0-9a-fA-F]{8})#)?$")
 
 _DEFAULT_HIGHLIGHT_HEX = "ffd700ff"  # matches TextConfig.highlight_color (255, 215, 0, 255)
 _DEFAULT_HIGHLIGHT_PREFIX = f"#b#{_DEFAULT_HIGHLIGHT_HEX}#"
+
+# Stroke width (px) used when simulating bold weight on fonts without a wght
+# axis. Keep draw-time stroke and measurement-time ink widest in sync so a bold
+# word's advance includes its simulated overhang and never clips its right glyph.
+_SIMULATE_BOLD_STROKE_WIDTH = 1
 
 
 def prepare_translation_segments(text: str | list[str] | None) -> list[str]:
@@ -134,12 +131,34 @@ def get_timage(
     highlight_segments: str | list[str] | None = None,
     **kwargs: Any,
 ) -> Image.Image | None:
-    """Renders multi-line translation text. Returns None if text is empty."""
+    """Renders multi-line translation text. Returns None if text is empty.
+
+    Security: text longer than MAX_TEXT_CHARS (or with more than MAX_TEXT_WORDS
+    tokens) is rejected before any measurement, so untrusted strings cannot
+    drive layout/rendering cost or canvas allocation unbounded.
+
+    Raises:
+        ValueError: If `text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS, or if
+            `max_height` is negative or exceeds MAX_CANVAS_DIMENSION.
+    """
     if text is None:
         return None
     s_text = str(text)
     if not s_text.strip():
         return None
+
+    # Reject pathological inputs before any tokenization, measurement, or canvas
+    # allocation so an untrusted string cannot drive memory/layout cost unbounded.
+    if len(s_text) > MAX_TEXT_CHARS:
+        raise ValueError(
+            f"text length {len(s_text)} exceeds maximum of {MAX_TEXT_CHARS} characters"
+        )
+    # N whitespace-delimited words need at least 2N-1 characters, so a text this
+    # short cannot reach the word cap; skip the tokenizing count in the hot path.
+    if len(s_text) >= 2 * MAX_TEXT_WORDS - 1:
+        word_count = len(re.findall(r"\S+", s_text))
+        if word_count > MAX_TEXT_WORDS:
+            raise ValueError(f"text has {word_count} words, exceeding maximum of {MAX_TEXT_WORDS}")
 
     if config is None:
         config = TextConfig()
@@ -149,7 +168,6 @@ def get_timage(
     if max_height is not None:
         if max_height < 0:
             raise ValueError("Width and height must be >= 0")
-        from quranmedialib.types import MAX_CANVAS_DIMENSION
 
         if max_height > MAX_CANVAS_DIMENSION:
             raise ValueError(f"max_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {max_height}")
@@ -158,7 +176,7 @@ def get_timage(
     styled_words = _parse_rich_text(s_text, config, None)
 
     if config.balanced_wrapping:
-        lines = wrap_rich_text_balanced(styled_words, config.max_width)
+        lines = wrap_rich_text_balanced(styled_words, config.max_width, mode=config.balancing_mode)
     else:
         lines = wrap_rich_text_greedy(styled_words, config.max_width)
 
@@ -183,6 +201,19 @@ def get_timage(
     # Add a 1px safety margin to total_width to prevent edge glyph clipping.
     tw = math.ceil(max(total_width + 1.0, 1.0))
     th = math.ceil(max(total_height, 1.0))
+
+    # Hard cap the canvas. A single word wider than the container is placed on
+    # its own line and can exceed `max_width`, so without this cap a huge glyph
+    # could force an unbounded image allocation (decompression-bomb vector).
+    if tw > MAX_CANVAS_DIMENSION or th > MAX_CANVAS_DIMENSION:
+        logger.warning(
+            "Rendered text canvas %dx%d exceeds the %dpx cap; clamping",
+            tw,
+            th,
+            MAX_CANVAS_DIMENSION,
+        )
+        tw = min(tw, MAX_CANVAS_DIMENSION)
+        th = min(th, MAX_CANVAS_DIMENSION)
 
     # Detect if we can use an 'L' mask (no color tags in original text)
     use_mask = "#" not in s_text
@@ -220,7 +251,7 @@ def get_timage(
             sf = last_style[0]
             sa = batch_words[0].ascent
             simulate_bold = last_style[2]
-            stroke_width = 1 if simulate_bold else 0
+            stroke_width = _SIMULATE_BOLD_STROKE_WIDTH if simulate_bold else 0
             stroke_fill = 255 if (use_mask and simulate_bold) else last_style[1]
             _draw_text(
                 (curr_x, current_y + (max_ascent - sa)),
@@ -432,6 +463,10 @@ def _parse_rich_text(
             font_path = str(f_tag.path if hasattr(f_tag, "path") else f_norm_path)
             font_size = f_tag.size if hasattr(f_tag, "size") else f_norm_size
             w, h, a = _metrics(s, font_path, font_size)
+            if is_bold:
+                # The advance must reserve the simulated stroke ink (one width
+                # per side) so bold text never clips its right-most glyph.
+                w += 2 * _SIMULATE_BOLD_STROKE_WIDTH
             styled_words.append(_StyledWord(s, f_tag, tag_color, w, h, a, simulate_bold=is_bold))
 
         last_pos = match.end()

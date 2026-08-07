@@ -155,15 +155,37 @@ def test_timage_invalid_rich_text_format() -> None:
 
 @pytest.mark.benchmark
 def test_timage_very_long_text() -> None:
-    """Test that get_timage handles very long text without crashing."""
+    """Test that get_timage handles long text without crashing.
+
+    Inputs above the pyramid word cap must fall back to greedy wrapping
+    (bounded) instead of entering the balanced search, while staying within the
+    character/word input limits enforced for untrusted text.
+    """
     config = TextConfig(max_width=1200)
-    very_long_text = (
+    sentence = (
         "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore "
         "et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
         "aliquip ex ea commodo consequat."
-    ) * 300
+    )
+    very_long_text = sentence * 8
 
+    assert len(very_long_text) < 10_000, "must stay under the character limit"
     result = get_timage(very_long_text, config)
+    assert result is not None
+    assert result.size[0] > 0
+    assert result.size[1] > 0
+
+
+def test_timage_balanced_pyramid_within_word_cap() -> None:
+    """Test that a realistic number of words still gets balanced wrapping."""
+    config = TextConfig(max_width=1200)
+    text = (
+        "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium "
+        "doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore "
+        "veritatis et quasi architecto beatae vitae dicta sunt explicabo."
+    ) * 4  # ~100 words, within the 256-word pyramid cap
+
+    result = get_timage(text, config)
     assert result is not None
     assert result.size[0] > 0
     assert result.size[1] > 0
@@ -452,7 +474,10 @@ def test_draw_bold_differs_from_plain() -> None:
     plain_img = get_timage("Bold", cfg)
 
     assert bold_img is not None and plain_img is not None
-    assert bold_img.size == plain_img.size
+    # Simulated bold reserves its stroke ink in the advance (one width per side)
+    # so the right-most glyph never clips, unlike the plain-text advance.
+    stroke_px = 2 * 1
+    assert bold_img.width == plain_img.width + stroke_px
     assert list(bold_img.get_flattened_data()) != list(plain_img.get_flattened_data())
     assert _ink_count(bold_img) > _ink_count(plain_img)
 
@@ -605,3 +630,39 @@ def test_no_warning_for_clean_rich_text(caplog) -> None:
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert not warnings, f"Expected no warnings, got: {warnings}"
+
+
+def test_text_character_limit_enforced() -> None:
+    """A text input exceeding MAX_TEXT_CHARS must be rejected before rendering."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    from quranmedialib import MAX_TEXT_CHARS
+
+    over = "a" * (MAX_TEXT_CHARS + 1)
+    with pytest.raises(ValueError, match="exceeds maximum"):
+        get_timage(over, cfg)
+    assert get_timage("a" * MAX_TEXT_CHARS, cfg) is not None
+
+
+def test_text_word_limit_enforced() -> None:
+    """A text input exceeding MAX_TEXT_WORDS is rejected even under the char cap."""
+    cfg = TextConfig(font_size=36, max_width=500)
+    from quranmedialib import MAX_TEXT_WORDS
+
+    over = "a " * (MAX_TEXT_WORDS + 1)
+    assert len(over) < 10_000, "word-limit test must stay under the character cap"
+    with pytest.raises(ValueError, match="exceeding maximum"):
+        get_timage(over, cfg)
+
+
+def test_overlong_word_canvas_is_clamped(caplog) -> None:
+    """A word wider than the container must clamp to MAX_CANVAS_DIMENSION, not OOM."""
+    cfg = TextConfig(font_size=100, max_width=50)
+    img = get_timage("w" * 3000, cfg)
+
+    assert img is not None
+    from quranmedialib.types import MAX_CANVAS_DIMENSION
+
+    assert img.width <= MAX_CANVAS_DIMENSION
+    assert img.height <= MAX_CANVAS_DIMENSION
+    clamp_warnings = [r for r in caplog.records if r.levelname == "WARNING" and "clamping" in str(r.message)]
+    assert clamp_warnings, "Expected a canvas-clamp warning for an over-long word"

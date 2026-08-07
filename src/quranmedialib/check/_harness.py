@@ -797,13 +797,15 @@ def _compare_images(ref: Image.Image, rendered: Image.Image) -> PageDiff:
 
     diff = ImageChops.difference(ref, rendered)
     bbox = diff.getbbox()
-    diff_raw = diff.tobytes()
-    stride = len(diff.getbands())
-    diff_pixels = sum(
-        1
-        for i in range(0, len(diff_raw), stride)
-        if any(b != 0 for b in diff_raw[i:i + stride])
-    )
+    # Vectorized diff-pixel count (all C-level ops). A pixel differs iff at
+    # least one channel is non-zero; saturating-adding the channels preserves
+    # that property (identical pixels sum to 0), and histogram() counts the
+    # non-zero bins. The per-pixel Python loop this replaces cost ~1s per
+    # 1080p page and only ran on pages that actually differ.
+    total_mask = diff.split()[0]
+    for channel in diff.split()[1:]:
+        total_mask = ImageChops.add(total_mask, channel)
+    diff_pixels = sum(total_mask.histogram()[1:])
     total = diff.size[0] * diff.size[1]
 
     return PageDiff(

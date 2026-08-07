@@ -91,8 +91,32 @@ Resolution-independent layout primitives inspired by Roblox UDim2.
 - `FrameConfig`: Frame-level settings (`background_color`, `max_width`, `image_height`, `aspect_ratio`). No layout logic — position is handled by `PresetLayout` + `LayoutEngine`.
 - `VerseConfig`: Verse-level layout settings (word spacing, row spacing, max rows per page, balanced wrapping).
 - `WordConfig`: Font size, colors, and word-level padding.
-- `TextConfig`: Translation font and style settings. Rich text tags (`#b|i|bi#<hex6|hex8>#text#`) are parsed per segment; stray `#` characters not forming a valid tag log a warning. Set `ignore_non_token_hashtags=True` to silence that warning and render stray hashtags as literal text.
+- `TextConfig`: Translation font and style settings. Rich text tags (`#b|i|bi#<hex6|hex8>#text#`) are parsed per segment; stray `#` characters not forming a valid tag log a warning. Set `ignore_non_token_hashtags=True` to silence that warning and render stray hashtags as literal text. `balanced_wrapping` (default `True`) enables paragraph balancing, selected by `balancing_mode`.
 - `FontResource`: Handles font file resolution.
+
+### Text Balancing (`BalancingMode`, v4.2.0)
+`BalancingMode` drives how multi-line translation text is wrapped. Select it via
+`TextConfig.balancing_mode` or `VerseConfig.balancing_mode` (default `SMOOTH`).
+
+| Mode | Notes |
+|------|-------|
+| `BalancingMode.FORWARD` | Greedy max-fill; always valid, negligible cost. |
+| `BalancingMode.SMOOTH` | Global minimal-line, flattest-split "pyramid" (default). Context-limited to `PYRAMID_MAX_WORDS` (256); larger inputs fall back to greedy. |
+| `BalancingMode.KNUTH_PLASS` | Optimized guarded quadratic-slack DP. |
+| `BalancingMode.TEX` | Micro-optimized faithful TeX port; byte-identical to TeX for small inputs, budget-aborts fall back to greedy. |
+
+**Fallback contract**: every solver returns break indices, `[]` (single line), or
+`None` (infeasible). Greedy is the unconditional fallback — when a solver returns
+`None`, `balance_lines_pyramid` runs greedy and logs a reason with the first 100
+chars of source text; it returns `None` only when greedy itself is unsatisfiable
+(a line budget that even one-word-per-line cannot meet).
+
+### Output & Input Limits
+Untrusted text is bounded before any measurement so it cannot drive memory,
+layout-solver, or canvas cost unbounded:
+- `MAX_TEXT_CHARS` (10,000) — `get_timage` raises `ValueError` if longer.
+- `MAX_TEXT_WORDS` (1,000) — `get_timage` raises `ValueError` if a text has more tokens.
+- `MAX_CANVAS_DIMENSION` (5,000) — a rendered text canvas exceeding this is clamped with a `WARNING` (an over-wide single word cannot force a decompression-bomb image allocation).
 
 ### Layout Engine (`modules/layout_engine.py`)
 New in v4.0. Resolves `PresetLayout` definitions to absolute pixel rects for any frame size.
