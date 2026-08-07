@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from quranmedialib.modules.text_layout import (
     StyledWord,
     _text_preview,
@@ -238,3 +240,53 @@ def test_impossible_constraints_warns_greedy(caplog):
         and r.levelno == logging.WARNING
         for r in caplog.records
     )
+
+
+@pytest.mark.benchmark
+def test_balance_solver_regression_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark greedy vs SMOOTH pyramid and gate on regression-free cost.
+
+    Greedy (FORWARD) is a single-pass O(n) max-fill; SMOOTH is a quadratic DP
+    capped at PYRAMID_MAX_WORDS (256). Timings are recorded and guarded with
+    generous absolute and relative-scaling bounds so an order-of-magnitude cost
+    regression in either path fails loudly, while staying robust to machine speed.
+    """
+    import time
+
+    def widths(n: int) -> list[int]:
+        # Deterministic distinct widths so the pyramid descent never collapses
+        # to a single line and the DP actually does work.
+        return [(i * 37) % 90 + 10 for i in range(n)]
+
+    def run(mode: BalancingMode, n: int) -> float:
+        w = widths(n)
+        start = time.perf_counter()
+        for _ in range(5):
+            balance_lines_pyramid(w, 8, 0, 600, mode=mode)
+        return (time.perf_counter() - start) / 5
+
+    greedy_small = run(BalancingMode.FORWARD, 2048)
+    greedy_large = run(BalancingMode.FORWARD, 8192)
+    smooth_128 = run(BalancingMode.SMOOTH, 128)
+    smooth_256 = run(BalancingMode.SMOOTH, 256)
+
+    # Greedy is linear: 4x the words must stay well under 8x the time.
+    assert greedy_large < 8 * greedy_small + 1e-6
+    # SMOOTH is ~quadratic in n: 2x the words must stay under 8x the time.
+    assert smooth_256 < 8 * smooth_128 + 1e-6
+    # GENEROUS absolute ceilings only trip on pathological regressions.
+    assert greedy_large < 1.0
+    assert smooth_256 < 5.0
+
+    request.node.benchmark_data = [
+        f"greedy_2048={greedy_small * 1000:.2f}ms",
+        f"greedy_8192={greedy_large * 1000:.2f}ms",
+        f"smooth_128={smooth_128 * 1000:.2f}ms",
+        f"smooth_256={smooth_256 * 1000:.2f}ms",
+    ]
+
+    print("\nLayout balance solver regression benchmark:")
+    print(f"  FORWARD greedy 2048w: {greedy_small * 1000:.2f}ms")
+    print(f"  FORWARD greedy 8192w: {greedy_large * 1000:.2f}ms")
+    print(f"  SMOOTH pyramid 128w: {smooth_128 * 1000:.2f}ms")
+    print(f"  SMOOTH pyramid 256w: {smooth_256 * 1000:.2f}ms")
