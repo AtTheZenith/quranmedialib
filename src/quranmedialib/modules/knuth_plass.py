@@ -515,10 +515,7 @@ def _add_active_dedup(active_nodes: list[_ActiveBreak], node: _ActiveBreak) -> i
     insert_index = index
 
     while index < len(active_nodes) and active_nodes[index].line == node.line:
-        if (
-            active_nodes[index].fitness_class == node.fitness_class
-            and active_nodes[index].position == node.position
-        ):
+        if active_nodes[index].fitness_class == node.fitness_class and active_nodes[index].position == node.position:
             return index + 1
         index += 1
 
@@ -570,9 +567,9 @@ def _fast_breakpoints(
             # Match the ObjectList path: inter-word glue with the full max_width
             # stretch budget (never a short line) and no shrink (hard cap).
             push(float(spacing), float(max_width), 0, 0, 0, 1)
-    push(0, 0, 0, INFINITY, 0, 2)         # closing penalty (forbid a break)
+    push(0, 0, 0, INFINITY, 0, 2)  # closing penalty (forbid a break)
     push(0, float(INFINITY), 0, 0, 0, 1)  # final glue, stretch = INFINITY
-    push(0, 0, 0, -INFINITY, 1, 2)        # forced end-of-paragraph break
+    push(0, 0, 0, -INFINITY, 1, 2)  # forced end-of-paragraph break
 
     m = len(kind)
 
@@ -665,9 +662,7 @@ def _fast_breakpoints(
                     demerits += _FITNESS_DEMERIT
 
                 feasible_breaks.append(
-                    _ActiveBreak(
-                        i, node.line + 1, fitness_class, prefix_w[i], prefix_s[i], prefix_z[i], demerits, node
-                    )
+                    _ActiveBreak(i, node.line + 1, fitness_class, prefix_w[i], prefix_s[i], prefix_z[i], demerits, node)
                 )
 
         for brk in feasible_breaks:

@@ -69,6 +69,7 @@ def _bytes_mode_max_batch(chunk: int, frame_cfg: FrameConfig) -> int:
     max_verses = max(1, int(budget / (frame_bytes * 3)))
     return min(chunk, max_verses)
 
+
 __all__ = ["VerseRangeWorkflow"]
 
 

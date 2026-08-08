@@ -192,10 +192,7 @@ def test_greedy_fallback_benign_logged_at_debug(caplog):
     words = [create_mock_word(f"W{i}", 100) for i in range(120)]
     with caplog.at_level(logging.DEBUG, logger="quranmedialib.modules.text_layout"):
         wrap_rich_text_balanced(words, 150, mode=BalancingMode.TEX)
-    assert any(
-        "impossible constraints for 'tex'" in r.message and r.levelno == logging.DEBUG
-        for r in caplog.records
-    )
+    assert any("impossible constraints for 'tex'" in r.message and r.levelno == logging.DEBUG for r in caplog.records)
 
 
 def test_text_preview_truncation():
@@ -236,8 +233,7 @@ def test_impossible_constraints_warns_greedy(caplog):
         breaks = balance_lines_pyramid(widths, 0, 2, 100, mode=BalancingMode.TEX)
     assert breaks is None
     assert any(
-        "impossible constraints for the greedy fallback" in r.message
-        and r.levelno == logging.WARNING
+        "impossible constraints for the greedy fallback" in r.message and r.levelno == logging.WARNING
         for r in caplog.records
     )
 

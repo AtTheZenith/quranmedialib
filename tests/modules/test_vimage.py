@@ -275,10 +275,7 @@ def test_vimage_benchmark_render(word_config) -> None:
 @pytest.mark.benchmark
 def test_vimage_benchmark_stop_sign_adjustment(word_config) -> None:
     """Benchmark stop-sign-aware page chunking with many items."""
-    items = [
-        create_dummy_word(f"W{i}{QURANIC_STOP_SIGNS[i % len(QURANIC_STOP_SIGNS)]}", 50, 40)
-        for i in range(50)
-    ]
+    items = [create_dummy_word(f"W{i}{QURANIC_STOP_SIGNS[i % len(QURANIC_STOP_SIGNS)]}", 50, 40) for i in range(50)]
     verse_cfg = VerseConfig(word_spacing=5, row_spacing=10)
     vimg = VImage(items, verse_cfg, 150)
     chunk, consumed = vimg.get_page_chunk(0, 5)

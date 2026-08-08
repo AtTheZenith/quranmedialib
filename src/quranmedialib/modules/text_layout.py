@@ -455,8 +455,7 @@ def balance_lines_pyramid(
     if greedy_breaks is None:
         reason = "impossible constraints for the greedy fallback (line budget cannot be satisfied)"
         logger.warning(
-            "Line balancing mode '%s' infeasible; even the greedy fallback cannot "
-            "satisfy the constraints (%s)%s.",
+            "Line balancing mode '%s' infeasible; even the greedy fallback cannot satisfy the constraints (%s)%s.",
             resolved.value,
             reason,
             preview,
