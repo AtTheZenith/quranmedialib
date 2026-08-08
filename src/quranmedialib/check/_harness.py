@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -826,6 +827,30 @@ def _get_reference_root() -> Path:
     return Path(__file__).resolve().parent / "references"
 
 
+# Version directory names: letters, digits, dot, underscore, hyphen. Blocks
+# path traversal via a malicious --version (e.g. "..\\..\\secrets").
+_VERSION_DIR_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def validate_version_dir_name(version: str) -> str:
+    """Validate a reference version string for safe use as a directory name.
+
+    Args:
+        version: The version string to validate.
+
+    Returns:
+        The validated version string.
+
+    Raises:
+        ValueError: If the version contains characters unsafe for a path segment.
+    """
+    if not _VERSION_DIR_RE.match(version):
+        raise ValueError(
+            f"Invalid reference version: {version!r}. Only letters, digits, dots, underscores and hyphens are allowed."
+        )
+    return version
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     try:
         with open(path) as f:
@@ -926,7 +951,7 @@ class ValidationHarness:
     def __init__(self, version: str | None = None) -> None:
         if version is None:
             version = f"v{qml_version}"
-        self._version = version
+        self._version = validate_version_dir_name(version)
         self._db = DatabaseManager()
         self._ref_root = _get_reference_root()
 
@@ -1253,6 +1278,8 @@ class ValidationHarness:
 
         Returns a report of matching, differing, and version-unique scenarios.
         """
+        version_a = validate_version_dir_name(version_a)
+        version_b = validate_version_dir_name(version_b)
         dir_a = self._ref_root / version_a
         dir_b = self._ref_root / version_b
 

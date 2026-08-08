@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from quranmedialib.check import CANONICAL_SCENARIOS, ValidationHarness
+from quranmedialib.check._harness import validate_version_dir_name
 
 SUPPORTED_VERSIONS = ["v4.1.1"]
 
@@ -35,3 +36,48 @@ def _diff_summary(result) -> str:
         elif d.diff_pixels > 0:
             parts.append(f"p{d.page}: {d.diff_percent}% diff")
     return ", ".join(parts)
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "v4.1.0",
+        "v4.2.0.dev1",
+        "v_1.2_3",
+        "VERSION-2024",
+        "v4.2.0",
+    ],
+)
+def test_validate_version_dir_name_accepts_safe(version: str) -> None:
+    """Safe version strings (letters, digits, dots, underscores, hyphens) pass."""
+    assert validate_version_dir_name(version) == version
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["..\\..\\evil", "../../evil", "a/b", "v:1", "i c", "v?1", "abc/xyz"],
+)
+def test_validate_version_dir_name_rejects_traversal(version: str) -> None:
+    """Traversal and separator-laden version strings are rejected."""
+    with pytest.raises(ValueError):
+        validate_version_dir_name(version)
+
+
+def test_validation_harness_rejects_traversal_version() -> None:
+    """ValidationHarness refuses to construct a version dir outside references/."""
+    with pytest.raises(ValueError):
+        ValidationHarness("..\\..\\escape")
+    with pytest.raises(ValueError):
+        ValidationHarness("../../escape")
+
+
+def test_compare_versions_rejects_traversal() -> None:
+    """compare_versions validates both versions before touching the filesystem."""
+    harness = ValidationHarness()
+    try:
+        with pytest.raises(ValueError):
+            harness.compare_versions("..\\..\\a", "v4.1.0")
+        with pytest.raises(ValueError):
+            harness.compare_versions("v4.1.0", "b/c")
+    finally:
+        harness.close()

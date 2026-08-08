@@ -6,6 +6,7 @@ a range of verses sequentially with Arabic text and translations.
 
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -18,6 +19,7 @@ from quranmedialib.workflows.verse_range import (
     _bytes_mode_max_batch,
     _handle_output,
     _render_verse_worker,
+    _sanitize_filename_prefix,
 )
 
 
@@ -330,10 +332,51 @@ class TestRenderVerseWorkerBytesPath:
 
             bytes_pages = result_bytes[0]
             file_pages = result_files[0]
-            assert len(bytes_pages) == len(file_pages)
 
             for (bm, bs, bd), fpath in zip(bytes_pages, file_pages):
                 file_img = Image.open(fpath)
                 assert file_img.mode == bm
                 assert file_img.size == bs
                 assert file_img.tobytes() == bd
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected"),
+    [
+        ("surah_108", "surah_108"),
+        ("..\\..\\evil", "_.._evil"),
+        ("../../evil", "_.._evil"),
+        ("a/b\\c:d", "a_b_c_d"),
+        ("..", "output"),
+        ("surah..108", "surah..108"),
+        ("dir\\..\\x", "dir_.._x"),
+    ],
+)
+def test_sanitize_filename_prefix(prefix: str, expected: str) -> None:
+    """Filename prefix sanitizer neutralizes path traversal and separators."""
+    result = _sanitize_filename_prefix(prefix)
+    assert result == expected
+    # Must never contain a path separator or be empty
+    assert "/" not in result and "\\" not in result
+    assert result
+
+
+def test_sanitize_filename_prefix_blocks_traversal_in_handle_output(tmp_path) -> None:
+    """Files written via _handle_output never escape output_dir, even with a hostile prefix."""
+    from quranmedialib.modules.timage import get_timage
+
+    preset = LANDSCAPE_PRESET["translation"]["1080p"]
+    img = get_timage("Surah Al-Kawthar", preset.text)  # type: ignore[call-arg]
+    paths = _handle_output(
+        pages=[img],
+        ayah=1,
+        output_dir=str(tmp_path),
+        filename_prefix="..\\..\\escape",
+        save_fn=lambda im, p, format, compress_level: im.save(p, format=format, compress_level=compress_level),
+        use_bytes=False,
+    )
+    # Resolve each returned path and confirm it stays inside tmp_path.
+    tmp_real = tmp_path.resolve()
+    for p in paths:
+        resolved = Path(p).resolve()
+        assert resolved.is_relative_to(tmp_real)

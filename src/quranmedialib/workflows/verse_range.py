@@ -11,6 +11,7 @@ import functools
 import gc
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -48,6 +49,28 @@ from quranmedialib.workflows.base import BaseWorkflow
 
 type OutputItem = str | tuple[str, tuple[int, int], bytes] | Image.Image
 logger = logging.getLogger(__name__)
+
+# Allowed characters in output filename prefixes. Blocks path separators so a
+# hostile prefix cannot escape output_dir (which is the only path boundary
+# enforced by the workflow).
+_FILENAME_PREFIX_RE = re.compile(r"[^A-Za-z0-9_\-\.]+")
+
+
+def _sanitize_filename_prefix(prefix: str) -> str:
+    """Return a filesystem-safe output filename prefix.
+
+    Replaces any character that is not alphanumeric, underscore, hyphen or
+    dot, then strips leading/trailing dots. This neutralizes path traversal
+    (``..``, separators) in a single pass.
+
+    Args:
+        prefix: The raw user-supplied prefix.
+
+    Returns:
+        The sanitized prefix.
+    """
+    cleaned = _FILENAME_PREFIX_RE.sub("_", prefix).strip(".")
+    return cleaned or "output"
 
 
 def _bytes_mode_max_batch(chunk: int, frame_cfg: FrameConfig) -> int:
@@ -147,6 +170,7 @@ class VerseRangeWorkflow(BaseWorkflow):
             _ensure_within_working_dir(Path(output_dir))
 
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
+        filename_prefix = _sanitize_filename_prefix(str(filename_prefix))
         total_verses = end_verse - start_verse + 1
 
         guide = build_layout_guide(
@@ -360,8 +384,9 @@ def _handle_output(
     """Save pages to disk or convert to bytes for IPC."""
     if output_dir:
         paths = []
+        safe_prefix = _sanitize_filename_prefix(filename_prefix)
         for j, p in enumerate(pages):
-            path = os.path.join(output_dir, f"{filename_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
+            path = os.path.join(output_dir, f"{safe_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
             save_fn(p, path, format="PNG", compress_level=1)
             paths.append(path)
         return paths
