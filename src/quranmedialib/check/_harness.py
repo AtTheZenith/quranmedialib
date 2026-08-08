@@ -694,6 +694,7 @@ def _build_workflow(scenario: Scenario) -> Any:
 def _create_dummy_word_item(text: str, width: int, height: int) -> WordItem:
     """Create a deterministic grayscale WordItem for VImage golden tests."""
     from PIL import Image
+
     return WordItem(image=Image.new("L", (width, height), 255), text=text, color=None)
 
 
@@ -983,7 +984,10 @@ class ValidationHarness:
             for v in range(start, end + 1):
                 tr.append([self._db.get_translation_from_verse(surah, v)])
             it = wf.get_iterator(
-                surah=surah, translations=tr, start_ayah=start, end_ayah=end,
+                surah=surah,
+                translations=tr,
+                start_ayah=start,
+                end_ayah=end,
                 annotate=scenario.params.get("annotate", True),
                 output_dir=output_dir,
             )
@@ -1001,8 +1005,11 @@ class ValidationHarness:
             wbw = list(self._db.get_wbw_grouped_by_verse(surah).get(ayah, []))
             translation = self._db.get_translation_from_verse(surah, ayah)
             it = wf.get_iterator(
-                surah=surah, verse_words=verse_text, translations=[translation],
-                ayah=ayah, wbw_translations=wbw,
+                surah=surah,
+                verse_words=verse_text,
+                translations=[translation],
+                ayah=ayah,
+                wbw_translations=wbw,
                 annotate=scenario.params.get("annotate", True),
             )
         else:
@@ -1039,7 +1046,10 @@ class ValidationHarness:
             for v in range(start, end + 1):
                 tr.append([self._db.get_translation_from_verse(surah, v)])
             it = wf.get_iterator(
-                surah=surah, translations=tr, start_ayah=start, end_ayah=end,
+                surah=surah,
+                translations=tr,
+                start_ayah=start,
+                end_ayah=end,
                 annotate=scenario.params.get("annotate", True),
             )
         elif scenario.workflow_type == "isolate":
@@ -1049,8 +1059,11 @@ class ValidationHarness:
             wbw = list(self._db.get_wbw_grouped_by_verse(surah).get(ayah, []))
             translation = self._db.get_translation_from_verse(surah, ayah)
             it = wf.get_iterator(
-                surah=surah, verse_words=verse_text, translations=[translation],
-                ayah=ayah, wbw_translations=wbw,
+                surah=surah,
+                verse_words=verse_text,
+                translations=[translation],
+                ayah=ayah,
+                wbw_translations=wbw,
                 annotate=scenario.params.get("annotate", True),
             )
         else:
@@ -1154,9 +1167,7 @@ class ValidationHarness:
 
         # Handle missing pages (rendered fewer than expected)
         while i < scenario.expected_pages:
-            page_diffs.append(
-                PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-            )
+            page_diffs.append(PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False))
             all_pass = False
             i += 1
 
@@ -1217,13 +1228,15 @@ class ValidationHarness:
                 page.save(path)
                 created.append(path)
 
-            metrics_list.append(ScenarioMetrics(
-                name=scenario.name,
-                elapsed_s=elapsed,
-                pages=page_count,
-                peak_rss_mb=rss,
-                pixel_hash=f"sha256:{hasher.hexdigest()}",
-            ))
+            metrics_list.append(
+                ScenarioMetrics(
+                    name=scenario.name,
+                    elapsed_s=elapsed,
+                    pages=page_count,
+                    peak_rss_mb=rss,
+                    pixel_hash=f"sha256:{hasher.hexdigest()}",
+                )
+            )
 
         _write_json(ref_dir / "scenarios.json", _scenarios_metadata(self._version))
         _write_json(ref_dir / "perf.json", _perf_metrics(self._version, metrics_list))
@@ -1378,8 +1391,12 @@ def _print_compare_report(report: CrossVersionReport) -> None:
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
-def cli() -> int:
-    """CLI entrypoint for the validation harness."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the harness argument parser.
+
+    Returns:
+        argparse.ArgumentParser: Configured parser with all subcommands.
+    """
     parser = argparse.ArgumentParser(
         description="QuranMediaLib Validation Harness — permanent rendering correctness checker.",
     )
@@ -1417,209 +1434,244 @@ def cli() -> int:
     compare_parser.add_argument("version_b", help="Second version (e.g. v4.0.0)")
     compare_parser.add_argument("--json", action="store_true", help="Output results as JSON")
 
-    args = parser.parse_args()
+    return parser
 
-    # ── list ──────────────────────────────────────────────────────────────
-    if args.command == "list":
-        print(f"\nCanonical Scenarios ({len(CANONICAL_SCENARIOS)} total):\n")
-        for s in CANONICAL_SCENARIOS:
-            print(
-                f"  {s.name:<28s}  {s.aspect:<10s} {s.mode:<12s} {s.resolution:<6s} "
-                f"{s.workflow_type:<12s} {s.expected_pages} page(s)"
-            )
+
+def _select_scenarios(scenario_name: str | None) -> list[Scenario] | None:
+    """Resolve canonical scenarios, optionally filtered to one by name.
+
+    Args:
+        scenario_name: Optional scenario name filter.
+
+    Returns:
+        The scenario list, or None if the named scenario is unknown.
+    """
+    if scenario_name is None:
+        return CANONICAL_SCENARIOS
+    scenarios = [s for s in CANONICAL_SCENARIOS if s.name == scenario_name]
+    if not scenarios:
+        print(f"Unknown scenario: {scenario_name}")
+        return None
+    return scenarios
+
+
+def _json_diff_detail(page_diffs: list[PageDiff] | None) -> list[dict[str, Any]] | None:
+    """Serialize page diff details for JSON output.
+
+    Args:
+        page_diffs: The diff details to serialize.
+
+    Returns:
+        Serializable list, or None if there are no diffs.
+    """
+    if not page_diffs:
+        return None
+    return [
+        {
+            "page": x.page,
+            "diff_pixels": x.diff_pixels,
+            "total_pixels": x.total_pixels,
+            "diff_percent": x.diff_percent,
+            "size_match": x.size_match,
+            "bbox": x.bbox,
+        }
+        for x in page_diffs
+    ]
+
+
+def _cmd_list() -> int:
+    """List canonical scenarios."""
+    print(f"\nCanonical Scenarios ({len(CANONICAL_SCENARIOS)} total):\n")
+    for s in CANONICAL_SCENARIOS:
+        print(
+            f"  {s.name:<28s}  {s.aspect:<10s} {s.mode:<12s} {s.resolution:<6s} "
+            f"{s.workflow_type:<12s} {s.expected_pages} page(s)"
+        )
+    print()
+    return 0
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    """Compare two versions' reference sets."""
+    harness = ValidationHarness()
+    report = harness.compare_versions(args.version_a, args.version_b)
+    if args.json:
+        json.dump(
+            {
+                "version_a": report.version_a,
+                "version_b": report.version_b,
+                "all_match": report.all_match,
+                "only_in_a": report.only_in_a,
+                "only_in_b": report.only_in_b,
+                "comparisons": [
+                    {
+                        "scenario": d.scenario,
+                        "match": d.match,
+                        "max_diff_percent": d.max_diff_percent,
+                        "pages_a": d.pages_a,
+                        "pages_b": d.pages_b,
+                        "details": _json_diff_detail(d.details),
+                    }
+                    for d in report.common
+                ],
+            },
+            sys.stdout,
+            indent=2,
+        )
         print()
-        return 0
+    else:
+        _print_compare_report(report)
+    harness.close()
+    return 0 if report.all_match else 1
 
-    # ── compare ───────────────────────────────────────────────────────────
-    if args.command == "compare":
-        harness = ValidationHarness()
-        report = harness.compare_versions(args.version_a, args.version_b)
-        if args.json:
-            json.dump(
-                {
-                    "version_a": report.version_a,
-                    "version_b": report.version_b,
-                    "all_match": report.all_match,
-                    "only_in_a": report.only_in_a,
-                    "only_in_b": report.only_in_b,
-                    "comparisons": [
-                        {
-                            "scenario": d.scenario,
-                            "match": d.match,
-                            "max_diff_percent": d.max_diff_percent,
-                            "pages_a": d.pages_a,
-                            "pages_b": d.pages_b,
-                            "details": [
-                                {
-                                    "page": x.page,
-                                    "diff_pixels": x.diff_pixels,
-                                    "total_pixels": x.total_pixels,
-                                    "diff_percent": x.diff_percent,
-                                    "size_match": x.size_match,
-                                    "bbox": x.bbox,
-                                }
-                                for x in (d.details or [])
-                            ]
-                            if d.details
-                            else None,
-                        }
-                        for d in report.common
-                    ],
-                },
-                sys.stdout,
-                indent=2,
-            )
-            print()
-        else:
-            _print_compare_report(report)
-        harness.close()
-        return 0 if report.all_match else 1
 
-    # ── test ──────────────────────────────────────────────────────────────
-    if args.command == "test":
-        import pytest as _pytest
+def _cmd_test(args: argparse.Namespace) -> int:
+    """Run the full test suite: pixel validation + benchmarks + unit tests."""
+    version = getattr(args, "version", None) or f"v{qml_version}"
+    hv = ValidationHarness(version)
 
-        version = getattr(args, "version", None) or f"v{qml_version}"
-        hv = ValidationHarness(version)
-
-        all_pass = True
-        total_start = time.perf_counter()
-
-        try:
-            # 1. Pixel validation (unless --unit)
-            if not args.unit:
-                scenarios = CANONICAL_SCENARIOS
-                if args.scenario:
-                    scenarios = [s for s in scenarios if s.name == args.scenario]
-                    if not scenarios:
-                        print(f"Unknown scenario: {args.scenario}")
-                        return 1
-
-                results = hv.run_all(scenarios)
-                _print_validation_report(results)
-                if not all(r.passed for r in results):
-                    all_pass = False
-
-            # 2. Benchmarks (always run unless --no-benchmark)
-            if not args.no_benchmark:
-                scenarios = CANONICAL_SCENARIOS
-                if args.scenario:
-                    scenarios = [s for s in scenarios if s.name == args.scenario]
-                metrics = hv.benchmark_all(scenarios)
-                _print_perf_report(metrics)
-
-            # 3. Unit tests + module benchmarks via pytest
-            if not args.scenario:
-                pytest_args = ["tests/", "-x", "-q", "--tb=short"]
-                if args.unit:
-                    # Pure unit gate: excludes the golden-contract test, which
-                    # needs git-ignored reference images (developer-local only).
-                    pytest_args.append("--ignore=tests/test_validation.py")
-                    print("\n  Running unit tests only...")
-                else:
-                    pytest_args.extend(["--ignore=tests/test_validation.py"])
-                    if not args.no_benchmark:
-                        pytest_args.append("--benchmark")
-                        print("\n  Running unit tests with module benchmarks...")
-                    else:
-                        print("\n  Running unit tests...")
-                unit_ok = _pytest.main(pytest_args) == 0
-                if not unit_ok:
-                    all_pass = False
-
-        finally:
-            hv.close()
-
-        elapsed = time.perf_counter() - total_start
-        print(f"\n{'=' * 60}")
-        print(f"  {'ALL TESTS PASSED' if all_pass else 'SOME TESTS FAILED'}  ({elapsed:.1f}s total)")
-        print(f"{'=' * 60}\n")
-        return 0 if all_pass else 1
-
-    # ── Commands that need a harness instance ─────────────────────────────
-    version = getattr(args, "version", None)
-    harness = ValidationHarness(version)
+    all_pass = True
+    total_start = time.perf_counter()
 
     try:
-        # ── update ────────────────────────────────────────────────────────
+        if not args.unit:
+            scenarios = _select_scenarios(args.scenario)
+            if scenarios is None:
+                return 1
+            results = hv.run_all(scenarios)
+            _print_validation_report(results)
+            if not all(r.passed for r in results):
+                all_pass = False
+
+        if not args.no_benchmark:
+            scenarios = CANONICAL_SCENARIOS
+            if args.scenario:
+                scenarios = [s for s in scenarios if s.name == args.scenario]
+            metrics = hv.benchmark_all(scenarios)
+            _print_perf_report(metrics)
+
+        if not args.scenario and not _cmd_pytest_unit(args):
+            all_pass = False
+    finally:
+        hv.close()
+
+    elapsed = time.perf_counter() - total_start
+    print(f"\n{'=' * 60}")
+    print(f"  {'ALL TESTS PASSED' if all_pass else 'SOME TESTS FAILED'}  ({elapsed:.1f}s total)")
+    print(f"{'=' * 60}\n")
+    return 0 if all_pass else 1
+
+
+def _cmd_pytest_unit(args: argparse.Namespace) -> bool:
+    """Run the pytest unit gate (excludes the git-ignored golden tests).
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Returns:
+        True if the pytest run succeeded.
+    """
+    import pytest as _pytest
+
+    pytest_args = ["tests/", "-x", "-q", "--tb=short"]
+    if args.unit:
+        # Pure unit gate: excludes the golden-contract test, which needs
+        # git-ignored reference images (developer-local only).
+        pytest_args.append("--ignore=tests/test_validation.py")
+        print("\n  Running unit tests only...")
+    else:
+        pytest_args.extend(["--ignore=tests/test_validation.py"])
+        if not args.no_benchmark:
+            pytest_args.append("--benchmark")
+            print("\n  Running unit tests with module benchmarks...")
+        else:
+            print("\n  Running unit tests...")
+    return _pytest.main(pytest_args) == 0
+
+
+def _cmd_update(args: argparse.Namespace, harness: ValidationHarness) -> int:
+    """(Re)generate reference images + perf data."""
+    scenarios = _select_scenarios(args.scenario)
+    if scenarios is None:
+        return 1
+    paths = harness.update_references(scenarios)
+    print(f"\nUpdated {len(paths)} reference images + metadata in {harness.reference_dir}\n")
+    return 0
+
+
+def _cmd_benchmark(args: argparse.Namespace, harness: ValidationHarness) -> int:
+    """Run performance benchmarks."""
+    scenarios = _select_scenarios(args.scenario)
+    if scenarios is None:
+        return 1
+    metrics = harness.benchmark_all(scenarios)
+    if args.json:
+        json.dump(_perf_metrics(harness.version, metrics), sys.stdout, indent=2)
+        print()
+    else:
+        _print_perf_report(metrics)
+    return 0
+
+
+def _cmd_run(args: argparse.Namespace, harness: ValidationHarness) -> int:
+    """Validate against reference images."""
+    scenarios = _select_scenarios(args.scenario)
+    if scenarios is None:
+        return 1
+    results = harness.run_all(scenarios)
+    if args.json:
+        json.dump(
+            [
+                {
+                    "scenario": r.scenario,
+                    "passed": r.passed,
+                    "pages_expected": r.pages_expected,
+                    "pages_actual": r.pages_actual,
+                    "error": r.error,
+                    "elapsed": round(r.elapsed, 3),
+                    "metrics": {
+                        "elapsed_s": round(r.metrics.elapsed_s, 3),
+                        "pages": r.metrics.pages,
+                        "peak_rss_mb": round(r.metrics.peak_rss_mb, 1),
+                        "pixel_hash": r.metrics.pixel_hash,
+                    }
+                    if r.metrics
+                    else None,
+                    "page_diffs": _json_diff_detail(r.page_diffs),
+                }
+                for r in results
+            ],
+            sys.stdout,
+            indent=2,
+        )
+        print()
+    else:
+        _print_validation_report(results)
+    return 0 if all(r.passed for r in results) else 1
+
+
+def cli() -> int:
+    """CLI entrypoint for the validation harness."""
+    args = _build_parser().parse_args()
+
+    if args.command == "list":
+        return _cmd_list()
+
+    if args.command == "compare":
+        return _cmd_compare(args)
+
+    if args.command == "test":
+        return _cmd_test(args)
+
+    version = getattr(args, "version", None)
+    harness = ValidationHarness(version)
+    try:
         if args.command == "update":
-            scenarios = CANONICAL_SCENARIOS
-            if args.scenario:
-                scenarios = [s for s in scenarios if s.name == args.scenario]
-                if not scenarios:
-                    print(f"Unknown scenario: {args.scenario}")
-                    return 1
-            paths = harness.update_references(scenarios)
-            print(f"\nUpdated {len(paths)} reference images + metadata in {harness.reference_dir}\n")
-            return 0
-
-        # ── benchmark ─────────────────────────────────────────────────────
+            return _cmd_update(args, harness)
         if args.command == "benchmark":
-            scenarios = CANONICAL_SCENARIOS
-            if args.scenario:
-                scenarios = [s for s in scenarios if s.name == args.scenario]
-                if not scenarios:
-                    print(f"Unknown scenario: {args.scenario}")
-                    return 1
-            metrics = harness.benchmark_all(scenarios)
-            if args.json:
-                json.dump(_perf_metrics(harness.version, metrics), sys.stdout, indent=2)
-                print()
-            else:
-                _print_perf_report(metrics)
-            return 0
-
-        # ── run ───────────────────────────────────────────────────────────
+            return _cmd_benchmark(args, harness)
         if args.command == "run":
-            scenarios = CANONICAL_SCENARIOS
-            if args.scenario:
-                scenarios = [s for s in scenarios if s.name == args.scenario]
-                if not scenarios:
-                    print(f"Unknown scenario: {args.scenario}")
-                    return 1
-            results = harness.run_all(scenarios)
-            if args.json:
-                json.dump(
-                    [
-                        {
-                            "scenario": r.scenario,
-                            "passed": r.passed,
-                            "pages_expected": r.pages_expected,
-                            "pages_actual": r.pages_actual,
-                            "error": r.error,
-                            "elapsed": round(r.elapsed, 3),
-                            "metrics": {
-                                "elapsed_s": round(r.metrics.elapsed_s, 3),
-                                "pages": r.metrics.pages,
-                                "peak_rss_mb": round(r.metrics.peak_rss_mb, 1),
-                                "pixel_hash": r.metrics.pixel_hash,
-                            }
-                            if r.metrics
-                            else None,
-                            "page_diffs": [
-                                {
-                                    "page": d.page,
-                                    "diff_pixels": d.diff_pixels,
-                                    "total_pixels": d.total_pixels,
-                                    "diff_percent": d.diff_percent,
-                                    "size_match": d.size_match,
-                                    "bbox": d.bbox,
-                                }
-                                for d in (r.page_diffs or [])
-                            ]
-                            if r.page_diffs
-                            else None,
-                        }
-                        for r in results
-                    ],
-                    sys.stdout,
-                    indent=2,
-                )
-                print()
-            else:
-                _print_validation_report(results)
-            return 0 if all(r.passed for r in results) else 1
-
+            return _cmd_run(args, harness)
     finally:
         harness.close()
 

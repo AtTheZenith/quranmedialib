@@ -9,7 +9,7 @@ from typing import Any, Sequence
 from PIL import Image, ImageDraw
 
 from quranmedialib.modules.font_cache import _load_font_base
-from quranmedialib.modules.text_layout import StyledWord, wrap_rich_text_balanced, wrap_rich_text_greedy
+from quranmedialib.modules.text_layout import Line, StyledWord, wrap_rich_text_balanced, wrap_rich_text_greedy
 from quranmedialib.types import MAX_CANVAS_DIMENSION, MAX_TEXT_CHARS, MAX_TEXT_WORDS, TextConfig
 
 logger = logging.getLogger(__name__)
@@ -125,64 +125,62 @@ def format_isolation_text(
     return " ".join(parts)
 
 
-def get_timage(
-    text: str | None,
-    config: TextConfig | None = None,
-    highlight_segments: str | list[str] | None = None,
-    **kwargs: Any,
-) -> Image.Image | None:
-    """Renders multi-line translation text. Returns None if text is empty.
+def _validate_input_bounds(s_text: str) -> None:
+    """Reject pathological inputs before any measurement or canvas allocation.
 
-    Security: text longer than MAX_TEXT_CHARS (or with more than MAX_TEXT_WORDS
-    tokens) is rejected before any measurement, so untrusted strings cannot
-    drive layout/rendering cost or canvas allocation unbounded.
+    Args:
+        s_text: The raw text to validate.
 
     Raises:
-        ValueError: If `text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS, or if
-            `max_height` is negative or exceeds MAX_CANVAS_DIMENSION.
+        ValueError: If `s_text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS tokens.
     """
-    if text is None:
-        return None
-    s_text = str(text)
-    if not s_text.strip():
-        return None
-
-    # Reject pathological inputs before any tokenization, measurement, or canvas
-    # allocation so an untrusted string cannot drive memory/layout cost unbounded.
     if len(s_text) > MAX_TEXT_CHARS:
-        raise ValueError(
-            f"text length {len(s_text)} exceeds maximum of {MAX_TEXT_CHARS} characters"
-        )
+        raise ValueError(f"text length {len(s_text)} exceeds maximum of {MAX_TEXT_CHARS} characters")
     # N whitespace-delimited words need at least 2N-1 characters, so a text this
-    # short cannot reach the word cap; skip the tokenizing count in the hot path.
+    # short cannot reach the word limit; skip the tokenizing count in the hot path.
     if len(s_text) >= 2 * MAX_TEXT_WORDS - 1:
         word_count = len(re.findall(r"\S+", s_text))
         if word_count > MAX_TEXT_WORDS:
             raise ValueError(f"text has {word_count} words, exceeding maximum of {MAX_TEXT_WORDS}")
 
-    if config is None:
-        config = TextConfig()
 
-    # Support max_height as kwarg alias for config.height
+def _resolve_max_height(config: TextConfig, kwargs: dict[str, Any]) -> int | None:
+    """Resolve and validate the `max_height` constraint from kwargs or config.
+
+    Args:
+        config: The text configuration (source of the default height).
+        kwargs: Caller-supplied overrides (`max_height` alias).
+
+    Returns:
+        The effective max_height, or None if unbounded.
+
+    Raises:
+        ValueError: If max_height is negative or exceeds MAX_CANVAS_DIMENSION.
+    """
     max_height = kwargs.get("max_height", config.height)
     if max_height is not None:
         if max_height < 0:
             raise ValueError("Width and height must be >= 0")
-
         if max_height > MAX_CANVAS_DIMENSION:
             raise ValueError(f"max_height exceeds maximum limit of {MAX_CANVAS_DIMENSION}, got {max_height}")
+    return max_height
 
-    # Measure and wrap
-    styled_words = _parse_rich_text(s_text, config, None)
 
-    if config.balanced_wrapping:
-        lines = wrap_rich_text_balanced(styled_words, config.max_width, mode=config.balancing_mode)
-    else:
-        lines = wrap_rich_text_greedy(styled_words, config.max_width)
+def _compute_canvas_size(
+    lines: list[Line],
+    l_spacing: float,
+    max_height: int | None,
+) -> tuple[int, int, float]:
+    """Compute the pixel canvas size and the layout width for a wrapped text.
 
-    if not lines:
-        return None
+    Args:
+        lines: Wrapped text lines.
+        l_spacing: Vertical spacing between lines.
+        max_height: Optional height constraint (from config/kwargs).
 
+    Returns:
+        tuple[int, int, float]: (canvas width, canvas height, total text width).
+    """
     total_width = 0.0
     total_height = 0.0
     for line in lines:
@@ -190,7 +188,6 @@ def get_timage(
             total_width = line.width
         total_height += line.height
 
-    l_spacing = config.line_spacing
     total_height += (len(lines) - 1) * l_spacing
 
     # Apply height constraint if provided
@@ -215,12 +212,30 @@ def get_timage(
         tw = min(tw, MAX_CANVAS_DIMENSION)
         th = min(th, MAX_CANVAS_DIMENSION)
 
-    # Detect if we can use an 'L' mask (no color tags in original text)
-    use_mask = "#" not in s_text
-    img = Image.new("L" if use_mask else "RGBA", (tw, th), 0 if use_mask else (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    _draw_text = draw.text
+    return tw, th, total_width
 
+
+def _layout_text_lines(
+    draw: ImageDraw.ImageDraw,
+    lines: list[StyledWord | Line],
+    total_width: float,
+    max_height: int | None,
+    use_mask: bool,
+    l_spacing: float,
+) -> None:
+    """Draw wrapped text onto the canvas, centering each line horizontally.
+
+    Words sharing the same style are batched into a single draw call; stroke
+    ink is reserved for simulated bold so glyphs never clip their right edge.
+
+    Args:
+        draw: Canvas draw handle.
+        lines: Wrapped text lines to render.
+        total_width: Text layout width, used for horizontal centering.
+        max_height: Optional vertical cap; lines beyond it are skipped.
+        use_mask: If True, draw into an 'L' mask with white ink.
+        l_spacing: Vertical spacing between lines.
+    """
     current_y = 0.0
     for line in lines:
         l_height = line.height
@@ -233,9 +248,8 @@ def get_timage(
         # 1. Find max ascent for baseline alignment
         max_ascent = 0
         for word in line.words:
-            wa = word.ascent
-            if wa > max_ascent:
-                max_ascent = wa
+            if word.ascent > max_ascent:
+                max_ascent = word.ascent
 
         # 2. Render words in batches of same style
         curr_x = line_x
@@ -253,7 +267,7 @@ def get_timage(
             simulate_bold = last_style[2]
             stroke_width = _SIMULATE_BOLD_STROKE_WIDTH if simulate_bold else 0
             stroke_fill = 255 if (use_mask and simulate_bold) else last_style[1]
-            _draw_text(
+            draw.text(
                 (curr_x, current_y + (max_ascent - sa)),
                 txt,
                 font=sf,
@@ -280,6 +294,58 @@ def get_timage(
             _flush_batch()
 
         current_y += l_height + l_spacing
+
+
+def get_timage(
+    text: str | None,
+    config: TextConfig | None = None,
+    highlight_segments: str | list[str] | None = None,
+    **kwargs: Any,
+) -> Image.Image | None:
+    """Renders multi-line translation text. Returns None if text is empty.
+
+    Security: text longer than MAX_TEXT_CHARS (or with more than MAX_TEXT_WORDS
+    tokens) is rejected before any measurement, so untrusted strings cannot
+    drive layout/rendering cost or canvas allocation unbounded.
+
+    Raises:
+        ValueError: If `text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS, or if
+            `max_height` is negative or exceeds MAX_CANVAS_DIMENSION.
+    """
+    if text is None:
+        return None
+    s_text = str(text)
+    if not s_text.strip():
+        return None
+
+    # Reject pathological inputs before any tokenization, measurement, or canvas
+    # allocation so an untrusted string cannot drive memory/layout cost unbounded.
+    _validate_input_bounds(s_text)
+
+    if config is None:
+        config = TextConfig()
+
+    # Support max_height as kwarg alias for config.height
+    max_height = _resolve_max_height(config, kwargs)
+
+    # Measure and wrap
+    styled_words = _parse_rich_text(s_text, config, None)
+
+    if config.balanced_wrapping:
+        lines = wrap_rich_text_balanced(styled_words, config.max_width, mode=config.balancing_mode)
+    else:
+        lines = wrap_rich_text_greedy(styled_words, config.max_width)
+
+    if not lines:
+        return None
+
+    tw, th, total_width = _compute_canvas_size(lines, config.line_spacing, max_height)
+
+    # Detect if we can use an 'L' mask (no color tags in original text)
+    use_mask = "#" not in s_text
+    img = Image.new("L" if use_mask else "RGBA", (tw, th), 0 if use_mask else (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    _layout_text_lines(draw, lines, total_width, max_height, use_mask, config.line_spacing)
 
     if use_mask:
         # Convert 'L' mask to 'RGBA' using the base color to preserve performance
