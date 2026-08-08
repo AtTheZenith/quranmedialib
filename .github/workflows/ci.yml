@@ -23,5 +23,11 @@ jobs:
       - name: Lint
         run: uv run ruff check src/ tests/ demo.py
 
+      - name: Format check
+        run: uv run ruff format --check src/ tests/ demo.py
+
+      - name: Dependency audit
+        run: uv run --with pip-audit pip-audit
+
       - name: Unit tests
         run: uv run -m quranmedialib.check test --unit
