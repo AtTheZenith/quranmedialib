@@ -31,3 +31,7 @@ src/quranmedialib/check/references/
 
 # Other
 .github/wiki
+
+# Agent config / skills — not for distribution
+CLAUDE.md
+.claude/
