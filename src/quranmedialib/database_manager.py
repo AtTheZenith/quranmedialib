@@ -225,7 +225,7 @@ class DatabaseManager:
             self._local.connections = {}
 
         if name not in self._local.connections:
-            conn = sqlite3.connect(str(config.filepath), check_same_thread=False)
+            conn = sqlite3.connect(f"file:{config.filepath}?mode=ro", uri=True, check_same_thread=False)
             for pragma in _SQLITE_PRAGMAS:
                 conn.execute(pragma)
             conn.row_factory = None
