@@ -17,20 +17,20 @@ A high-performance media generation library for rendering Quranic Arabic text an
 ---
 
 ## 📌 Table of Contents
-- [User Guide](#-user-guide)
+- [User Guide](#user-guide)
     - [Installation](#installation)
     - [Quick Start](#quick-start)
     - [Presets Reference](#presets-reference)
     - [Built-in Workflows](#built-in-workflows)
     - [Demo Gallery](#demo-gallery)
-- [Developer Guide](#-developer-guide)
+- [Developer Guide](#developer-guide)
     - [Architecture](#architecture)
     - [Core Thesis](#core-thesis)
     - [Core API Reference](#core-api-reference)
     - [Advanced Workflows](#advanced-workflows)
     - [Performance & Parallelism](#performance--parallelism)
     - [Development Suite](#development-suite)
-- [Community & License](#-community--license)
+- [Community & License](#community--license)
 
 ---
 

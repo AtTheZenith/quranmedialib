@@ -11,7 +11,7 @@ We recommend using `uv` for the fastest and most consistent experience.
 # https://astral.sh/uv
 
 # Clone and install
-git clone https://github.com/yourusername/quranmedialib.git
+git clone https://github.com/AtTheZenith/quranmedialib.git
 cd quranmedialib
 uv pip install -e .
 ```
@@ -56,8 +56,8 @@ translations = ["In the name of Allah,", "the Entirely Merciful, the Especially 
 iterator = workflow.get_iterator(surah=1, ayah=1, translations=translations)
 
 for page_num, page_images in enumerate(iterator, 1):
-    for img, suffix in page_images:
-        img.save(f"my_first_verse_p{page_num}_{suffix}.png")
+    for img in page_images:
+        img.save(f"my_first_verse_p{page_num}.png")
 ```
 
 ## Scaling Up: Rendering a Whole Surah
@@ -72,8 +72,8 @@ workflow = SurahWorkflow(preset)
 
 # Process Surah Al-Ikhlas (112)
 for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
-    for img, suffix in page_images:
-        img.save(f"surah112_p{page_num}_{suffix}.png")
+    for img in page_images:
+        img.save(f"surah112_p{page_num}.png")
 ```
 
 ## Need Help?

@@ -215,7 +215,7 @@ Use `--no-benchmark` when you only need correctness (pixel + unit) and `--unit` 
   - Padding and color in `pad`.
   - `strength` and `radius` in `glow`.
   - Layout options in `Frame` and `VImage`.
-  - `rendered_width` and `rendered_height` kwargs in `Frame.layer()` for multi-page alignment.
+  - `keep_bottom` and `vertical_alignment` kwargs in `Frame.layer_at()` for multi-page alignment.
 - Keep public functions short by delegating to private helpers.
 - Use `**kwargs` for extensibility in workflow methods; document expected keys in docstring.
 - Functions that process images generally return new objects instead of mutating inputs.
@@ -319,7 +319,7 @@ class LayoutConfig:
 ### 8.2 Layout (VImage Composition)
 
 - `VImage` is the verse image layout engine that implements RTL row packing (`_greedy_pack`), Descending Line Balancing (`_balance_rows`), and page chunking (`get_page_chunk`).
-- `Frame` manages the RGBA canvas and handles layering of `VImage` objects onto pages (`Frame.layer()`).
+- `Frame` manages the RGBA canvas and handles layering of `VImage` objects onto pages (`Frame.layer_at()`).
 - `get_page_chunk` computes rows per-page from remaining items, matching v2's per-page row computation behavior.
 - `_apply_stop_sign_adjustment` uses `QURANIC_STOP_SIGNS` to adjust page breaks.
 - `VImage.layer()` places rendered word rows onto the page canvas at computed positions.
@@ -647,6 +647,9 @@ uv run -m ruff check .
 
 # Format with Ruff
 uv run -m ruff format .
+
+# Lint Markdown (see .pymarkdown for rule config)
+uv run pymarkdownlnt --config .pymarkdown scan -r README.md docs CONTRIBUTING.md CODE_OF_CONDUCT.md
 
 # Refactor with Sourcery
 uvx sourcery review . --disable low-code-quality --disable no-loop-in-tests --disable no-conditionals-in-tests

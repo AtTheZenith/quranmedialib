@@ -1,6 +1,6 @@
 # API Reference
 
-This document provides a detailed summary of the public API for `QuranMediaLib`. 
+This document provides a detailed summary of the public API for `QuranMediaLib`.
 
 ## Exception Hierarchy
 
@@ -74,7 +74,7 @@ Isolates individual words for study tools.
 ### Presets
 Pre-configured settings for different media formats.
 - `LANDSCAPE_PRESET`: 16:9 aspect ratio.
-- `STORY_PRESET`: 9:16 aspect la...
+- `STORY_PRESET`: 9:16 aspect ratio.
 - `SQUARE_PRESET`: 1:1 aspect ratio.
 
 **Usage:** `preset = LANDSCAPE_PRESET["default"]["1080p"]`
@@ -150,7 +150,7 @@ Frame composition class that manages the RGBA surface and handles layering of im
 | `layer_at` | `(image, rect: ResolvedRect, text_color=None, **kwargs)` | `None` | Places content at a resolved pixel rect. Handles `Layerable`, `'L'` masks, `RGBA` composites. |
 | `render` | `()` | `Image.Image` | Returns the final composed RGBA image. |
 
-`layer()` (old API) is deprecated — use `layer_at()` with a `ResolvedRect` instead.
+`Frame.layer()` (old v3 API) was removed in v4.0.0 — use `layer_at()` with a `ResolvedRect` instead.
 
 ## Utility Tools
 
@@ -170,4 +170,3 @@ Synchronous peak aggregate-RSS tracker. Context manager; tracks peak between `__
 
 ### `_bytes_mode_max_batch(chunk, frame_cfg)`
 Module-level function in `verse_range.py`. Calculates safe per-batch verse count for the bytes IPC path, bounding `batch_results` accumulation to ~80% of the per-process 256MB limit. Adapts to frame dimensions (e.g., 8 verses at 1080p, 2 at 2160p).
-

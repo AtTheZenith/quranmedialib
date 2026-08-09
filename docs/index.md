@@ -14,6 +14,7 @@ Welcome to the official documentation of `QuranMediaLib`. This directory contain
 
 ### Getting Started
 - [Getting Started](getting_started.md): A detailed guide for new users to go from installation to first render.
+- [Getting Started Notebook](getting_started.ipynb): An interactive, runnable version of the guide with a word-slicing demo.
 
 ---
 *For quick start and installation, please refer to the [README](../README.md).*

@@ -42,7 +42,7 @@ The primary test entrypoint is `quranmedialib.check`, which wraps pixel validati
 # Full suite: pixel validation + benchmarks + unit tests
 uv run -m quranmedialib.check test
 
-# Pixel validation only (no benchmarks, no unit tests)
+# Unit tests only (skip pixel validation and benchmarks)
 uv run -m quranmedialib.check test --unit
 
 # Standalone benchmark run
@@ -86,6 +86,9 @@ We use `Ruff` and `Sourcery` to maintain a clean, "boring" codebase.
 # Lint and Format
 uv run -m ruff check .
 uv run -m ruff format .
+
+# Markdown lint (README, docs/, contributing, conduct)
+uv run pymarkdownlnt --config .pymarkdown scan -r README.md docs CONTRIBUTING.md CODE_OF_CONDUCT.md
 
 # Advanced refactoring suggestions
 uvx sourcery review .

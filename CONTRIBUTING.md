@@ -4,7 +4,7 @@ Thank you for your interest in contributing to QuranMediaLib! We aim to maintain
 
 ## Technical Bar
 
-Before you submit a Pull Request, please familiarize yourself with our **Repository Style Guide** in [`AGENTS.md`](AGENTS.md). 
+Before you submit a Pull Request, please familiarize yourself with our **Repository Style Guide** in [`AGENTS.md`](AGENTS.md).
 
 We treat our code as a professional asset. We prioritize:
 - **Correctness First**: All tests must pass.
@@ -27,7 +27,7 @@ git config core.hooksPath .githooks
 ```
 - `commit-msg` — enforces Conventional Commits (see `AGENTS.md` section 21).
 - `pre-commit` — runs `ruff check` on staged Python files.
-- `pre-push` — runs `ruff check` on the full tree plus `quranmedialib.check test --unit` (unit tests only; pixel validation and benchmarks are excluded).
+- `pre-push` — runs `ruff check` on the full tree, markdown lint (`pymarkdownlnt`), plus `quranmedialib.check test --unit` (unit tests only; pixel validation and benchmarks are excluded).
 
 Bypass on demand with `--no-verify` or `SKIP_QC=1`. On Windows (git-bash), ensure `uv` is on the PATH the hooks inherit.
 
