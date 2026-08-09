@@ -20,6 +20,12 @@ if ! uv run ruff format --check src/ tests/ demo.py; then
   exit 1
 fi
 
+echo "==> pymarkdownlnt scan"
+if ! uv run pymarkdownlnt --config .pymarkdown scan -r README.md docs CONTRIBUTING.md CODE_OF_CONDUCT.md; then
+  echo "Markdown lint failed. Fix before pushing, or bypass with SKIP_QC=1."
+  exit 1
+fi
+
 echo "==> quranmedialib.check test --unit"
 if ! uv run -m quranmedialib.check test --unit; then
   echo "Unit tests failed. Fix before pushing, or bypass with SKIP_QC=1."

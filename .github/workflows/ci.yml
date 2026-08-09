@@ -26,6 +26,9 @@ jobs:
       - name: Format check
         run: uv run ruff format --check src/ tests/ demo.py
 
+      - name: Markdown lint
+        run: uv run pymarkdownlnt --config .pymarkdown scan -r README.md docs CONTRIBUTING.md CODE_OF_CONDUCT.md
+
       - name: Dependency audit
         run: uv run --with pip-audit pip-audit
 
