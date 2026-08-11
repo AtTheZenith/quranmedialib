@@ -242,7 +242,7 @@ wheels = [
 
 [[package]]
 name = "quranmedialib"
-version = "4.2.0.dev1"
+version = "4.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "pillow" },
