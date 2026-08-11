@@ -1,35 +1,40 @@
-# Python-generated files
+# Python build & distribution
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
-*.egg-info
-.venv
+*.egg-info/
+.venv/
 
-# Development
+# Environment & secrets
 .env
-.ruff_cache/
-.gitnexus
 
-# Test artifacts
+# Tooling & test caches
+.ruff_cache/
 .pytest_cache/
 .coverage
 htmlcov/
-/output/
-.bm/
+.gitnexus/
 
-# Local helper scripts (install hooks etc.) — never tracked
-/scripts/
+# Benchmark artifacts — never committed (regenerated via `check benchmark`)
+benchmarks/
+/output/
+
+# check module caches & golden references
+src/quranmedialib/check/.bm/
 
 # Golden reference images — regenerated on demand via `check update`
 # (the code is the source of truth, not the images)
 src/quranmedialib/check/references/
 
+# Local helper scripts (install hooks etc.) — never tracked
+/scripts/
+
 # IDE files
 .vscode/
 
-# Other
+# Local wiki mirror (on-disk only)
 .github/wiki
 
 # Agent config / skills — not for distribution
