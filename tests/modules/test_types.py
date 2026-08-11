@@ -259,7 +259,7 @@ def test_font_resource_none_font_name() -> None:
 def test_font_resource_from_path_outside_working_dir() -> None:
     """Test that FontResource.from_path rejects paths outside working dir."""
     with pytest.raises(ResourceError, match="outside the working directory"):
-        FontResource.from_path("C:\\Windows\\Fonts\\arial.ttf")
+        FontResource.from_path("/outside/fonts/arial.ttf")
 
 
 def test_font_resource_from_path_with_unsafe_paths() -> None:
@@ -267,10 +267,10 @@ def test_font_resource_from_path_with_unsafe_paths() -> None:
     from pathlib import Path
 
     resource = FontResource.from_path(
-        "C:\\Windows\\Fonts\\arial.ttf",
+        "/outside/fonts/arial.ttf",
         unsafe_paths=True,
     )
-    assert resource.path == Path("C:\\Windows\\Fonts\\arial.ttf")
+    assert resource.path == Path("/outside/fonts/arial.ttf")
 
 
 def test_font_resource_from_path_inside_working_dir() -> None:
