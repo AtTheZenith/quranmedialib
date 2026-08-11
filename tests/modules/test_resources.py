@@ -7,6 +7,8 @@ This module contains tests for verifying resource loading functionality includin
 - SQLite connection handling
 """
 
+from pathlib import Path
+
 import pytest
 
 from quranmedialib.resources import (
@@ -77,8 +79,9 @@ def test_get_asset_path_path_traversal_windows_style() -> None:
 
 def test_get_asset_path_absolute_path_rejected() -> None:
     """Test that absolute paths are rejected."""
+    absolute_path = str(Path(__file__).resolve())
     with pytest.raises(ValueError, match="Absolute paths are not allowed"):
-        get_asset_path("C:\\Windows\\System32\\config\\SAM")
+        get_asset_path(absolute_path)
 
 
 def test_verify_asset_exists_valid() -> None:
