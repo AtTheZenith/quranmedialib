@@ -2,9 +2,14 @@
 
 Cross-version log of the `quranmedialib.check` benchmark suite. Per-version tables live in each `changelog/vX.Y.Z.md` under `## Benchmark History`; this file is the cross-version summary.
 
-## Method
+## Benchmark Procedure
 
-Run `uv run -m quranmedialib.check benchmark --json` in a worktree at each release tag, best-of-5, raw runs saved to `output/bench_vX.Y.Z_rN.json` (gitignored). The headline metric is the fastest full-suite run (min of run totals), not the sum of per-scenario bests. Al-Baqarah is the perf-regression scenario (~473 pages, ~90% of suite time). Rows are comparable only across the same host, user, and date window; deltas below ~10% carry no signal. Tooling: `output/aggregate_bench.py`, `output/gen_changelog_sections.py`.
+- Run `uv run -m quranmedialib.check benchmark --json` in a worktree at each release tag.
+- Capture best-of-5 raw runs to `output/bench_vX.Y.Z_rN.json` (gitignored).
+- Headline metric is the fastest full-suite run (min of run totals), not the sum of per-scenario bests.
+- Al-Baqarah is the perf-regression scenario (~473 pages, ~90% of suite time).
+- Rows are comparable only across the same host, user, and date window; deltas below ~10% carry no signal.
+- Tooling: `output/aggregate_bench.py`, `output/gen_changelog_sections.py`.
 
 ## User Benchmarks
 
