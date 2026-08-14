@@ -136,7 +136,10 @@ class IsolateWordsWorkflow(BaseWorkflow):
                 )
 
             # Bundle into WordItems for layout
-            items = [WordItem(img, text) for img, text in zip(isolated_images, items_text)]
+            items = [
+                WordItem(image=img, text=text, index=idx, class_type="verse_number" if text == "" else "word")
+                for idx, (img, text) in enumerate(zip(isolated_images, items_text), start=1)
+            ]
 
             # Resolve layout positions from UDim2 presets
             guide = build_layout_guide(

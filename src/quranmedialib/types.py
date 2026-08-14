@@ -487,6 +487,19 @@ class WordItem:
     """Combines a word image with its text metadata for layout processing.
 
     Used by the framer to calculate line breaks and alignments.
+
+    Attributes:
+        image: The rendered word image.
+        text: The word text (empty string for the verse number marker).
+        color: Optional highlight color.
+        index: 1-based position in the verse word sequence. Unset (0) for the
+            verse number marker and for batched annotations until the batch
+            boundary structure lands (see Gap 1 in the v5 implementation plan).
+        class_type: Record discriminator — ``"word"`` or ``"verse_number"``.
+            Lets sidecar consumers distinguish a real word from the phantom
+            empty-text verse number marker without special-casing text.
+        width: Pre-calculated image width.
+        height: Pre-calculated image height.
     """
 
     image: Image.Image
@@ -494,6 +507,8 @@ class WordItem:
     color: Color | None = None
     width: int = field(init=False)
     height: int = field(init=False)
+    index: int = 0
+    class_type: str = "word"
 
     def __post_init__(self):
         """Pre-calculate image dimensions to speed up layout loops."""

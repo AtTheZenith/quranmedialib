@@ -6,6 +6,7 @@ of individual Quranic verses with accompanying translations.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 from typing import Iterator
 
@@ -112,7 +113,16 @@ class VerseWorkflow(BaseWorkflow):
         # 4. Prepare WordItems for layout
         # We append an empty string for the verse number marker's text
         all_text = list(verse_words) + [""]
-        word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)]
+        if annotate:
+            # Per-word index needs the batch boundary structure (Gap 1, Phase 2);
+            # annotated items keep the default index until that lands.
+            word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)]
+        else:
+            word_items = [
+                WordItem(image=img, text=text, index=idx)
+                for idx, (img, text) in enumerate(zip(annotated_images, all_text), start=1)
+            ]
+        word_items[-1] = dataclasses.replace(word_items[-1], class_type="verse_number")
 
         # 5. Prepare Translation Images (lazy - renders on demand)
         translation_images = self._prepare_translation_images(translations)

@@ -367,6 +367,27 @@ def test_word_item_valid_image() -> None:
     assert item.text == "test"
 
 
+def test_word_item_index_and_class_type_defaults() -> None:
+    """Test that WordItem.index defaults to 0 and class_type to 'word'."""
+    from PIL import Image
+
+    img = Image.new("RGBA", (100, 50))
+    item = WordItem(img, text="test")
+    assert item.index == 0
+    assert item.class_type == "word"
+
+
+def test_word_item_verse_number_marker() -> None:
+    """Test that the verse number marker carries class_type 'verse_number'."""
+    from PIL import Image
+
+    img = Image.new("RGBA", (40, 40))
+    item = WordItem(image=img, text="", class_type="verse_number")
+    assert item.text == ""
+    assert item.class_type == "verse_number"
+    assert item.index == 0
+
+
 # === Boundary Value Tests ===
 
 

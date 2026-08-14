@@ -261,14 +261,19 @@ def _generate_word_items(
             wbw_translations=wbw_translations,
             texts=verse_words,
         )
+        # Per-word index needs the batch boundary structure (Gap 1, Phase 2);
+        # annotated items keep the default index until that lands.
+        word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
     else:
-        annotated_images, annotated_text = word_images, verse_words
+        word_items = [
+            WordItem(image=img, text=txt, index=idx)
+            for idx, (img, txt) in enumerate(zip(word_images, verse_words), start=1)
+        ]
 
     vn_img = verse_number(ayah, word_cfg)
-    annotated_images.append(vn_img)
-    annotated_text.append("")
+    word_items.append(WordItem(image=vn_img, text="", class_type="verse_number"))
 
-    return [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+    return word_items
 
 
 def _render_pages(
