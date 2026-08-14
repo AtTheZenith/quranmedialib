@@ -87,3 +87,59 @@ def test_async_image_saver_exception_handling(caplog) -> None:
 
     assert "Failed to save image" in caplog.text
     assert "Disk full" in caplog.text
+
+
+def test_save_data_writes_string_payload() -> None:
+    """Verifies save_data writes str payloads to disk."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        with async_image_saver(max_queue=2) as save:
+            path = os.path.join(temp_dir, "sidecar.json")
+            save.save_data(path, '{"schema": "spatial-1", "words": []}')
+
+        with open(path, encoding="utf-8") as fh:
+            assert fh.read() == '{"schema": "spatial-1", "words": []}'
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_save_data_writes_bytes_payload() -> None:
+    """Verifies save_data writes bytes payloads to disk."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        with async_image_saver(max_queue=2) as save:
+            path = os.path.join(temp_dir, "sidecar.bin")
+            save.save_data(path, b"\x00\x01\x02binary")
+
+        with open(path, "rb") as fh:
+            assert fh.read() == b"\x00\x01\x02binary"
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_save_data_shares_queue_and_waits_on_exit() -> None:
+    """save_data and save share the queue; context exit waits for both to land."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        img = Image.new("RGB", (10, 10))
+        image_paths = [os.path.join(temp_dir, f"img_{i}.png") for i in range(3)]
+        data_paths = [os.path.join(temp_dir, f"data_{i}.json") for i in range(3)]
+
+        with async_image_saver(max_queue=3) as save:
+            for p in image_paths:
+                save(img, p)
+            for p in data_paths:
+                save.save_data(p, '{"schema": "spatial-1"}')
+
+        for p in image_paths + data_paths:
+            assert os.path.exists(p)
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_save_data_exception_is_logged(caplog) -> None:
+    """Verifies save_data failures are logged and don't crash the worker."""
+    with async_image_saver(max_queue=1) as save:
+        save.save_data("bad_dir/does_not_exist/sidecar.json", "{}")
+
+    assert "Failed to save data" in caplog.text
