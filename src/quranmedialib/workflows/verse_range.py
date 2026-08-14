@@ -252,7 +252,7 @@ def _generate_word_items(
 
     if annotate:
         wbw_translations = all_wbw.get(ayah, [])
-        annotated_images, annotated_text = annotate_words(
+        annotated_images, annotated_text, batch_map = annotate_words(
             images=word_images,
             surah=surah,
             ayah=ayah,
@@ -260,10 +260,14 @@ def _generate_word_items(
             word_config=word_cfg,
             wbw_translations=wbw_translations,
             texts=verse_words,
+            return_batch_map=True,
         )
-        # Per-word index needs the batch boundary structure (Gap 1, Phase 2);
-        # annotated items keep the default index until that lands.
-        word_items = [WordItem(image=img, text=txt) for img, txt in zip(annotated_images, annotated_text)]
+        # Each output image carries the verse-relative start index of the words
+        # it covers (1 for a single word; the batch start for a combined block).
+        word_items = [
+            WordItem(image=img, text=txt, index=batch_start)
+            for (img, txt), (batch_start, _count) in zip(zip(annotated_images, annotated_text), batch_map)
+        ]
     else:
         word_items = [
             WordItem(image=img, text=txt, index=idx)

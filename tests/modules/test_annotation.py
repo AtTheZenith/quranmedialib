@@ -279,3 +279,85 @@ def test_annotate_words_range_exceeds_images() -> None:
     # Start at 1, but Surah 1:1 only has 4 words -- requesting 10 should succeed via padding
     result = annotate_words(images, surah=1, ayah=1, start=1, word_config=word_config)
     assert len(result) == 10
+
+
+def test_annotate_words_batch_map_dominant_dun_allah() -> None:
+    """Batch map reports one record per source word for a combined wbw block.
+
+    Uses Surah Hud 11:113 words 10-12 (من دون الله), all with the same wbw
+    translation "besides allah" -- the exact grouping the user flagged. The three
+    words combine into one image, so the batch map must report one record per
+    source word sharing that single block.
+    """
+    from quranmedialib.modules.annotation import annotate_words_with_texts
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    verse_text = db.get_verse(11, 113)
+    words = verse_text.split()
+    word_images = [get_wimage(w, word_config) for w in words]
+
+    annotated_images, annotated_texts, batch_map = annotate_words_with_texts(
+        word_images,
+        surah=11,
+        ayah=113,
+        start=1,
+        texts=words,
+        word_config=word_config,
+        return_batch_map=True,
+    )
+
+    # Words 10-12 share the same wbw string, so they collapse into one image
+    batched_blocks = [entry for entry in batch_map if entry[1] > 1]
+    assert len(batched_blocks) >= 1, f"expected a combined block, got {batch_map}"
+    start_idx, count = batched_blocks[0]
+    assert count >= 3, f"expected >= 3 words in the shared block, got {count}"
+    # The block's own wbw string is identical across all source words
+    wbw = db.get_wbw_from_verse(11, 113)
+    assert wbw[start_idx - 1 : start_idx - 1 + count] == [wbw[start_idx - 1]] * count
+
+
+def test_annotate_words_batch_map_aligned_and_single_words() -> None:
+    """Batch map is parallel to output images and singles report count 1."""
+    from quranmedialib.modules.annotation import annotate_words_with_texts
+
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    # Surah 1:1 "bismillah" -- words are individually distinct in wbw
+    verse_text = db.get_verse(1, 1)
+    words = verse_text.split()
+    word_images = [get_wimage(w, word_config) for w in words]
+
+    annotated_images, annotated_texts, batch_map = annotate_words_with_texts(
+        word_images,
+        surah=1,
+        ayah=1,
+        start=1,
+        texts=words,
+        word_config=word_config,
+        return_batch_map=True,
+    )
+
+    assert len(batch_map) == len(annotated_images) == len(annotated_texts)
+    # Every image's start index plus count stays within the verse word range
+    for i, (start_idx, count) in enumerate(batch_map):
+        assert start_idx >= 1
+        assert start_idx + count - 1 <= len(words)
+
+
+def test_annotate_words_batch_map_deterministic() -> None:
+    """Batch map is a pure function of input: same call yields same bytes + map."""
+    word_config = LANDSCAPE_PRESET["default"]["1080p"].word
+    verse_text = db.get_verse(11, 113)
+    words = verse_text.split()
+    word_images = [get_wimage(w, word_config) for w in words]
+
+    from quranmedialib.modules.annotation import annotate_words_with_texts
+
+    images_a, texts_a, batch_map_a = annotate_words_with_texts(
+        word_images, surah=11, ayah=113, start=1, texts=words, word_config=word_config, return_batch_map=True
+    )
+    images_b, texts_b, batch_map_b = annotate_words_with_texts(
+        word_images, surah=11, ayah=113, start=1, texts=words, word_config=word_config, return_batch_map=True
+    )
+
+    assert batch_map_a == batch_map_b
+    assert [img.tobytes() for img in images_a] == [img.tobytes() for img in images_b]

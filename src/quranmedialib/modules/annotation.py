@@ -10,7 +10,7 @@ from __future__ import annotations
 import functools
 import logging
 from pathlib import Path
-from typing import overload
+from typing import Literal, overload
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -24,6 +24,11 @@ __all__ = [
     "annotate_words",
     "annotate_words_with_texts",
 ]
+
+# Parallel to the output image list: (verse-relative 1-based word index of the
+# batch start, number of source words covered). Lets callers map each annotated
+# image back to its source words without re-deriving batching.
+type BatchMap = list[tuple[int, int]]
 
 
 def _get_annotation_font(word_config: WordConfig) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -207,6 +212,7 @@ def annotate_words(
     word_config: WordConfig | None = ...,
     texts: None = ...,
     wbw_translations: list[str] | None = ...,
+    return_batch_map: Literal[False] = ...,
 ) -> list[Image.Image]: ...
 
 
@@ -220,7 +226,36 @@ def annotate_words(
     word_config: WordConfig | None = ...,
     texts: list[str] = ...,
     wbw_translations: list[str] | None = ...,
+    return_batch_map: Literal[False] = ...,
 ) -> tuple[list[Image.Image], list[str]]: ...
+
+
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: None = ...,
+    wbw_translations: list[str] | None = ...,
+    return_batch_map: Literal[True] = ...,
+) -> tuple[list[Image.Image], BatchMap]: ...
+
+
+@overload
+def annotate_words(
+    images: list[Image.Image],
+    surah: int,
+    ayah: int,
+    start: int,
+    db: DatabaseManager | None = ...,
+    word_config: WordConfig | None = ...,
+    texts: list[str] = ...,
+    wbw_translations: list[str] | None = ...,
+    return_batch_map: Literal[True] = ...,
+) -> tuple[list[Image.Image], list[str], BatchMap]: ...
 
 
 def annotate_words(
@@ -232,7 +267,8 @@ def annotate_words(
     word_config: WordConfig | None = None,
     texts: list[str] | None = None,
     wbw_translations: list[str] | None = None,
-) -> list[Image.Image] | tuple[list[Image.Image], list[str]]:
+    return_batch_map: bool = False,
+) -> list[Image.Image] | tuple[list[Image.Image], list[str]] | tuple[list[Image.Image], BatchMap]:
     """Annotates a list of word images, batching those with identical translations.
 
     Consecutive words sharing the same WBW translation are combined into a single
@@ -248,17 +284,27 @@ def annotate_words(
         texts: Optional list of word strings to return alongside annotated images.
         wbw_translations: Optional pre-fetched WBW translations for the verse.
             If provided, avoids redundant database queries.
+        return_batch_map: If True, additionally return the batch boundaries.
+            Each entry is ``(first_word_index, word_count)`` in verse-relative
+            1-based indexing, parallel to the returned images.
 
     Returns:
         List of annotated images (may be fewer than input images due to batching).
         If texts is provided, returns (annotated_images, annotated_texts).
+        If return_batch_map is True, the batch boundaries are appended to the
+        tuple: (images, texts, batch_map) or (images, batch_map).
 
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(
+    result, annotated_texts, batch_map = _annotate_words_internal(
         images, surah, ayah, start, db, word_config, wbw_translations, texts
     )
+
+    if return_batch_map:
+        if texts is not None:
+            return result, annotated_texts, batch_map
+        return result, batch_map
 
     return (result, annotated_texts) if texts is not None else result
 
@@ -272,7 +318,8 @@ def annotate_words_with_texts(
     db: DatabaseManager | None = None,
     word_config: WordConfig | None = None,
     wbw_translations: list[str] | None = None,
-) -> tuple[list[Image.Image], list[str]]:
+    return_batch_map: bool = False,
+) -> tuple[list[Image.Image], list[str]] | tuple[list[Image.Image], list[str], BatchMap]:
     """Annotates word images and returns images with texts.
 
     This is a type-safe wrapper around annotate_words that always returns a tuple.
@@ -286,16 +333,20 @@ def annotate_words_with_texts(
         db: Optional DatabaseManager instance.
         word_config: Rendering configuration.
         wbw_translations: Optional pre-fetched WBW translations for the verse.
+        return_batch_map: If True, additionally return the batch boundaries.
 
     Returns:
-        Tuple of (annotated_images, annotated_texts).
+        Tuple of (annotated_images, annotated_texts). If return_batch_map is
+        True, the batch boundaries are appended: (images, texts, batch_map).
 
     Raises:
         ValueError: If range is out of bounds or config is missing.
     """
-    result, annotated_texts = _annotate_words_internal(
+    result, annotated_texts, batch_map = _annotate_words_internal(
         images, surah, ayah, start, db, word_config, wbw_translations, texts
     )
+    if return_batch_map:
+        return result, annotated_texts, batch_map
     return result, annotated_texts  # type: ignore[return-value]  # texts is always provided here
 
 
@@ -308,7 +359,7 @@ def _annotate_words_internal(
     word_config: WordConfig | None,
     wbw_translations: list[str] | None = None,
     texts: list[str] | None = None,
-) -> tuple[list[Image.Image], list[str] | None]:
+) -> tuple[list[Image.Image], list[str] | None, BatchMap]:
     """Internal implementation for annotating words.
 
     Args:
@@ -322,7 +373,7 @@ def _annotate_words_internal(
         texts: Optional list of word texts to extract.
 
     Returns:
-        Tuple of (annotated_images, annotated_texts or None).
+        Tuple of (annotated_images, annotated_texts or None, batch_map).
 
     Raises:
         ValueError: If range is out of bounds or config is missing.
@@ -359,6 +410,7 @@ def _annotate_words_internal(
     i = 0
     annotated_images = []
     annotated_texts: list[str] = []
+    batch_map: BatchMap = []
 
     while i < range_len:
         current_wbw = target_wbws[i]
@@ -410,6 +462,10 @@ def _annotate_words_internal(
             elif texts is not None:
                 annotated_texts.append("")  # Missing text placeholder
 
+        # Record the verse-relative start index and word count for this output image.
+        # batch_count is already the effective count: forced to 1 for no-wbw, real
+        # run length for multi-word batches, 1 for singles.
+        batch_map.append((start + i, batch_count))
         i += batch_count
 
-    return annotated_images, annotated_texts if texts is not None else None
+    return annotated_images, annotated_texts if texts is not None else None, batch_map

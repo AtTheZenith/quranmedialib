@@ -14,7 +14,7 @@ from PIL import Image
 
 from quranmedialib.database_manager import DatabaseManager
 from quranmedialib.exceptions import WorkflowError
-from quranmedialib.modules.annotation import annotate_words
+from quranmedialib.modules.annotation import BatchMap, annotate_words
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.timage import LazyTranslationImages
 from quranmedialib.modules.verse_number import verse_number
@@ -45,25 +45,34 @@ class VerseWorkflow(BaseWorkflow):
         verse_words: list[str],
         wbw_translations: list[str | None],
         annotate: bool,
-    ) -> list[Image.Image]:
-        """Generates and optionally annotates word images for the verse."""
+    ) -> tuple[list[Image.Image], list[str], BatchMap]:
+        """Generates and optionally annotates word images for the verse.
+
+        Returns:
+            Tuple of (annotated_images, annotated_texts, batch_map). Images and
+            texts are aligned (batch text for combined blocks); batch_map is
+            parallel to them: (verse-relative start index, word count) per image.
+        """
         # Generate base word images
         word_images = [get_wimage(word, self.word_cfg) for word in verse_words]
 
         if annotate:
             # annotate_words returns a tuple (images, texts) when texts are provided
-            annotated_images, _ = annotate_words(
+            annotated_images, annotated_texts, batch_map = annotate_words(
                 images=word_images,
                 surah=surah,
                 ayah=ayah,
                 start=1,
                 word_config=self.word_cfg,
                 texts=verse_words,
+                return_batch_map=True,
             )
         else:
             annotated_images = word_images
+            annotated_texts = verse_words
+            batch_map = [(i, 1) for i in range(1, len(word_images) + 1)]
 
-        return annotated_images
+        return annotated_images, annotated_texts, batch_map
 
     def _prepare_translation_images(self, translations: list[str]) -> LazyTranslationImages:
         """Creates a lazy wrapper that defers get_timage() calls until accessed."""
@@ -104,7 +113,9 @@ class VerseWorkflow(BaseWorkflow):
         wbw_translations = db.get_wbw_from_verse(surah, ayah) if annotate else []
 
         # 2. Image Generation
-        annotated_images = self._prepare_word_images(surah, ayah, verse_words, wbw_translations, annotate)
+        annotated_images, annotated_texts, batch_map = self._prepare_word_images(
+            surah, ayah, verse_words, wbw_translations, annotate
+        )
 
         # 3. Add verse number marker
         vn_image = verse_number(ayah, self.word_cfg)
@@ -112,16 +123,12 @@ class VerseWorkflow(BaseWorkflow):
 
         # 4. Prepare WordItems for layout
         # We append an empty string for the verse number marker's text
-        all_text = list(verse_words) + [""]
-        if annotate:
-            # Per-word index needs the batch boundary structure (Gap 1, Phase 2);
-            # annotated items keep the default index until that lands.
-            word_items = [WordItem(image=img, text=text) for img, text in zip(annotated_images, all_text)]
-        else:
-            word_items = [
-                WordItem(image=img, text=text, index=idx)
-                for idx, (img, text) in enumerate(zip(annotated_images, all_text), start=1)
-            ]
+        all_text = annotated_texts + [""]
+        batch_map.append((0, 1))
+        word_items = [
+            WordItem(image=img, text=text, index=start_idx)
+            for (img, text), (start_idx, _count) in zip(zip(annotated_images, all_text), batch_map)
+        ]
         word_items[-1] = dataclasses.replace(word_items[-1], class_type="verse_number")
 
         # 5. Prepare Translation Images (lazy - renders on demand)
