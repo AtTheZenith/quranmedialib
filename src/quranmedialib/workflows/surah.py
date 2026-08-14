@@ -45,6 +45,9 @@ class SurahWorkflow(VerseRangeWorkflow):
             **kwargs:
                 - parallel: bool (default: True for |verses| > 10)
                 - output_dir: Optional path to save images directly.
+                - filename_prefix: Prefix for output filenames.
+                - emit_sidecar: bool (default: False) - Write a spatial sidecar JSON
+                  beside each PNG (requires ``output_dir``).
 
         Yields:
             list[Image.Image]: List of page images for each verse in the surah.
@@ -56,7 +59,14 @@ class SurahWorkflow(VerseRangeWorkflow):
         surah = self._validate_surah(surah)
 
         # Warn about unrecognized kwargs to catch typos early
-        known_kwargs = {"annotate", "separate_translations", "parallel", "output_dir", "filename_prefix"}
+        known_kwargs = {
+            "annotate",
+            "separate_translations",
+            "parallel",
+            "output_dir",
+            "filename_prefix",
+            "emit_sidecar",
+        }
         if unrecognized := set(kwargs.keys()) - known_kwargs:
             warnings.warn(
                 f"Unknown kwargs ignored by SurahWorkflow.get_iterator: {unrecognized}",

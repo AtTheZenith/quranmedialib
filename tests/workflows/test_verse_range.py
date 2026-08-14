@@ -380,3 +380,102 @@ def test_sanitize_filename_prefix_blocks_traversal_in_handle_output(tmp_path) ->
     for p in paths:
         resolved = Path(p).resolve()
         assert resolved.is_relative_to(tmp_real)
+
+
+def test_emit_sidecar_writes_one_json_per_png(tmp_path) -> None:
+    """VerseRangeWorkflow with emit_sidecar writes a deterministic sidecar beside each PNG."""
+    import json as json_module
+
+    from quranmedialib.modules.sidecar import SIDECAR_SCHEMA
+
+    db = DatabaseManager()
+    surah = 108  # Al-Kawthar, 3 verses
+    translations_list = [[t] for t in db.get_translation_from_surah(surah)]
+
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
+    output_dir = Path("output/test/sidecar/write")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = workflow._process_range(
+        surah=surah,
+        start_verse=1,
+        end_verse=3,
+        translations=translations_list,
+        output_dir=str(output_dir),
+        emit_sidecar=True,
+        parallel=False,
+    )
+    list(generator)
+
+    pngs = sorted(output_dir.glob("*.png"))
+    jsons = sorted(output_dir.glob("*.json"))
+    assert len(pngs) == len(jsons) > 0
+
+    # Every PNG has exactly one matching JSON stem, and vice versa.
+    png_stems = {p.stem for p in pngs}
+    json_stems = {j.stem for j in jsons}
+    assert png_stems == json_stems
+
+    for j in jsons:
+        data = json_module.loads(j.read_text(encoding="utf-8"))
+        assert data["schema"] == SIDECAR_SCHEMA
+        assert "rows" in data
+        assert "dimensions" in data
+        # Word records carry the class_type discriminator.
+        for row in data["rows"]:
+            for word in row["words"]:
+                assert word["class_type"] in {"word", "verse_number"}
+
+
+def test_emit_sidecar_is_deterministic_across_runs() -> None:
+    """Two identical emit_sidecar runs produce byte-identical JSON sidecars."""
+    db = DatabaseManager()
+    surah = 108
+    translations_list = [[t] for t in db.get_translation_from_surah(surah)]
+
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
+
+    def run_and_read(dir_path: Path) -> dict[str, str]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+        gen = workflow._process_range(
+            surah=surah,
+            start_verse=1,
+            end_verse=3,
+            translations=translations_list,
+            output_dir=str(dir_path),
+            emit_sidecar=True,
+            parallel=False,
+        )
+        list(gen)
+        return {j.stem: j.read_text(encoding="utf-8") for j in dir_path.glob("*.json")}
+
+    first = run_and_read(Path("output/test/sidecar/deterministic/run1"))
+    second = run_and_read(Path("output/test/sidecar/deterministic/run2"))
+    assert first.keys() == second.keys()
+    assert first == second
+
+
+def test_emit_sidecar_requires_output_dir() -> None:
+    """emit_sidecar without output_dir must fail loudly with ValidationError."""
+    from quranmedialib.exceptions import ValidationError
+
+    db = DatabaseManager()
+    surah = 108
+    translations_list = [[t] for t in db.get_translation_from_surah(surah)]
+
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
+
+    with pytest.raises(ValidationError):
+        list(
+            workflow._process_range(
+                surah=surah,
+                start_verse=1,
+                end_verse=1,
+                translations=translations_list,
+                emit_sidecar=True,
+                parallel=False,
+            )
+        )

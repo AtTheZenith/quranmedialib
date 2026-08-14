@@ -26,7 +26,8 @@ from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.layout_engine import LayoutGuide
-from quranmedialib.modules.timage import LazyTranslationImages
+from quranmedialib.modules.sidecar import build_sidecar, serialize_sidecar
+from quranmedialib.modules.timage import LazyTranslationImages, _render_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
 from quranmedialib.modules.wimage import get_wimage
@@ -121,6 +122,11 @@ class VerseRangeWorkflow(BaseWorkflow):
             **kwargs:
                 - annotate: bool (default: True) - Whether to annotate words.
                 - separate_translations: bool (default: False) - Separate translation pages.
+                - parallel: bool (default: True) - Parallel processing for multi-verse ranges.
+                - output_dir: Optional path to save images directly.
+                - filename_prefix: Prefix for output filenames.
+                - emit_sidecar: bool (default: False) - Write a spatial sidecar JSON
+                  beside each PNG (requires ``output_dir``).
 
         Yields:
             list[Image.Image]: List of page images for each verse in the range.
@@ -148,6 +154,9 @@ class VerseRangeWorkflow(BaseWorkflow):
             annotate=kwargs.get("annotate", True),
             separate_translations=kwargs.get("separate_translations", False),
             parallel=kwargs.get("parallel", True),
+            output_dir=kwargs.get("output_dir"),
+            filename_prefix=kwargs.get("filename_prefix", f"surah_{surah:03d}"),
+            emit_sidecar=kwargs.get("emit_sidecar", False),
         )
 
     def _process_range(
@@ -168,6 +177,10 @@ class VerseRangeWorkflow(BaseWorkflow):
         output_dir = kwargs.get("output_dir")
         if output_dir:
             _ensure_within_working_dir(Path(output_dir))
+
+        emit_sidecar = kwargs.get("emit_sidecar", False)
+        if emit_sidecar and not output_dir:
+            raise ValidationError("emit_sidecar=True requires output_dir")
 
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
         filename_prefix = _sanitize_filename_prefix(str(filename_prefix))
@@ -196,6 +209,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 separate_translations=separate_translations,
                 output_dir=output_dir,
                 filename_prefix=filename_prefix,
+                emit_sidecar=emit_sidecar,
             )
 
             # Each batch = natural chunk (ceil(tasks/workers)) for even distribution.
@@ -226,6 +240,7 @@ class VerseRangeWorkflow(BaseWorkflow):
                 output_dir,
                 filename_prefix,
                 use_bytes=False,
+                emit_sidecar=emit_sidecar,
             )
 
 
@@ -236,6 +251,21 @@ def _fetch_worker_data(surah: int, annotate: bool) -> tuple[dict[int, str], dict
     all_wbw = db.get_wbw_grouped_by_verse(surah) if annotate else {}
     arabic_map = {i + 1: txt for i, txt in enumerate(arabic_verses)}
     return arabic_map, all_wbw
+
+
+def _build_wbw_index(wbw_list: list[str]) -> dict[int, str]:
+    """Build a WordIndex-keyed map of word-by-word translations.
+
+    wbw translations are 1-based per-word strings from the database; the map
+    keys match the ``WordItem.index`` values set by ``_generate_word_items``.
+
+    Args:
+        wbw_list: Per-word wbw translation strings for one verse.
+
+    Returns:
+        dict[int, str]: Map of word index (1-based) to its wbw translation.
+    """
+    return {i + 1: wbw for i, wbw in enumerate(wbw_list)}
 
 
 def _generate_word_items(
@@ -289,13 +319,61 @@ def _render_pages(
     verse_cfg: VerseConfig,
     text_cfg: TextConfig,
     separate_translations: bool,
-) -> list[Image.Image]:
-    """Render the verse pages using resolved layout guide."""
+    emit_sidecar: bool = False,
+    surah: int | None = None,
+    ayah: int | None = None,
+    wbw_by_index: dict[int, str] | None = None,
+) -> list[Image.Image] | list[tuple[Image.Image, dict]]:
+    """Render the verse pages using resolved layout guide.
+
+    When ``emit_sidecar`` is True, each page is returned as a
+    ``(page_image, sidecar_dict)`` tuple instead of a bare page image. The
+    sidecar captures the word geometry via the VImage ``geometry_sink`` and the
+    translation paragraph via ``_render_timage`` + ``translation_placement``.
+
+    Args:
+        word_items: The verse words to render.
+        verse_translations: Translation texts, one per page.
+        frame_cfg: Canvas configuration.
+        guide: Resolved layout positions.
+        word_cfg: Word rendering configuration.
+        verse_cfg: Verse layout configuration.
+        text_cfg: Translation text configuration.
+        separate_translations: Render translations on separate pages.
+        emit_sidecar: Whether to collect sidecar geometry alongside pages.
+        surah: Surah number, required when ``emit_sidecar``.
+        ayah: Ayah number, required when ``emit_sidecar``.
+        wbw_by_index: Map of word index to word-by-word translation, joined at
+            emission. Required for annotated sidecars.
+
+    Returns:
+        list[Image.Image] | list[tuple[Image.Image, dict]]: The rendered pages,
+            or (page_image, sidecar) pairs when ``emit_sidecar``.
+    """
     trans_images = LazyTranslationImages(verse_translations, text_cfg)
 
     frame_w = frame_cfg.max_width
     frame_h = frame_cfg.image_height
     bg = frame_cfg.background_color
+
+    def _sidecar(
+        page_num: int,
+        rows: list[tuple[list[WordItem], int, int]],
+        translation_geo: dict | None,
+        geometry: list[tuple[WordItem, int, int]],
+    ) -> dict:
+        """Build the sidecar for one rendered page."""
+        assert surah is not None and ayah is not None
+        return build_sidecar(
+            surah=surah,
+            ayah=ayah,
+            page=page_num,
+            dimensions=(frame_w, frame_h),
+            rows=rows,
+            translation_geo=translation_geo,
+            word_items_with_geometry=geometry,
+            wbw_by_index=wbw_by_index,
+        )
 
     if not separate_translations:
         vimage = VImage(word_items, verse_cfg, guide.arabic.width)
@@ -308,6 +386,11 @@ def _render_pages(
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
             frame_obj = Frame(frame_w, frame_h, bg)
 
+            geometry: list[tuple[WordItem, int, int]] = []
+
+            def _geometry_sink(item: WordItem, x: int, y: int) -> None:
+                geometry.append((item, x, y))
+
             frame_obj.layer_at(
                 vimage,
                 guide.arabic,
@@ -316,10 +399,16 @@ def _render_pages(
                 center=True,
                 content_height=guide.arabic.height,
                 vertical_alignment=arabic_vertical_alignment(frame_cfg.aspect_ratio, frame_cfg.mode),
+                **({"geometry_sink": _geometry_sink} if emit_sidecar else {}),
             )
 
+            translation_geo = None
             if trans_images and page_index < len(trans_images):
-                if t_image := trans_images[page_index]:
+                if emit_sidecar:
+                    t_image, exceeded_bounds = _render_timage(verse_translations[page_index], text_cfg)
+                else:
+                    t_image, exceeded_bounds = trans_images[page_index], False
+                if t_image:
                     place_rect, keep_bottom = translation_placement(
                         guide.translation,
                         t_image.width,
@@ -333,8 +422,20 @@ def _render_pages(
                         text_color=text_cfg.color,
                         keep_bottom=keep_bottom,
                     )
+                    if emit_sidecar:
+                        translation_geo = {
+                            "bbox": {"x": 0, "y": 0, "w": t_image.width, "h": t_image.height},
+                            "position": {"x": place_rect.left, "y": place_rect.top},
+                            "exceeded_bounds": exceeded_bounds,
+                        }
 
-            pages.append(frame_obj.render())
+            page_image = frame_obj.render()
+            if emit_sidecar:
+                pages.append(
+                    (page_image, _sidecar(page_index + 1, current_rows, translation_geo, geometry))
+                )
+            else:
+                pages.append(page_image)
             current_index += items_consumed
             page_index += 1
         return pages
@@ -344,10 +445,16 @@ def _render_pages(
     pages = []
     current_index = 0
     total_items = len(word_items)
+    page_index = 0
 
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
         frame_obj = Frame(frame_w, frame_h, bg)
+
+        geometry: list[tuple[WordItem, int, int]] = []
+
+        def _geometry_sink(item: WordItem, x: int, y: int) -> None:
+            geometry.append((item, x, y))
 
         frame_obj.layer_at(
             vimage,
@@ -357,11 +464,22 @@ def _render_pages(
             center=True,
             content_height=guide.arabic.height,
             vertical_alignment=arabic_vertical_alignment(frame_cfg.aspect_ratio, frame_cfg.mode),
+            **({"geometry_sink": _geometry_sink} if emit_sidecar else {}),
         )
-        pages.append(frame_obj.render())
+        page_image = frame_obj.render()
+        if emit_sidecar:
+            pages.append((page_image, _sidecar(page_index + 1, current_rows, None, geometry)))
+        else:
+            pages.append(page_image)
         current_index += items_consumed
+        page_index += 1
 
-    for t_img in trans_images:
+    translation_iter: Iterator[tuple[Image.Image | None, bool]]
+    if emit_sidecar:
+        translation_iter = (_render_timage(text, text_cfg) for text in verse_translations)
+    else:
+        translation_iter = ((t, False) for t in trans_images)
+    for t_img, exceeded_bounds in translation_iter:
         if not t_img:
             continue
         frame_obj = Frame(frame_w, frame_h, bg)
@@ -378,31 +496,64 @@ def _render_pages(
             text_color=text_cfg.color,
             keep_bottom=keep_bottom,
         )
-        pages.append(frame_obj.render())
+        page_image = frame_obj.render()
+        if emit_sidecar:
+            translation_geo = {
+                "bbox": {"x": 0, "y": 0, "w": t_img.width, "h": t_img.height},
+                "position": {"x": place_rect.left, "y": place_rect.top},
+                "exceeded_bounds": exceeded_bounds,
+            }
+            pages.append((page_image, _sidecar(page_index + 1, [], translation_geo, [])))
+            page_index += 1
+        else:
+            pages.append(page_image)
     return pages
 
 
 def _handle_output(
-    pages: list[Image.Image],
+    pages: list[Image.Image] | list[tuple[Image.Image, dict]],
     ayah: int,
     output_dir: str | None,
     filename_prefix: str,
     save_fn: Callable[[Image.Image, str, str, int], None],
     use_bytes: bool,
+    emit_sidecar: bool = False,
 ) -> list[OutputItem]:
-    """Save pages to disk or convert to bytes for IPC."""
+    """Save pages to disk or convert to bytes for IPC.
+
+    When ``emit_sidecar`` is True, ``pages`` holds ``(page_image, sidecar)``
+    tuples and each PNG is written alongside a ``{stem}.json`` sidecar via the
+    saver's ``save_data``.
+
+    Args:
+        pages: Page images, or (page_image, sidecar) pairs when ``emit_sidecar``.
+        ayah: Ayah number for filename construction.
+        output_dir: Optional directory to save images.
+        filename_prefix: Prefix for output filenames.
+        save_fn: The saver callable with a ``save_data`` attribute.
+        use_bytes: If True, convert images to bytes for IPC.
+        emit_sidecar: Whether pages carry sidecar dicts to persist.
+
+    Returns:
+        list[OutputItem]: Paths, byte data tuples, or page images.
+    """
     if output_dir:
         paths = []
         safe_prefix = _sanitize_filename_prefix(filename_prefix)
         for j, p in enumerate(pages):
+            page = p[0] if emit_sidecar else p
             path = os.path.join(output_dir, f"{safe_prefix}_verse_{ayah:03d}_page_{j + 1}.png")
-            save_fn(p, path, format="PNG", compress_level=1)
+            save_fn(page, path, format="PNG", compress_level=1)
+            if emit_sidecar:
+                stem = os.path.splitext(path)[0]
+                save_fn.save_data(stem + ".json", serialize_sidecar(p[1]))
             paths.append(path)
         return paths
     elif use_bytes:
-        return [(p.mode, p.size, p.tobytes()) for p in pages]
+        pages_flat = [p[0] if emit_sidecar else p for p in pages]
+        return [(p.mode, p.size, p.tobytes()) for p in pages_flat]
     else:
-        return pages
+        return [p[0] if emit_sidecar else p for p in pages]
 
 
 def _render_verse_worker(
@@ -418,6 +569,7 @@ def _render_verse_worker(
     output_dir: str | None,
     filename_prefix: str,
     use_bytes: bool = True,
+    emit_sidecar: bool = False,
 ) -> list[list[OutputItem]]:
     """Worker function for rendering a batch of verses. Returns pickle-safe data.
 
@@ -432,6 +584,7 @@ def _render_verse_worker(
         output_dir: Optional directory to save images.
         filename_prefix: Prefix for output filenames.
         use_bytes: If True, convert images to bytes for IPC.
+        emit_sidecar: Whether to persist a spatial sidecar JSON beside each PNG.
 
     Returns:
         list[list[OutputItem]]: List of pages (paths or byte data tuples) for each verse.
@@ -462,6 +615,7 @@ def _render_verse_worker(
                 continue
 
             word_items = _generate_word_items(verse_text, ayah, surah, word_cfg, annotate, all_wbw)
+            wbw_by_index = _build_wbw_index(all_wbw.get(ayah, [])) if emit_sidecar and annotate else None
             pages = _render_pages(
                 word_items,
                 verse_translations,
@@ -471,9 +625,15 @@ def _render_verse_worker(
                 verse_cfg,
                 text_cfg,
                 separate_translations,
+                emit_sidecar=emit_sidecar,
+                surah=surah,
+                ayah=ayah,
+                wbw_by_index=wbw_by_index,
             )
 
-            result = _handle_output(pages, ayah, output_dir, filename_prefix, save, use_bytes)
+            result = _handle_output(
+                pages, ayah, output_dir, filename_prefix, save, use_bytes, emit_sidecar=emit_sidecar
+            )
             batch_results.append(result)
 
     return batch_results

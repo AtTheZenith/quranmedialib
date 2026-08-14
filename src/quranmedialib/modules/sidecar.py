@@ -63,6 +63,50 @@ def _word_record(item: WordItem, x: int, y: int, wbw: str | None) -> dict[str, A
     return record
 
 
+def _word_records(item: WordItem, x: int, y: int, wbw_by_index: dict[int, str]) -> list[dict[str, Any]]:
+    """Build the sidecar records for a word item, expanding combined batches.
+
+    A wimage whose text carries multiple whitespace-separated words is a
+    combined annotation batch (consecutive words sharing the same wbw string,
+    e.g. ``من دون الله``). The sidecar must emit one record per source word —
+    each with its own ``index``, ``text``, and ``wbw`` — all sharing the batch's
+    pixel box, so word records map 1:1 onto the wbw database keys.
+
+    Args:
+        item: The WordItem placed on the page.
+        x: Absolute page x of the top-left corner (shared by all batch words).
+        y: Absolute page y of the top-left corner (shared by all batch words).
+        wbw_by_index: Map of word index to its word-by-word translation.
+
+    Returns:
+        list[dict[str, Any]]: One record for a single word or verse number, or
+            one record per source word for a combined batch.
+    """
+    if item.class_type != "word":
+        return [_word_record(item, x, y, wbw_by_index.get(item.index))]
+    words = (item.text or "").split()
+    if len(words) <= 1:
+        return [_word_record(item, x, y, wbw_by_index.get(item.index))]
+
+    records = []
+    for offset, word_text in enumerate(words):
+        index = item.index + offset
+        record = {
+            "index": index,
+            "class_type": "word",
+            "text": word_text,
+            "x": x,
+            "y": y,
+            "w": item.width,
+            "h": item.height,
+        }
+        wbw = wbw_by_index.get(index)
+        if wbw is not None:
+            record["wbw"] = wbw
+        records.append(record)
+    return records
+
+
 def build_sidecar(
     surah: int,
     ayah: int,
@@ -101,7 +145,7 @@ def build_sidecar(
         words = []
         for item in row_items:
             x, y = geo_by_id.get(id(item), (0, 0))
-            words.append(_word_record(item, x, y, wbw.get(item.index)))
+            words.extend(_word_records(item, x, y, wbw))
         row_records.append(
             {
                 "width": row_width,

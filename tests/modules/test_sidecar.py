@@ -104,8 +104,8 @@ def test_build_sidecar_includes_translation_geo():
     """A translation paragraph contributes one page-level record."""
     rows, geometry = _sample_rows_and_geometry()
     translation_geo = {
-        "bbox": {"x": 0, "y": 900, "w": 1920, "h": 120},
-        "position": {"x": 0, "y": 900},
+        "bbox": {"x": 0, "y": 0, "w": 1500, "h": 120},
+        "position": {"x": 200, "y": 900},
         "exceeded_bounds": False,
     }
     sidecar = build_sidecar(
@@ -149,7 +149,7 @@ def test_serialize_sidecar_is_deterministic():
 def test_serialize_sidecar_preserves_arabic():
     """Arabic text must serialize as UTF-8, not \\u escapes."""
     img = Image.new("L", (50, 40), 255)
-    item = WordItem(image=img, text="من دون الله", index=1)
+    item = WordItem(image=img, text="الله", index=1)
     sidecar = build_sidecar(
         surah=11,
         ayah=113,
@@ -161,5 +161,48 @@ def test_serialize_sidecar_preserves_arabic():
     )
 
     serialized = serialize_sidecar(sidecar)
-    assert "من دون الله" in serialized
+    assert "الله" in serialized
     assert "\\u" not in serialized
+
+
+def test_combined_batch_expands_to_one_record_per_source_word():
+    """A combined batch (consecutive words sharing wbw) emits one record per source word."""
+    img = Image.new("L", (150, 40), 255)
+    item = WordItem(image=img, text="من دون الله", index=10)
+    sidecar = build_sidecar(
+        surah=11,
+        ayah=113,
+        page=1,
+        dimensions=(1920, 1080),
+        rows=[([item], 150, 40)],
+        translation_geo=None,
+        word_items_with_geometry=[(item, 100, 20)],
+        wbw_by_index={10: "besides allah", 11: "besides allah", 12: "besides allah"},
+    )
+
+    words = sidecar["rows"][0]["words"]
+    assert len(words) == 3
+    assert [w["index"] for w in words] == [10, 11, 12]
+    assert [w["text"] for w in words] == ["من", "دون", "الله"]
+    assert all(w["wbw"] == "besides allah" for w in words)
+    # All source words share the batch's pixel box.
+    assert all((w["x"], w["y"], w["w"], w["h"]) == (100, 20, 150, 40) for w in words)
+
+
+def test_combined_batch_omits_wbw_when_not_joined():
+    """Expanded batch records omit wbw when no join map is supplied."""
+    img = Image.new("L", (150, 40), 255)
+    item = WordItem(image=img, text="من دون الله", index=10)
+    sidecar = build_sidecar(
+        surah=11,
+        ayah=113,
+        page=1,
+        dimensions=(1920, 1080),
+        rows=[([item], 150, 40)],
+        translation_geo=None,
+        word_items_with_geometry=[(item, 100, 20)],
+    )
+
+    words = sidecar["rows"][0]["words"]
+    assert len(words) == 3
+    assert all("wbw" not in w for w in words)
