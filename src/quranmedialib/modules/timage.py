@@ -296,27 +296,22 @@ def _layout_text_lines(
         current_y += l_height + l_spacing
 
 
-def get_timage(
+def _render_timage(
     text: str | None,
     config: TextConfig | None = None,
-    highlight_segments: str | list[str] | None = None,
     **kwargs: Any,
-) -> Image.Image | None:
-    """Renders multi-line translation text. Returns None if text is empty.
+) -> tuple[Image.Image | None, bool]:
+    """Render multi-line translation text, reporting whether it exceeded the height cap.
 
-    Security: text longer than MAX_TEXT_CHARS (or with more than MAX_TEXT_WORDS
-    tokens) is rejected before any measurement, so untrusted strings cannot
-    drive layout/rendering cost or canvas allocation unbounded.
-
-    Raises:
-        ValueError: If `text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS, or if
-            `max_height` is negative or exceeds MAX_CANVAS_DIMENSION.
+    Returns:
+        tuple[Image.Image | None, bool]: (rendered image or None if empty, True if the
+            text exceeded ``max_height`` and lines were clipped).
     """
     if text is None:
-        return None
+        return None, False
     s_text = str(text)
     if not s_text.strip():
-        return None
+        return None, False
 
     # Reject pathological inputs before any tokenization, measurement, or canvas
     # allocation so an untrusted string cannot drive memory/layout cost unbounded.
@@ -337,9 +332,14 @@ def get_timage(
         lines = wrap_rich_text_greedy(styled_words, config.max_width)
 
     if not lines:
-        return None
+        return None, False
 
     tw, th, total_width = _compute_canvas_size(lines, config.line_spacing, max_height)
+
+    # Clipping happens when max_height is set and the natural block height exceeds it.
+    # Mirrors the clamp condition in _compute_canvas_size (max_height > 0).
+    natural_height = sum(line.height for line in lines) + (len(lines) - 1) * config.line_spacing
+    exceeded_bounds = max_height is not None and max_height > 0 and natural_height > max_height
 
     # Detect if we can use an 'L' mask (no color tags in original text)
     use_mask = "#" not in s_text
@@ -352,9 +352,29 @@ def get_timage(
         # while ensuring the output image is transparent-capable.
         result = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
         result.paste(config.color, (0, 0), mask=img)
-        return result
+        return result, exceeded_bounds
 
-    return img
+    return img, exceeded_bounds
+
+
+def get_timage(
+    text: str | None,
+    config: TextConfig | None = None,
+    highlight_segments: str | list[str] | None = None,
+    **kwargs: Any,
+) -> Image.Image | None:
+    """Renders multi-line translation text. Returns None if text is empty.
+
+    Security: text longer than MAX_TEXT_CHARS (or with more than MAX_TEXT_WORDS
+    tokens) is rejected before any measurement, so untrusted strings cannot
+    drive layout/rendering cost or canvas allocation unbounded.
+
+    Raises:
+        ValueError: If `text` exceeds MAX_TEXT_CHARS or MAX_TEXT_WORDS, or if
+            `max_height` is negative or exceeds MAX_CANVAS_DIMENSION.
+    """
+    image, _ = _render_timage(text, config, **kwargs)
+    return image
 
 
 # Cache for font baseline metrics (ascent + descent) and ascent

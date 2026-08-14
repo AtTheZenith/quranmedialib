@@ -666,3 +666,34 @@ def test_overlong_word_canvas_is_clamped(caplog) -> None:
     assert img.height <= MAX_CANVAS_DIMENSION
     clamp_warnings = [r for r in caplog.records if r.levelname == "WARNING" and "clamping" in str(r.message)]
     assert clamp_warnings, "Expected a canvas-clamp warning for an over-long word"
+
+
+def test_render_timage_reports_no_overflow_within_cap() -> None:
+    """_render_timage must report exceeded_bounds=False when the text fits the cap."""
+    from quranmedialib.modules.timage import _render_timage
+
+    cfg = TextConfig(font_size=36, max_width=500, height=400)
+    image, exceeded = _render_timage("Short line of text", cfg)
+    assert image is not None
+    assert exceeded is False
+
+
+def test_render_timage_reports_overflow_beyond_cap() -> None:
+    """_render_timage must report exceeded_bounds=True when the text is clipped by height."""
+    from quranmedialib.modules.timage import _render_timage
+
+    cfg = TextConfig(font_size=36, max_width=200, height=100)
+    image, exceeded = _render_timage("One long line that wraps\nonto many rows\nto overflow the cap", cfg)
+    assert image is not None
+    assert image.height <= cfg.height
+    assert exceeded is True
+
+
+def test_render_timage_returns_none_for_empty_text() -> None:
+    """_render_timage returns (None, False) for None, empty, and whitespace-only text."""
+    from quranmedialib.modules.timage import _render_timage
+
+    for text in (None, "", "   "):
+        image, exceeded = _render_timage(text)
+        assert image is None
+        assert exceeded is False

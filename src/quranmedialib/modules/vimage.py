@@ -14,6 +14,7 @@ from PIL import Image
 
 from quranmedialib.modules.text_layout import balance_lines_pyramid
 from quranmedialib.types import (
+    GeometrySink,
     VerseConfig,
     VerticalAlignment,
     WordConfig,
@@ -243,6 +244,7 @@ class VImage:
         center: bool = True,
         content_height: int = 0,
         vertical_alignment: VerticalAlignment = VerticalAlignment.CENTER,
+        geometry_sink: GeometrySink | None = None,
         **kwargs,
     ) -> None:
         """Renders the verse (or a subset of rows) directly onto the provided canvas.
@@ -257,6 +259,9 @@ class VImage:
             content_height: If > 0, vertically positions the block within the rect.
             vertical_alignment: How to vertically position the block when content_height
                 exceeds the rendered height. Defaults to CENTER.
+            geometry_sink: Optional callback invoked per placed word with the absolute
+                top-left canvas coordinates (x, y). Used by the sidecar emitter to
+                record each word's pixel box. No-op when None.
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
@@ -294,6 +299,8 @@ class VImage:
                     ry = (max_row_height - w_img.height) // 2
                     rx -= w_img.width
                     row_mask.paste(w_img, (rx, ry))
+                    if geometry_sink is not None:
+                        geometry_sink(item, current_x - row_width + rx, draw_y + ry)
                     rx -= word_spacing
 
                 color_to_use = first_color if first_color is not None else global_word_color
@@ -305,14 +312,18 @@ class VImage:
                     w_img = item.image
                     ry = draw_y + (max_row_height - w_img.height) // 2
                     color_to_use = item.color if item.color is not None else global_word_color
+                    word_x = current_x - w_img.width
 
                     if w_img.mode == "L":
                         color_to_use = 255 if canvas.mode == "L" else color_to_use
-                        canvas.paste(color_to_use, (current_x - w_img.width, ry), mask=w_img)
+                        canvas.paste(color_to_use, (word_x, ry), mask=w_img)
                     elif w_img.mode == "RGBA" and canvas.mode == "RGBA":
-                        canvas.alpha_composite(w_img, dest=(current_x - w_img.width, ry))
+                        canvas.alpha_composite(w_img, dest=(word_x, ry))
                     else:
-                        canvas.paste(w_img.convert(canvas.mode), (current_x - w_img.width, ry))
+                        canvas.paste(w_img.convert(canvas.mode), (word_x, ry))
+
+                    if geometry_sink is not None:
+                        geometry_sink(item, word_x, ry)
 
                     current_x -= w_img.width + word_spacing
 

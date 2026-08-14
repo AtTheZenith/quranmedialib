@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import os.path
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -516,6 +517,10 @@ class WordItem:
             # Use object.__setattr__ because the dataclass is frozen
             object.__setattr__(self, "width", self.image.width)
             object.__setattr__(self, "height", self.image.height)
+
+
+# Absolute top-left corner of a placed word on a page canvas, reported per word.
+type GeometrySink = Callable[[WordItem, int, int], None]
 
 
 # === Configuration Types ===
