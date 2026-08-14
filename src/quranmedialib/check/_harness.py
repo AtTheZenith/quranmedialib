@@ -26,7 +26,7 @@ import sys
 import time
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -46,6 +46,7 @@ from quranmedialib import (
 )
 from quranmedialib import __version__ as qml_version
 from quranmedialib.modules.image import color, glow, pad
+from quranmedialib.modules.sidecar import serialize_sidecar
 from quranmedialib.modules.timage import get_timage
 from quranmedialib.modules.vimage import QURANIC_STOP_SIGNS, VImage
 from quranmedialib.modules.wimage import get_wimage
@@ -119,6 +120,7 @@ class ScenarioMetrics:
     pages: int
     peak_rss_mb: float
     pixel_hash: str
+    sidecar_hashes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -133,6 +135,7 @@ class ValidationResult:
     metrics: ScenarioMetrics | None = None
     error: str | None = None
     elapsed: float = 0.0
+    sidecar_mismatch: bool = False
 
 
 @dataclass(slots=True)
@@ -660,6 +663,38 @@ CANONICAL_SCENARIOS: list[Scenario] = [
         },
         expected_pages=2,
     ),
+    # ── Sidecar dual-hash scenarios (spatial geometry) ─────────────────────
+    # emit_sidecar=True requires file-based output; the harness renders these
+    # through the .bm/ scratch dir and validates pixels AND sidecar geometry.
+    Scenario(
+        name="surah_kawthar_sidecar",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="surah",
+        params={
+            "surah": 108,
+            "annotate": True,
+            "separate_translations": False,
+            "emit_sidecar": True,
+        },
+        expected_pages=3,
+    ),
+    Scenario(
+        name="range_kawthar_sidecar",
+        aspect="landscape",
+        mode="default",
+        resolution="1080p",
+        workflow_type="verse_range",
+        params={
+            "surah": 108,
+            "start_ayah": 1,
+            "end_ayah": 3,
+            "annotate": True,
+            "emit_sidecar": True,
+        },
+        expected_pages=3,
+    ),
 ]
 
 
@@ -912,6 +947,7 @@ def _perf_metrics(version: str, metrics: list[ScenarioMetrics]) -> dict[str, Any
                 "pages": m.pages,
                 "peak_rss_mb": round(m.peak_rss_mb, 1),
                 "pixel_hash": m.pixel_hash,
+                **({"sidecar_hashes": m.sidecar_hashes} if m.sidecar_hashes else {}),
             }
             for m in metrics
         ],
@@ -935,6 +971,30 @@ def _load_scenarios_meta(path: Path) -> list[dict[str, Any]] | None:
     if data is None:
         return None
     return data.get("scenarios", [])
+
+
+# ── Sidecar helpers ──────────────────────────────────────────────────────────
+
+
+def _scenario_has_sidecar(scenario: Scenario) -> bool:
+    """Return whether a scenario emits a spatial sidecar beside each page."""
+    return bool(scenario.params.get("emit_sidecar", False))
+
+
+def _sidecar_sha256(sidecar: dict[str, Any]) -> str:
+    """Return the canonical SHA-256 of a serialized sidecar document."""
+    return f"sha256:{hashlib.sha256(serialize_sidecar(sidecar).encode('utf-8')).hexdigest()}"
+
+
+def _load_sidecar_hashes(ref_dir: Path, scenario_name: str) -> list[str]:
+    """Load the per-page sidecar hashes recorded for a scenario in perf.json."""
+    perf = _load_perf(ref_dir)
+    if not perf:
+        return []
+    for entry in perf.get("scenarios", []):
+        if entry.get("name") == scenario_name:
+            return entry.get("sidecar_hashes", [])
+    return []
 
 
 # ── Harness ─────────────────────────────────────────────────────────────────
@@ -1000,6 +1060,7 @@ class ValidationHarness:
                 annotate=scenario.params.get("annotate", True),
                 separate_translations=scenario.params.get("separate_translations", False),
                 output_dir=output_dir,
+                emit_sidecar=scenario.params.get("emit_sidecar", False),
             )
         elif scenario.workflow_type == "verse_range":
             surah = scenario.params["surah"]
@@ -1015,6 +1076,7 @@ class ValidationHarness:
                 end_ayah=end,
                 annotate=scenario.params.get("annotate", True),
                 output_dir=output_dir,
+                emit_sidecar=scenario.params.get("emit_sidecar", False),
             )
         elif scenario.workflow_type == "verse":
             it = wf.get_iterator(
@@ -1097,6 +1159,65 @@ class ValidationHarness:
         for batch in it:
             yield from batch
 
+    def _iter_pages_with_sidecars(self, scenario: Scenario) -> Iterator[tuple[Image.Image, dict]]:
+        """Render a sidecar scenario, yielding (page, sidecar) pairs in page order.
+
+        Sidecar emission requires file-based output (``emit_sidecar=True`` is
+        rejected without ``output_dir``), so pages render into a scratch dir
+        under ``.bm/`` and each PNG is read back together with its sibling
+        ``.json`` sidecar. Only ``surah`` and ``verse_range`` workflows support
+        sidecars.
+
+        Yields:
+            tuple[Image.Image, dict]: (page image, sidecar dict) per page.
+
+        Raises:
+            ValueError: If the scenario's workflow type does not support sidecars.
+        """
+        if scenario.workflow_type not in ("surah", "verse_range"):
+            raise ValueError(f"emit_sidecar unsupported for workflow type: {scenario.workflow_type}")
+
+        tmp_dir = os.path.join(_get_reference_root().parent, ".bm", uuid.uuid4().hex[:12])
+        os.makedirs(tmp_dir, exist_ok=True)
+        try:
+            wf = _build_workflow(scenario)
+
+            if scenario.workflow_type == "surah":
+                it = wf.get_iterator(
+                    surah=scenario.params["surah"],
+                    annotate=scenario.params.get("annotate", True),
+                    separate_translations=scenario.params.get("separate_translations", False),
+                    output_dir=tmp_dir,
+                    emit_sidecar=True,
+                )
+            else:
+                surah = scenario.params["surah"]
+                start = scenario.params.get("start_ayah", 1)
+                end = scenario.params.get("end_ayah", start)
+                tr: list[list[str]] = []
+                for v in range(start, end + 1):
+                    tr.append([self._db.get_translation_from_verse(surah, v)])
+                it = wf.get_iterator(
+                    surah=surah,
+                    translations=tr,
+                    start_ayah=start,
+                    end_ayah=end,
+                    annotate=scenario.params.get("annotate", True),
+                    output_dir=tmp_dir,
+                    emit_sidecar=True,
+                )
+
+            for batch in it:
+                for path_str in batch:
+                    page = Image.open(path_str)
+                    page.load()
+                    stem = os.path.splitext(path_str)[0]
+                    with open(stem + ".json", encoding="utf-8") as f:
+                        sidecar = json.load(f)
+                    yield page, sidecar
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
     def benchmark_scenario(self, scenario: Scenario) -> ScenarioMetrics:
         """Render and collect performance metrics for a single scenario.
 
@@ -1127,10 +1248,6 @@ class ValidationHarness:
         """Render a scenario and compare against its reference images (streaming, no accumulation)."""
         start = time.perf_counter()
         ref_dir = self.reference_dir
-        hasher = hashlib.sha256()
-        page_diffs: list[PageDiff] = []
-        all_pass = True
-        i = 0
 
         if not ref_dir.exists():
             return ValidationResult(
@@ -1142,35 +1259,60 @@ class ValidationHarness:
                 elapsed=time.perf_counter() - start,
             )
 
+        if _scenario_has_sidecar(scenario):
+            return self._validate_sidecar_scenario(scenario, start)
+
+        return self._validate_pixel_scenario(scenario, start)
+
+    def _pixel_compare_page(
+        self,
+        scenario: Scenario,
+        i: int,
+        page: Image.Image,
+        page_diffs: list[PageDiff],
+        hasher: "hashlib._Hash",
+    ) -> bool:
+        """Compare one rendered page against its reference image.
+
+        Args:
+            scenario: The scenario being validated.
+            i: Zero-based page index.
+            page: The rendered page image.
+            page_diffs: Accumulator for per-page diffs.
+            hasher: SHA-256 accumulator for the pixel hash.
+
+        Returns:
+            bool: True if the page matches its reference, False otherwise.
+        """
+        hasher.update(page.tobytes())
+
+        if i >= scenario.expected_pages:
+            page_diffs.append(PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False))
+            return False
+
+        ref_path = self.get_reference_path(scenario, i)
+        if not ref_path.exists():
+            page_diffs.append(PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False))
+            return False
+
+        ref_img = Image.open(ref_path)
+        diff = _compare_images(ref_img, page)
+        diff.page = i
+        page_diffs.append(diff)
+        return diff.diff_pixels == 0
+
+    def _validate_pixel_scenario(self, scenario: Scenario, start: float) -> ValidationResult:
+        """Validate a pixel-only scenario against its reference images."""
+        hasher = hashlib.sha256()
+        page_diffs: list[PageDiff] = []
+        all_pass = True
+        i = 0
+
         try:
             for page in self._iter_pages(scenario):
-                hasher.update(page.tobytes())
-
-                if i >= scenario.expected_pages:
-                    page_diffs.append(
-                        PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-                    )
-                    all_pass = False
-                    i += 1
-                    continue
-
-                ref_path = self.get_reference_path(scenario, i)
-                if not ref_path.exists():
-                    page_diffs.append(
-                        PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False)
-                    )
-                    all_pass = False
-                    i += 1
-                    continue
-
-                ref_img = Image.open(ref_path)
-                diff = _compare_images(ref_img, page)
-                diff.page = i
-                page_diffs.append(diff)
-                if diff.diff_pixels != 0:
+                if not self._pixel_compare_page(scenario, i, page, page_diffs, hasher):
                     all_pass = False
                 i += 1
-
         except Exception as e:
             return ValidationResult(
                 scenario=scenario.name,
@@ -1204,6 +1346,62 @@ class ValidationHarness:
             page_diffs=page_diffs,
             metrics=metrics,
             elapsed=time.perf_counter() - start,
+        )
+
+    def _validate_sidecar_scenario(self, scenario: Scenario, start: float) -> ValidationResult:
+        """Validate pixels AND per-page spatial sidecar hashes for a sidecar scenario."""
+        ref_dir = self.reference_dir
+        stored_hashes = _load_sidecar_hashes(ref_dir, scenario.name)
+        hasher = hashlib.sha256()
+        page_diffs: list[PageDiff] = []
+        all_pass = True
+        sidecar_mismatch = False
+        i = 0
+
+        try:
+            for page, sidecar in self._iter_pages_with_sidecars(scenario):
+                if not self._pixel_compare_page(scenario, i, page, page_diffs, hasher):
+                    all_pass = False
+                recomputed = _sidecar_sha256(sidecar)
+                if i >= len(stored_hashes) or stored_hashes[i] != recomputed:
+                    sidecar_mismatch = True
+                    all_pass = False
+                i += 1
+        except Exception as e:
+            return ValidationResult(
+                scenario=scenario.name,
+                passed=False,
+                pages_expected=scenario.expected_pages,
+                pages_actual=i,
+                error=str(e),
+                elapsed=time.perf_counter() - start,
+            )
+
+        actual = i
+        metrics = ScenarioMetrics(
+            name=scenario.name,
+            elapsed_s=time.perf_counter() - start,
+            pages=actual,
+            peak_rss_mb=_get_memory_mb(),
+            pixel_hash=f"sha256:{hasher.hexdigest()}",
+            sidecar_hashes=stored_hashes,
+        )
+
+        # Handle missing pages (rendered fewer than expected)
+        while i < scenario.expected_pages:
+            page_diffs.append(PageDiff(page=i, diff_pixels=-1, total_pixels=0, diff_percent=100.0, size_match=False))
+            all_pass = False
+            i += 1
+
+        return ValidationResult(
+            scenario=scenario.name,
+            passed=all_pass and actual == scenario.expected_pages,
+            pages_expected=scenario.expected_pages,
+            pages_actual=actual,
+            page_diffs=page_diffs,
+            metrics=metrics,
+            elapsed=time.perf_counter() - start,
+            sidecar_mismatch=sidecar_mismatch,
         )
 
     # ── Batch operations ──────────────────────────────────────────────────
@@ -1245,13 +1443,24 @@ class ValidationHarness:
 
             # Save reference images (streaming, no accumulation)
             hasher = hashlib.sha256()
-            for i, page in enumerate(self._iter_pages(scenario)):
-                if i >= scenario.expected_pages:
-                    break
-                hasher.update(page.tobytes())
-                path = self.get_reference_path(scenario, i)
-                page.save(path)
-                created.append(path)
+            sidecar_hashes: list[str] = []
+            if _scenario_has_sidecar(scenario):
+                for i, (page, sidecar) in enumerate(self._iter_pages_with_sidecars(scenario)):
+                    if i >= scenario.expected_pages:
+                        break
+                    hasher.update(page.tobytes())
+                    sidecar_hashes.append(_sidecar_sha256(sidecar))
+                    path = self.get_reference_path(scenario, i)
+                    page.save(path)
+                    created.append(path)
+            else:
+                for i, page in enumerate(self._iter_pages(scenario)):
+                    if i >= scenario.expected_pages:
+                        break
+                    hasher.update(page.tobytes())
+                    path = self.get_reference_path(scenario, i)
+                    page.save(path)
+                    created.append(path)
 
             metrics_list.append(
                 ScenarioMetrics(
@@ -1260,6 +1469,7 @@ class ValidationHarness:
                     pages=page_count,
                     peak_rss_mb=rss,
                     pixel_hash=f"sha256:{hasher.hexdigest()}",
+                    sidecar_hashes=sidecar_hashes,
                 )
             )
 
@@ -1367,6 +1577,8 @@ def _print_validation_report(results: list[ValidationResult]) -> None:
         status = "PASS" if r.passed else "FAIL"
         if r.error:
             print(f"  [{status}] {r.scenario}: ERROR — {r.error}")
+        elif r.sidecar_mismatch:
+            print(f"  [{status}] {r.scenario}: SIDECAR GEOMETRY MISMATCH")
         elif not r.passed and r.page_diffs:
             issues = []
             for d in r.page_diffs:
@@ -1656,6 +1868,7 @@ def _cmd_run(args: argparse.Namespace, harness: ValidationHarness) -> int:
                     "pages_actual": r.pages_actual,
                     "error": r.error,
                     "elapsed": round(r.elapsed, 3),
+                    "sidecar_mismatch": r.sidecar_mismatch,
                     "metrics": {
                         "elapsed_s": round(r.metrics.elapsed_s, 3),
                         "pages": r.metrics.pages,

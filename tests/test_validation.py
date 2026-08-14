@@ -6,10 +6,15 @@ specific version's reference images. New versions add new parametrize entries.
 
 from __future__ import annotations
 
+import copy
+import json
+import shutil
+
 import pytest
 
+from quranmedialib import __version__ as qml_version
 from quranmedialib.check import CANONICAL_SCENARIOS, ValidationHarness
-from quranmedialib.check._harness import validate_version_dir_name
+from quranmedialib.check._harness import _sidecar_sha256, validate_version_dir_name
 
 SUPPORTED_VERSIONS = ["v4.1.1"]
 
@@ -20,10 +25,63 @@ def test_rendering_contract(version: str, scenario) -> None:
     """Validate current output matches version-specific reference images."""
     harness = ValidationHarness(version)
     try:
+        if not harness.get_reference_path(scenario, 0).exists():
+            pytest.skip(f"[{version}] has no reference for {scenario.name}")
         result = harness.validate_scenario(scenario)
         assert result.passed, f"[{version}] {result.scenario}: " + (result.error or _diff_summary(result))
     finally:
         harness.close()
+
+
+def test_sidecar_scenarios_validate_against_current() -> None:
+    """Sidecar scenarios validate cleanly (pixels + geometry) against current references."""
+    version = f"v{qml_version}"
+    harness = ValidationHarness(version)
+    try:
+        sidecar_scenarios = [s for s in CANONICAL_SCENARIOS if s.params.get("emit_sidecar")]
+        assert sidecar_scenarios, "expected at least one sidecar canonical scenario"
+        for scenario in sidecar_scenarios:
+            if not harness.get_reference_path(scenario, 0).exists():
+                pytest.skip(f"[{version}] no references for {scenario.name}; run 'check update'")
+            result = harness.validate_scenario(scenario)
+            assert result.passed, f"[{version}] {result.scenario}: " + (result.error or _diff_summary(result))
+            assert result.sidecar_mismatch is False
+    finally:
+        harness.close()
+
+
+def test_sidecar_geometry_shift_detected_when_pixels_match() -> None:
+    """A shifted word x-coordinate fails geometry validation even when pixels match."""
+    scenario = next(s for s in CANONICAL_SCENARIOS if s.params.get("emit_sidecar"))
+    version = "v_sidecar_shift"
+    harness = ValidationHarness(version)
+    try:
+        harness.update_references([scenario])
+
+        # Capture the true page-0 sidecar, then shift the first word's x-coordinate.
+        rendered = list(harness._iter_pages_with_sidecars(scenario))
+        assert rendered, "sidecar scenario must produce pages"
+        _, true_sidecar = rendered[0]
+        shifted = copy.deepcopy(true_sidecar)
+        shifted["rows"][0]["words"][0]["x"] += 2
+
+        # Tamper the stored sidecar hash for page 0 in perf.json.
+        perf_path = harness.reference_dir / "perf.json"
+        perf = json.loads(perf_path.read_text())
+        for entry in perf["scenarios"]:
+            if entry["name"] == scenario.name:
+                entry["sidecar_hashes"][0] = _sidecar_sha256(shifted)
+        perf_path.write_text(json.dumps(perf, indent=2) + "\n")
+
+        # Pixels still match; the geometry hash must not.
+        result = harness.validate_scenario(scenario)
+        assert not result.passed
+        assert result.sidecar_mismatch is True
+        assert result.page_diffs is not None
+        assert all(d.diff_pixels == 0 for d in result.page_diffs), "pixels must still match"
+    finally:
+        harness.close()
+        shutil.rmtree(harness.reference_dir, ignore_errors=True)
 
 
 def _diff_summary(result) -> str:
