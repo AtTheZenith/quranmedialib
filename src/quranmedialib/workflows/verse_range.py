@@ -34,6 +34,7 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.presets import arabic_vertical_alignment, build_layout_guide, translation_placement
 from quranmedialib.types import (
     FrameConfig,
+    ResolvedRect,
     TextConfig,
     VerseConfig,
     WordConfig,
@@ -345,8 +346,9 @@ def _render_pages(
 
     When ``emit_sidecar`` is True, each page is returned as a
     ``(page_image, sidecar_dict)`` tuple instead of a bare page image. The
-    sidecar captures the word geometry via the VImage ``geometry_sink`` and the
-    translation paragraph via ``_render_timage`` + ``translation_placement``.
+    sidecar is assembled from the layer nodes collected by ``Frame`` during
+    placement: VImage emits its own ``vimage`` node through its ``sidecar_sink``
+    and the translation paragraph is recorded via ``sidecar_record``.
 
     Args:
         word_items: The verse words to render.
@@ -373,24 +375,33 @@ def _render_pages(
     frame_h = frame_cfg.image_height
     bg = frame_cfg.background_color
 
-    def _sidecar(
-        page_num: int,
-        rows: list[tuple[list[WordItem], int, int]],
-        translation_geo: dict | None,
-        geometry: list[tuple[WordItem, int, int]],
-    ) -> dict:
-        """Build the sidecar for one rendered page."""
+    def _sidecar(page_num: int, frame_obj: Frame) -> dict:
+        """Build the sidecar for one rendered page from Frame's collected layers."""
         assert surah is not None and ayah is not None
+        assert frame_obj.sidecar_layers is not None
         return build_sidecar(
             surah=surah,
             ayah=ayah,
             page=page_num,
             dimensions=(frame_w, frame_h),
-            rows=rows,
-            translation_geo=translation_geo,
-            word_items_with_geometry=geometry,
+            layers=frame_obj.sidecar_layers,
             wbw_by_index=wbw_by_index,
         )
+
+    def _translation_record(
+        t_image: Image.Image,
+        place_rect: ResolvedRect,
+        exceeded_bounds: bool,
+        text: str,
+    ) -> dict:
+        """Build the translation layer node for the sidecar."""
+        return {
+            "class_type": "translation",
+            "bbox": {"x": 0, "y": 0, "w": t_image.width, "h": t_image.height},
+            "position": {"x": place_rect.left, "y": place_rect.top},
+            "exceeded_bounds": exceeded_bounds,
+            "text": text,
+        }
 
     if not separate_translations:
         vimage = VImage(word_items, verse_cfg, guide.arabic.width)
@@ -401,12 +412,7 @@ def _render_pages(
 
         while current_index < total_items:
             current_rows, items_consumed = vimage.get_page_chunk(current_index, verse_cfg.max_rows_per_page)
-            frame_obj = Frame(frame_w, frame_h, bg)
-
-            geometry: list[tuple[WordItem, int, int]] = []
-
-            def _geometry_sink(item: WordItem, x: int, y: int) -> None:
-                geometry.append((item, x, y))
+            frame_obj = Frame(frame_w, frame_h, bg, collect_sidecar=emit_sidecar)
 
             frame_obj.layer_at(
                 vimage,
@@ -416,10 +422,8 @@ def _render_pages(
                 center=True,
                 content_height=guide.arabic.height,
                 vertical_alignment=arabic_vertical_alignment(frame_cfg.aspect_ratio, frame_cfg.mode),
-                **({"geometry_sink": _geometry_sink} if emit_sidecar else {}),
             )
 
-            translation_geo = None
             if trans_images and page_index < len(trans_images):
                 if emit_sidecar:
                     t_image, exceeded_bounds = _render_timage(verse_translations[page_index], text_cfg)
@@ -438,20 +442,16 @@ def _render_pages(
                         place_rect,
                         text_color=text_cfg.color,
                         keep_bottom=keep_bottom,
+                        sidecar_record=(
+                            _translation_record(t_image, place_rect, exceeded_bounds, verse_translations[page_index])
+                            if emit_sidecar
+                            else None
+                        ),
                     )
-                    if emit_sidecar:
-                        translation_geo = {
-                            "bbox": {"x": 0, "y": 0, "w": t_image.width, "h": t_image.height},
-                            "position": {"x": place_rect.left, "y": place_rect.top},
-                            "exceeded_bounds": exceeded_bounds,
-                            "text": verse_translations[page_index],
-                        }
 
             page_image = frame_obj.render()
             if emit_sidecar:
-                pages.append(
-                    (page_image, _sidecar(page_index + 1, current_rows, translation_geo, geometry))
-                )
+                pages.append((page_image, _sidecar(page_index + 1, frame_obj)))
             else:
                 pages.append(page_image)
             current_index += items_consumed
@@ -467,12 +467,7 @@ def _render_pages(
 
     while current_index < total_items:
         current_rows, items_consumed = vimage.get_page_chunk(current_index, modified_verse_cfg.max_rows_per_page)
-        frame_obj = Frame(frame_w, frame_h, bg)
-
-        geometry: list[tuple[WordItem, int, int]] = []
-
-        def _geometry_sink(item: WordItem, x: int, y: int) -> None:
-            geometry.append((item, x, y))
+        frame_obj = Frame(frame_w, frame_h, bg, collect_sidecar=emit_sidecar)
 
         frame_obj.layer_at(
             vimage,
@@ -482,11 +477,10 @@ def _render_pages(
             center=True,
             content_height=guide.arabic.height,
             vertical_alignment=arabic_vertical_alignment(frame_cfg.aspect_ratio, frame_cfg.mode),
-            **({"geometry_sink": _geometry_sink} if emit_sidecar else {}),
         )
         page_image = frame_obj.render()
         if emit_sidecar:
-            pages.append((page_image, _sidecar(page_index + 1, current_rows, None, geometry)))
+            pages.append((page_image, _sidecar(page_index + 1, frame_obj)))
         else:
             pages.append(page_image)
         current_index += items_consumed
@@ -494,15 +488,13 @@ def _render_pages(
 
     translation_iter: Iterator[tuple[str, Image.Image | None, bool]]
     if emit_sidecar:
-        translation_iter = (
-            (text, *_render_timage(text, text_cfg)) for text in verse_translations
-        )
+        translation_iter = ((text, *_render_timage(text, text_cfg)) for text in verse_translations)
     else:
         translation_iter = ((text, t, False) for text, t in zip(verse_translations, trans_images))
     for text, t_img, exceeded_bounds in translation_iter:
         if not t_img:
             continue
-        frame_obj = Frame(frame_w, frame_h, bg)
+        frame_obj = Frame(frame_w, frame_h, bg, collect_sidecar=emit_sidecar)
         place_rect, keep_bottom = translation_placement(
             guide.translation,
             t_img.width,
@@ -515,16 +507,11 @@ def _render_pages(
             place_rect,
             text_color=text_cfg.color,
             keep_bottom=keep_bottom,
+            sidecar_record=(_translation_record(t_img, place_rect, exceeded_bounds, text) if emit_sidecar else None),
         )
         page_image = frame_obj.render()
         if emit_sidecar:
-            translation_geo = {
-                "bbox": {"x": 0, "y": 0, "w": t_img.width, "h": t_img.height},
-                "position": {"x": place_rect.left, "y": place_rect.top},
-                "exceeded_bounds": exceeded_bounds,
-                "text": text,
-            }
-            pages.append((page_image, _sidecar(page_index + 1, [], translation_geo, [])))
+            pages.append((page_image, _sidecar(page_index + 1, frame_obj)))
             page_index += 1
         else:
             pages.append(page_image)

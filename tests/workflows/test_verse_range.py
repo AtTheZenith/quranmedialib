@@ -422,12 +422,14 @@ def test_emit_sidecar_writes_one_json_per_png(tmp_path) -> None:
     for j in page_jsons:
         data = json_module.loads(j.read_text(encoding="utf-8"))
         assert data["schema"] == SIDECAR_SCHEMA
-        assert "rows" in data
+        assert "layers" in data
         assert "dimensions" in data
-        # Word records carry the class_type discriminator.
-        for row in data["rows"]:
-            for word in row["words"]:
-                assert word["class_type"] in {"word", "verse_number"}
+        # VImage layers carry a rows hierarchy with class_type word records.
+        for layer in data["layers"]:
+            if layer["class_type"] == "vimage":
+                for row in layer["rows"]:
+                    for word in row["words"]:
+                        assert word["class_type"] in {"word", "verse_number"}
 
     task_data = json_module.loads(task_json.read_text(encoding="utf-8"))
     assert task_data["schema"] == TASK_SCHEMA

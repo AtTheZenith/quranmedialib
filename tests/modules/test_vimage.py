@@ -246,8 +246,8 @@ def test_vimage_layer_vs_render_equality(word_config):
     assert canvas_old.tobytes() == canvas_new.tobytes()
 
 
-def test_vimage_geometry_sink_reports_row_layout_positions(word_config):
-    """The geometry sink must report absolute positions consistent with the row layout math."""
+def test_vimage_sidecar_sink_reports_row_layout_positions(word_config):
+    """The sidecar sink must report absolute positions consistent with the row layout math."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     # 3 words of 50x40 in a 200-wide box -> one row, centered: row_x = (200 - 170)//2 = 15
     items = [
@@ -260,45 +260,64 @@ def test_vimage_geometry_sink_reports_row_layout_positions(word_config):
     assert consumed == 3
 
     canvas = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
-    captured: list[tuple[WordItem, int, int]] = []
+    captured: list[dict] = []
 
-    def sink(item: WordItem, x: int, y: int) -> None:
-        captured.append((item, x, y))
+    def sink(node: dict) -> None:
+        captured.append(node)
 
-    vimg.layer(canvas, x=0, y=0, word_config=word_config, rows_to_render=rows, geometry_sink=sink)
+    vimg.layer(canvas, x=0, y=0, word_config=word_config, rows_to_render=rows, sidecar_sink=sink)
+
+    assert len(captured) == 1
+    node = captured[0]
+    assert node["class_type"] == "vimage"
+    # Block box = ink extent of the single row: x=15, w=170, y=0, h=40.
+    assert node["x"] == 15
+    assert node["y"] == 0
+    assert node["w"] == 170
+    assert node["h"] == 40
+    assert len(node["rows"]) == 1
+    row = node["rows"][0]
+    assert (row["x"], row["y"], row["width"], row["height"]) == (15, 0, 170, 40)
 
     # RTL placement: the first item in the row list is the rightmost word.
     # Row starts at current_x = 15 + 170 = 185. W1 box: x = 185-50 = 135.
     # W2 box: x = 135-50-10 = 75. W3 box: x = 75-50-10 = 15.
-    assert [(item.text, x, y) for item, x, y in captured] == [("W1", 135, 0), ("W2", 75, 0), ("W3", 15, 0)]
+    assert [(w["text"], w["x"], w["y"]) for w in row["words"]] == [
+        ("W1", 135, 0),
+        ("W2", 75, 0),
+        ("W3", 15, 0),
+    ]
 
 
-def test_vimage_geometry_sink_pixels_match_reported_boxes(word_config):
+def test_vimage_sidecar_sink_pixels_match_reported_boxes(word_config):
     """Reported boxes must contain exactly the placed word's ink (geometry agrees with pixels)."""
     verse_cfg = VerseConfig(word_spacing=10, row_spacing=20)
     items = []
     for i in range(3):
         color = (0, 0, 255 - i * 40, 255)
         img = Image.new("RGBA", (50, 40), color)
-        items.append(WordItem(image=img, text=f"W{i + 1}"))
+        items.append(WordItem(image=img, text=f"W{i + 1}", index=i + 1))
     vimg = VImage(items, verse_cfg, 200)
     rows, consumed = vimg.get_page_chunk(0, 10)
     assert consumed == 3
 
     canvas = Image.new("RGBA", (200, 200), (0, 0, 0, 0))
-    captured: list[tuple[WordItem, int, int]] = []
+    captured: list[dict] = []
 
-    def sink(item: WordItem, x: int, y: int) -> None:
-        captured.append((item, x, y))
+    def sink(node: dict) -> None:
+        captured.append(node)
 
-    vimg.layer(canvas, x=0, y=0, word_config=word_config, rows_to_render=rows, geometry_sink=sink)
+    vimg.layer(canvas, x=0, y=0, word_config=word_config, rows_to_render=rows, sidecar_sink=sink)
 
-    for item, x, y in captured:
-        sample = canvas.getpixel((x + item.width // 2, y + item.height // 2))
-        assert sample == item.image.getpixel((item.width // 2, item.height // 2))
+    assert len(captured) == 1
+    words = captured[0]["rows"][0]["words"]
+    assert len(words) == 3
+    for record in words:
+        sample = canvas.getpixel((record["x"] + record["w"] // 2, record["y"] + record["h"] // 2))
+        assert sample == items[record["index"] - 1].image.getpixel((record["w"] // 2, record["h"] // 2))
         # The box must be fully within the canvas and contain ink at its center.
-        assert 0 <= x and x + item.width <= canvas.width
-        assert 0 <= y and y + item.height <= canvas.height
+        assert 0 <= record["x"] and record["x"] + record["w"] <= canvas.width
+        assert 0 <= record["y"] and record["y"] + record["h"] <= canvas.height
 
 
 # === Benchmark Tests ===

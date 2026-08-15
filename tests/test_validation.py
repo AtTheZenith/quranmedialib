@@ -63,7 +63,7 @@ def test_sidecar_geometry_shift_detected_when_pixels_match() -> None:
         assert rendered, "sidecar scenario must produce pages"
         _, true_sidecar = rendered[0]
         shifted = copy.deepcopy(true_sidecar)
-        shifted["rows"][0]["words"][0]["x"] += 2
+        shifted["layers"][0]["rows"][0]["words"][0]["x"] += 2
 
         # Tamper the stored sidecar hash for page 0 in perf.json.
         perf_path = harness.reference_dir / "perf.json"

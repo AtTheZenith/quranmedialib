@@ -18,7 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from quranmedialib.types import DatabaseConfig, FontResource, Padding, WordItem
+from quranmedialib.types import DatabaseConfig, FontResource, Padding
 
 # The schema contract version. Independent of the library version: bump only on
 # universal-contract changes (key renames, coordinate semantics, page structure),
@@ -52,34 +52,8 @@ def sidecar_filename(page_num: int) -> str:
     return f"page_{page_num:04d}.json"
 
 
-def _word_record(item: WordItem, x: int, y: int, wbw: str | None) -> dict[str, Any]:
-    """Build the sidecar record for a single word item.
-
-    Args:
-        item: The WordItem placed on the page.
-        x: Absolute page x of the word's top-left corner.
-        y: Absolute page y of the word's top-left corner.
-        wbw: Word-by-word translation for this word, if known.
-
-    Returns:
-        dict[str, Any]: The word record.
-    """
-    record: dict[str, Any] = {
-        "index": item.index,
-        "class_type": item.class_type,
-        "text": item.text or "",
-        "x": x,
-        "y": y,
-        "w": item.width,
-        "h": item.height,
-    }
-    if wbw is not None:
-        record["wbw"] = wbw
-    return record
-
-
-def _word_records(item: WordItem, x: int, y: int, wbw_by_index: dict[int, str]) -> list[dict[str, Any]]:
-    """Build the sidecar records for a word item, expanding combined batches.
+def _word_records(record: dict[str, Any], wbw_by_index: dict[int, str]) -> list[dict[str, Any]]:
+    """Build the sidecar records for a word record, expanding combined batches.
 
     A wimage whose text carries multiple whitespace-separated words is a
     combined annotation batch (consecutive words sharing the same wbw string,
@@ -88,38 +62,44 @@ def _word_records(item: WordItem, x: int, y: int, wbw_by_index: dict[int, str]) 
     pixel box, so word records map 1:1 onto the wbw database keys.
 
     Args:
-        item: The WordItem placed on the page.
-        x: Absolute page x of the top-left corner (shared by all batch words).
-        y: Absolute page y of the top-left corner (shared by all batch words).
+        record: Flat word record emitted by VImage (index, class_type, text, box).
         wbw_by_index: Map of word index to its word-by-word translation.
 
     Returns:
         list[dict[str, Any]]: One record for a single word or verse number, or
             one record per source word for a combined batch.
     """
-    if item.class_type != "word":
-        return [_word_record(item, x, y, wbw_by_index.get(item.index))]
-    words = (item.text or "").split()
+    if record["class_type"] != "word":
+        return [_word_record(record, wbw_by_index.get(record["index"]))]
+    words = (record.get("text") or "").split()
     if len(words) <= 1:
-        return [_word_record(item, x, y, wbw_by_index.get(item.index))]
+        return [_word_record(record, wbw_by_index.get(record["index"]))]
 
     records = []
     for offset, word_text in enumerate(words):
-        index = item.index + offset
-        record = {
-            "index": index,
-            "class_type": "word",
-            "text": word_text,
-            "x": x,
-            "y": y,
-            "w": item.width,
-            "h": item.height,
-        }
+        index = record["index"] + offset
+        expanded = dict(record)
+        expanded.update(index=index, text=word_text)
         wbw = wbw_by_index.get(index)
         if wbw is not None:
-            record["wbw"] = wbw
-        records.append(record)
+            expanded["wbw"] = wbw
+        records.append(expanded)
     return records
+
+
+def _word_record(record: dict[str, Any], wbw: str | None) -> dict[str, Any]:
+    """Return a single word record with its wbw translation when known.
+
+    Args:
+        record: Flat word record emitted by VImage (index, class_type, text, box).
+        wbw: Word-by-word translation for this word, if known.
+
+    Returns:
+        dict[str, Any]: The word record.
+    """
+    if wbw is not None:
+        return {**record, "wbw": wbw}
+    return record
 
 
 def build_sidecar(
@@ -127,47 +107,39 @@ def build_sidecar(
     ayah: int,
     page: int,
     dimensions: tuple[int, int],
-    rows: list[tuple[list[WordItem], int, int]],
-    translation_geo: dict[str, Any] | None,
-    word_items_with_geometry: list[tuple[WordItem, int, int]],
+    layers: list[dict[str, Any]],
     wbw_by_index: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     """Build the spatial sidecar document for one rendered page.
+
+    A thin assembler over the layers collected by Frame during placement. Each
+    Layerable emits its own ``class_type`` node through its ``sidecar_sink``;
+    this function only applies emission-time concerns the renderer must not know
+    (the wbw join and combined-batch expansion on vimage word records) and wraps
+    the nodes in the schema envelope.
 
     Args:
         surah: Surah number (1-114).
         ayah: Ayah number (1-286).
         page: 1-based page number within the verse.
         dimensions: (width, height) of the page canvas in pixels.
-        rows: The VImage row structure — list of (word_items, row_width, row_height).
-        translation_geo: Optional translation paragraph geometry with ``bbox``,
-            ``position``, and ``exceeded_bounds`` keys; None when no translation
-            was placed on this page.
-        word_items_with_geometry: Flat list of (item, x, y) captured from the
-            VImage geometry sink, in placement order.
+        layers: Collected layer nodes in placement order. VImage nodes carry
+            flat word records (no wbw); translation nodes carry bbox/position/
+            exceeded_bounds/text.
         wbw_by_index: Optional map of word index to its word-by-word translation,
             joined by WordIndex at emission.
 
     Returns:
-        dict[str, Any]: The sidecar document (schema, identity, dimensions, rows,
-            and the optional translation record).
+        dict[str, Any]: The sidecar document (schema, identity, dimensions, and
+            the layers array).
     """
-    geo_by_id = {id(item): (x, y) for item, x, y in word_items_with_geometry}
     wbw = wbw_by_index or {}
-
-    row_records: list[dict[str, Any]] = []
-    for row_items, row_width, row_height in rows:
-        words = []
-        for item in row_items:
-            x, y = geo_by_id.get(id(item), (0, 0))
-            words.extend(_word_records(item, x, y, wbw))
-        row_records.append(
-            {
-                "width": row_width,
-                "height": row_height,
-                "words": words,
-            }
-        )
+    resolved_layers: list[dict[str, Any]] = []
+    for layer in layers:
+        if layer.get("class_type") == "vimage":
+            resolved_layers.append(_resolve_vimage_words(layer, wbw))
+        else:
+            resolved_layers.append(layer)
 
     sidecar: dict[str, Any] = {
         "schema": SIDECAR_SCHEMA,
@@ -175,11 +147,31 @@ def build_sidecar(
         "ayah": ayah,
         "page": page,
         "dimensions": {"width": dimensions[0], "height": dimensions[1]},
-        "rows": row_records,
+        "layers": resolved_layers,
     }
-    if translation_geo is not None:
-        sidecar["translation"] = translation_geo
     return sidecar
+
+
+def _resolve_vimage_words(
+    layer: dict[str, Any],
+    wbw_by_index: dict[int, str],
+) -> dict[str, Any]:
+    """Expand combined batches and join wbw on a VImage layer's word records.
+
+    Args:
+        layer: The VImage node emitted by its ``sidecar_sink``.
+        wbw_by_index: Map of word index to its word-by-word translation.
+
+    Returns:
+        dict[str, Any]: The layer with rows' word records resolved.
+    """
+    resolved_rows = []
+    for row in layer.get("rows", []):
+        words = []
+        for record in row.get("words", []):
+            words.extend(_word_records(record, wbw_by_index))
+        resolved_rows.append({**row, "words": words})
+    return {**layer, "rows": resolved_rows}
 
 
 def serialize_sidecar(sidecar: dict[str, Any]) -> str:
@@ -330,8 +322,7 @@ def build_task_sidecar(
             "text": _config_to_dict(text_cfg),
         },
         "database": [
-            {"name": name, "filepath": str(config.filepath)}
-            for name, config in sorted(database_configs.items())
+            {"name": name, "filepath": str(config.filepath)} for name, config in sorted(database_configs.items())
         ],
         "fonts": _font_records(word_cfg, text_cfg),
     }

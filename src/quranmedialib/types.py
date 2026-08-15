@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Final, NamedTuple, Protocol, runtime_checkable
+from typing import Annotated, Any, Final, NamedTuple, Protocol, runtime_checkable
 
 from PIL import Image
 
@@ -170,6 +170,11 @@ class Layerable(Protocol):
 
     Implemented by classes that manage their own internal coordinates (like VImage)
     to avoid intermediate canvas allocations.
+
+    A Layerable may also participate in spatial sidecar emission: its ``layer``
+    method may accept an optional ``sidecar_sink`` keyword and, when provided,
+    emit its own fully-built ``class_type`` node after placement. This is
+    opt-in per class — the base contract only requires ``layer``.
     """
 
     def layer(self, canvas: Image.Image, x: int, y: int, **kwargs) -> None: ...
@@ -519,8 +524,14 @@ class WordItem:
             object.__setattr__(self, "height", self.image.height)
 
 
-# Absolute top-left corner of a placed word on a page canvas, reported per word.
-type GeometrySink = Callable[[WordItem, int, int], None]
+# Absolute (x, y, w, h) pixel box on a page canvas.
+type LayerBox = tuple[int, int, int, int]
+
+# Receives a fully-built layer node from a Layerable at placement time. Each
+# Layerable is responsible for serializing its own geometry into a ``class_type``
+# node (e.g. VImage emits ``vimage`` with rows+words). Called once per layer()
+# invocation, after the block box and per-row boxes are known.
+type SidecarSink = Callable[[dict[str, Any]], None]
 
 
 # === Configuration Types ===

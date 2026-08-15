@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import itertools
 import logging
+from typing import Any
 
 from PIL import Image
 
 from quranmedialib.modules.text_layout import balance_lines_pyramid
 from quranmedialib.types import (
-    GeometrySink,
+    LayerBox,
+    SidecarSink,
     VerseConfig,
     VerticalAlignment,
     WordConfig,
@@ -244,7 +246,7 @@ class VImage:
         center: bool = True,
         content_height: int = 0,
         vertical_alignment: VerticalAlignment = VerticalAlignment.CENTER,
-        geometry_sink: GeometrySink | None = None,
+        sidecar_sink: SidecarSink | None = None,
         **kwargs,
     ) -> None:
         """Renders the verse (or a subset of rows) directly onto the provided canvas.
@@ -259,9 +261,10 @@ class VImage:
             content_height: If > 0, vertically positions the block within the rect.
             vertical_alignment: How to vertically position the block when content_height
                 exceeds the rendered height. Defaults to CENTER.
-            geometry_sink: Optional callback invoked per placed word with the absolute
-                top-left canvas coordinates (x, y). Used by the sidecar emitter to
-                record each word's pixel box. No-op when None.
+            sidecar_sink: Optional callback invoked once after placement with this
+                VImage's fully-built ``vimage`` sidecar node (block box, per-row
+                boxes, and flat word records). Defaults to None → no sidecar
+                emission and no geometry capture.
         """
         rows = rows_to_render if rows_to_render is not None else self.rows
         if not rows:
@@ -279,6 +282,8 @@ class VImage:
         row_spacing = self.verse_config.row_spacing
         global_word_color = word_config.word_color
         draw_y = y
+        row_boxes: list[LayerBox] = []
+        row_word_records: list[list[dict[str, Any]]] = [] if sidecar_sink is not None else []
 
         for row, row_width, max_row_height in rows:
             # Per-row centering: each row independently centred within content_width
@@ -287,6 +292,8 @@ class VImage:
             else:
                 row_x = x
             current_x = row_x + row_width  # RTL anchor: right edge of this row
+            row_boxes.append((row_x, draw_y, row_width, max_row_height))
+            word_records: list[dict[str, Any]] = [] if sidecar_sink is not None else []
 
             first_color = row[0].color if row else None
             can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)
@@ -299,8 +306,8 @@ class VImage:
                     ry = (max_row_height - w_img.height) // 2
                     rx -= w_img.width
                     row_mask.paste(w_img, (rx, ry))
-                    if geometry_sink is not None:
-                        geometry_sink(item, current_x - row_width + rx, draw_y + ry)
+                    if sidecar_sink is not None:
+                        word_records.append(self._word_record(item, current_x - row_width + rx, draw_y + ry))
                     rx -= word_spacing
 
                 color_to_use = first_color if first_color is not None else global_word_color
@@ -322,12 +329,65 @@ class VImage:
                     else:
                         canvas.paste(w_img.convert(canvas.mode), (word_x, ry))
 
-                    if geometry_sink is not None:
-                        geometry_sink(item, word_x, ry)
+                    if sidecar_sink is not None:
+                        word_records.append(self._word_record(item, word_x, ry))
 
                     current_x -= w_img.width + word_spacing
 
+            if sidecar_sink is not None:
+                row_word_records.append(word_records)
             draw_y += max_row_height + row_spacing
+
+        if sidecar_sink is not None:
+            min_x = min(box[0] for box in row_boxes)
+            min_y = min(box[1] for box in row_boxes)
+            max_x = max(box[0] + box[2] for box in row_boxes)
+            max_y = max(box[1] + box[3] for box in row_boxes)
+            sidecar_sink(
+                {
+                    "class_type": "vimage",
+                    "x": min_x,
+                    "y": min_y,
+                    "w": max_x - min_x,
+                    "h": max_y - min_y,
+                    "rows": [
+                        {
+                            "x": box[0],
+                            "y": box[1],
+                            "width": box[2],
+                            "height": box[3],
+                            "words": words,
+                        }
+                        for box, words in zip(row_boxes, row_word_records)
+                    ],
+                }
+            )
+
+    @staticmethod
+    def _word_record(item: WordItem, x: int, y: int) -> dict[str, Any]:
+        """Build the flat sidecar word record for a placed item.
+
+        VImage emits geometry only (identity + box, no wbw): the wbw join and
+        combined-batch expansion are sidecar-emission concerns applied later by
+        ``build_sidecar``.
+
+        Args:
+            item: The WordItem placed on the canvas.
+            x: Absolute page x of the word's top-left corner.
+            y: Absolute page y of the word's top-left corner.
+
+        Returns:
+            dict[str, Any]: Flat word record (index, class_type, text, box).
+        """
+        return {
+            "index": item.index,
+            "class_type": item.class_type,
+            "text": item.text or "",
+            "x": x,
+            "y": y,
+            "w": item.width,
+            "h": item.height,
+        }
 
     def render(
         self,
