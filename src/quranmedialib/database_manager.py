@@ -871,6 +871,16 @@ class DatabaseManager:
         self._validate_state()
         return list(self._registry.keys())
 
+    def get_database_configs(self) -> dict[str, DatabaseConfig]:
+        """Return the registered database configs keyed by connection name.
+
+        Returns:
+            dict[str, DatabaseConfig]: Name to config mapping for every
+                registered connection.
+        """
+        self._validate_state()
+        return dict(self._configs)
+
     def close(self) -> None:
         """Closes all database connections and invalidates the instance state."""
         if not getattr(self, "_initialized", False):

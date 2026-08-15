@@ -386,7 +386,7 @@ def test_emit_sidecar_writes_one_json_per_png(tmp_path) -> None:
     """VerseRangeWorkflow with emit_sidecar writes a deterministic sidecar beside each PNG."""
     import json as json_module
 
-    from quranmedialib.modules.sidecar import SIDECAR_SCHEMA
+    from quranmedialib.modules.sidecar import SIDECAR_SCHEMA, TASK_SCHEMA
 
     db = DatabaseManager()
     surah = 108  # Al-Kawthar, 3 verses
@@ -409,15 +409,17 @@ def test_emit_sidecar_writes_one_json_per_png(tmp_path) -> None:
     list(generator)
 
     pngs = sorted(output_dir.glob("*.png"))
-    jsons = sorted(output_dir.glob("*.json"))
-    assert len(pngs) == len(jsons) > 0
+    page_jsons = sorted(output_dir.glob("*_page_*.json"))
+    task_json = output_dir / "task.json"
+    assert len(pngs) == len(page_jsons) > 0
+    assert task_json.exists()
 
-    # Every PNG has exactly one matching JSON stem, and vice versa.
+    # Every PNG has exactly one matching JSON stem, and vice versa (task.json is per-task, not per-page).
     png_stems = {p.stem for p in pngs}
-    json_stems = {j.stem for j in jsons}
-    assert png_stems == json_stems
+    page_json_stems = {j.stem for j in page_jsons}
+    assert png_stems == page_json_stems
 
-    for j in jsons:
+    for j in page_jsons:
         data = json_module.loads(j.read_text(encoding="utf-8"))
         assert data["schema"] == SIDECAR_SCHEMA
         assert "rows" in data
@@ -426,6 +428,12 @@ def test_emit_sidecar_writes_one_json_per_png(tmp_path) -> None:
         for row in data["rows"]:
             for word in row["words"]:
                 assert word["class_type"] in {"word", "verse_number"}
+
+    task_data = json_module.loads(task_json.read_text(encoding="utf-8"))
+    assert task_data["schema"] == TASK_SCHEMA
+    assert task_data["workflow"] == "verse_range"
+    assert task_data["surah"] == surah
+    assert task_data["ayah_range"] == {"start": 1, "end": 3}
 
 
 def test_emit_sidecar_is_deterministic_across_runs() -> None:

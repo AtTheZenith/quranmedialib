@@ -97,5 +97,6 @@ class SurahWorkflow(VerseRangeWorkflow):
             annotate=annotate,
             separate_translations=separate_translations,
             parallel=parallel,
+            workflow="surah",
             **kwargs,
         )

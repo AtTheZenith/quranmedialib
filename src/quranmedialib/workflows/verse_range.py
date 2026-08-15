@@ -26,7 +26,7 @@ from quranmedialib.exceptions import ValidationError
 from quranmedialib.modules.annotation import annotate_words
 from quranmedialib.modules.frame import Frame
 from quranmedialib.modules.layout_engine import LayoutGuide
-from quranmedialib.modules.sidecar import build_sidecar, serialize_sidecar
+from quranmedialib.modules.sidecar import build_sidecar, build_task_sidecar, serialize_sidecar
 from quranmedialib.modules.timage import LazyTranslationImages, _render_timage
 from quranmedialib.modules.verse_number import verse_number
 from quranmedialib.modules.vimage import VImage
@@ -181,6 +181,23 @@ class VerseRangeWorkflow(BaseWorkflow):
         emit_sidecar = kwargs.get("emit_sidecar", False)
         if emit_sidecar and not output_dir:
             raise ValidationError("emit_sidecar=True requires output_dir")
+
+        workflow = kwargs.get("workflow", "verse_range")
+        if emit_sidecar and output_dir:
+            _write_task_sidecar(
+                workflow=workflow,
+                surah=surah,
+                start_ayah=start_verse,
+                end_ayah=end_verse,
+                annotate=annotate,
+                separate_translations=separate_translations,
+                parallel=parallel,
+                frame_cfg=self.frame_cfg,
+                word_cfg=self.word_cfg,
+                verse_cfg=self.verse_cfg,
+                text_cfg=self.text_cfg,
+                output_dir=output_dir,
+            )
 
         filename_prefix = kwargs.get("filename_prefix", f"surah_{surah:03d}")
         filename_prefix = _sanitize_filename_prefix(str(filename_prefix))
@@ -427,6 +444,7 @@ def _render_pages(
                             "bbox": {"x": 0, "y": 0, "w": t_image.width, "h": t_image.height},
                             "position": {"x": place_rect.left, "y": place_rect.top},
                             "exceeded_bounds": exceeded_bounds,
+                            "text": verse_translations[page_index],
                         }
 
             page_image = frame_obj.render()
@@ -474,12 +492,14 @@ def _render_pages(
         current_index += items_consumed
         page_index += 1
 
-    translation_iter: Iterator[tuple[Image.Image | None, bool]]
+    translation_iter: Iterator[tuple[str, Image.Image | None, bool]]
     if emit_sidecar:
-        translation_iter = (_render_timage(text, text_cfg) for text in verse_translations)
+        translation_iter = (
+            (text, *_render_timage(text, text_cfg)) for text in verse_translations
+        )
     else:
-        translation_iter = ((t, False) for t in trans_images)
-    for t_img, exceeded_bounds in translation_iter:
+        translation_iter = ((text, t, False) for text, t in zip(verse_translations, trans_images))
+    for text, t_img, exceeded_bounds in translation_iter:
         if not t_img:
             continue
         frame_obj = Frame(frame_w, frame_h, bg)
@@ -502,6 +522,7 @@ def _render_pages(
                 "bbox": {"x": 0, "y": 0, "w": t_img.width, "h": t_img.height},
                 "position": {"x": place_rect.left, "y": place_rect.top},
                 "exceeded_bounds": exceeded_bounds,
+                "text": text,
             }
             pages.append((page_image, _sidecar(page_index + 1, [], translation_geo, [])))
             page_index += 1
@@ -554,6 +575,61 @@ def _handle_output(
         return [(p.mode, p.size, p.tobytes()) for p in pages_flat]
     else:
         return [p[0] if emit_sidecar else p for p in pages]
+
+
+def _write_task_sidecar(
+    workflow: str,
+    surah: int,
+    start_ayah: int,
+    end_ayah: int,
+    annotate: bool,
+    separate_translations: bool,
+    parallel: bool,
+    frame_cfg: FrameConfig,
+    word_cfg: WordConfig,
+    verse_cfg: VerseConfig,
+    text_cfg: TextConfig,
+    output_dir: str,
+) -> None:
+    """Write the per-task ``task.json`` sidecar documenting the render process.
+
+    Emitted once per render task (not per page) at the output_dir root when
+    ``emit_sidecar=True``. It records identity, the resolved configs, and the
+    database/font resources — documentation for auditing and reproduction, not
+    a validation contract (absolute paths are expected).
+
+    Args:
+        workflow: Workflow type, ``"surah"`` or ``"verse_range"``.
+        surah: Surah number (1-114).
+        start_ayah: First ayah rendered (inclusive).
+        end_ayah: Last ayah rendered (inclusive).
+        annotate: Whether word-by-word annotations were rendered.
+        separate_translations: Whether translations were rendered on separate pages.
+        parallel: Whether parallel processing was used.
+        frame_cfg: FrameConfig used for the render.
+        word_cfg: WordConfig used for the render.
+        verse_cfg: VerseConfig used for the render.
+        text_cfg: TextConfig used for the render.
+        output_dir: Output directory for the render task.
+    """
+    db = DatabaseManager()
+    task = build_task_sidecar(
+        workflow=workflow,
+        surah=surah,
+        start_ayah=start_ayah,
+        end_ayah=end_ayah,
+        annotate=annotate,
+        separate_translations=separate_translations,
+        parallel=parallel,
+        frame_cfg=frame_cfg,
+        word_cfg=word_cfg,
+        verse_cfg=verse_cfg,
+        text_cfg=text_cfg,
+        database_configs=db.get_database_configs(),
+    )
+    task_path = Path(output_dir) / "task.json"
+    task_path.write_text(serialize_sidecar(task), encoding="utf-8")
+    logger.info("Wrote task sidecar: %s", task_path)
 
 
 def _render_verse_worker(

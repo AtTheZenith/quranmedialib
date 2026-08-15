@@ -98,7 +98,9 @@ for page_num, page_images in enumerate(iterator, 1):
 ```
 
 - **`emit_sidecar` defaults to `False`** — explicit opt-in, zero surprise for existing callers.
-- Sidecars use `schema: "spatial-1"`, integer page-relative coordinates, and no timestamps/config/fonts, so identical input always produces byte-identical sidecar bytes.
+- Sidecars use `schema: "spatial-1"`, integer page-relative coordinates, and no timestamps/config/fonts, so identical input always produces byte-identical sidecar bytes. Keys are emitted in **chronological schema order** (not sorted) — a spec contract.
+- The per-page `translation` record carries the raw rich-text translation string in its `text` key alongside the geometry.
+- Each render task also writes a **`task.json`** (`schema: "task-1"`) at the output root — a documentation record of the process (workflow type, surah/ayah range, annotate/separate_translations/parallel flags, resolved configs, database filepaths, and fonts). It is *not* hashed by validation: it documents a specific machine's run and may contain absolute paths.
 - Bytes mode (`use_bytes=True`) does **not** produce sidecars; they require file output.
 
 ## Need Help?
