@@ -76,5 +76,30 @@ for page_num, page_images in enumerate(workflow.get_iterator(surah=112), 1):
         img.save(f"surah112_p{page_num}.png")
 ```
 
+## Emitting Spatial Sidecars
+
+File-writing workflows (`SurahWorkflow`, `VerseRangeWorkflow`) can emit a **spatial sidecar** beside every PNG — a deterministic JSON record of the page's exact layout (per-word bounding boxes, verse number placement, translation paragraph box, and row geometry). This is the source of truth an external agent reads to understand and refit the layout.
+
+```python
+from quranmedialib import SurahWorkflow, LANDSCAPE_PRESET
+
+preset = LANDSCAPE_PRESET["default"]["1080p"]
+workflow = SurahWorkflow(preset)
+
+# emit_sidecar requires output_dir; writes page_N.json beside each page_N.png
+iterator = workflow.get_iterator(
+    surah=112,
+    output_dir="output/surah112",
+    emit_sidecar=True,
+)
+for page_num, page_images in enumerate(iterator, 1):
+    for img in page_images:
+        img.save(f"surah112_p{page_num}.png")
+```
+
+- **`emit_sidecar` defaults to `False`** — explicit opt-in, zero surprise for existing callers.
+- Sidecars use `schema: "spatial-1"`, integer page-relative coordinates, and no timestamps/config/fonts, so identical input always produces byte-identical sidecar bytes.
+- Bytes mode (`use_bytes=True`) does **not** produce sidecars; they require file output.
+
 ## Need Help?
 Refer to the [API Reference](api_reference.md) for technical details or the [Architecture Docs](architecture.md) to understand the pipeline.

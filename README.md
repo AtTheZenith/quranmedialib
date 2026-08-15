@@ -125,15 +125,15 @@ iterator = workflow.get_iterator(surah=1, start_ayah=1, end_ayah=2, translations
   <tbody>
     <tr>
       <td><b>Landscape (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/fd8b0650-9fcd-4c5c-a9ec-569b083302ce" width="600" alt="Landscape 1080p Render Example"></td>
+      <td align="center"><img src="https://r2.e-z.host/260a415f-62cc-46f5-b718-c2d87cd6fef6/gjrsmkpt.png" width="600" alt="Landscape 1080p Render Example"></td>
     </tr>
     <tr>
       <td><b>Story (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/d3bb2696-3218-4b4d-8e8a-4302de7cf065" width="250" alt="Story 1080p Render Example"></td>
+      <td align="center"><img src="https://r2.e-z.host/260a415f-62cc-46f5-b718-c2d87cd6fef6/11h24eus.png" width="250" alt="Story 1080p Render Example"></td>
     </tr>
     <tr>
       <td><b>Square (1080p)</b></td>
-      <td align="center"><img src="https://github.com/user-attachments/assets/a5ca9c28-5751-438f-8abd-609c4fbaabe4" width="400" alt="Square 1080p Render Example"></td>
+      <td align="center"><img src="https://r2.e-z.host/260a415f-62cc-46f5-b718-c2d87cd6fef6/x0zhjeqj.png" width="400" alt="Square 1080p Render Example"></td>
     </tr>
   </tbody>
 </table>
