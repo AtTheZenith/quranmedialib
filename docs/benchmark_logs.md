@@ -17,7 +17,7 @@ Cross-version log of the `quranmedialib.check` benchmark suite. Per-version tabl
 
 | Version | Total runtime (s) | Al-Baqarah (s) |
 | :------ | ----------------: | -------------: |
-| v5.0.0  | 7.20              | 6.148          |
+| v5.0.0  | 6.49              | 5.567          |
 | v4.2.0  | 6.88              | 5.945          |
 | v4.1.1  | 8.17              | 7.418          |
 | v4.1.0  | 7.61              | 6.971          |
