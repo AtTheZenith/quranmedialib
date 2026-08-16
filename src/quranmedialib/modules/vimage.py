@@ -283,7 +283,7 @@ class VImage:
         global_word_color = word_config.word_color
         draw_y = y
         row_boxes: list[LayerBox] = []
-        row_word_records: list[list[dict[str, Any]]] = [] if sidecar_sink is not None else []
+        row_word_records: list[list[dict[str, Any]]] = []
 
         for row, row_width, max_row_height in rows:
             # Per-row centering: each row independently centred within content_width
@@ -293,7 +293,7 @@ class VImage:
                 row_x = x
             current_x = row_x + row_width  # RTL anchor: right edge of this row
             row_boxes.append((row_x, draw_y, row_width, max_row_height))
-            word_records: list[dict[str, Any]] = [] if sidecar_sink is not None else []
+            word_records: list[dict[str, Any]] = []
 
             first_color = row[0].color if row else None
             can_merge = len(row) > 1 and all(item.image.mode == "L" and item.color == first_color for item in row)

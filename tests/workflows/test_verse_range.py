@@ -467,6 +467,57 @@ def test_emit_sidecar_is_deterministic_across_runs() -> None:
     assert first == second
 
 
+def test_emit_sidecar_with_separate_translations() -> None:
+    """separate_translations + emit_sidecar writes sidecars for Arabic and translation-only pages."""
+    import json as json_module
+
+    from quranmedialib.modules.sidecar import SIDECAR_SCHEMA
+
+    db = DatabaseManager()
+    surah = 108
+    translations_list = [[t] for t in db.get_translation_from_surah(surah)]
+
+    preset = LANDSCAPE_PRESET["default"]["1080p"]
+    workflow = VerseRangeWorkflow(preset)
+    output_dir = Path("output/test/sidecar/separate")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = workflow._process_range(
+        surah=surah,
+        start_verse=1,
+        end_verse=3,
+        translations=translations_list,
+        output_dir=str(output_dir),
+        emit_sidecar=True,
+        separate_translations=True,
+        parallel=False,
+    )
+    list(generator)
+
+    page_jsons = sorted(output_dir.glob("*_page_*.json"))
+    assert len(page_jsons) > 0
+
+    # Arabic pages carry a vimage layer only; translation-only pages carry a
+    # translation layer whose position points at actual pasted pixels.
+    arabic_pages = 0
+    translation_pages = 0
+    for j in page_jsons:
+        data = json_module.loads(j.read_text(encoding="utf-8"))
+        assert data["schema"] == SIDECAR_SCHEMA
+        class_types = [layer["class_type"] for layer in data["layers"]]
+        assert class_types, "every sidecar must carry at least one layer"
+        assert len(class_types) == len(set(class_types)), "no duplicate class_type in one page"
+        if "translation" in class_types:
+            translation_pages += 1
+            translation = next(layer for layer in data["layers"] if layer["class_type"] == "translation")
+            assert translation["position"]["x"] >= 0 and translation["position"]["y"] >= 0
+        if "vimage" in class_types:
+            arabic_pages += 1
+
+    assert arabic_pages == 3
+    assert translation_pages == 3
+
+
 def test_emit_sidecar_requires_output_dir() -> None:
     """emit_sidecar without output_dir must fail loudly with ValidationError."""
     from quranmedialib.exceptions import ValidationError

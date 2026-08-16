@@ -34,7 +34,6 @@ from quranmedialib.modules.wimage import get_wimage
 from quranmedialib.presets import arabic_vertical_alignment, build_layout_guide, translation_placement
 from quranmedialib.types import (
     FrameConfig,
-    ResolvedRect,
     TextConfig,
     VerseConfig,
     WordConfig,
@@ -390,15 +389,20 @@ def _render_pages(
 
     def _translation_record(
         t_image: Image.Image,
-        place_rect: ResolvedRect,
         exceeded_bounds: bool,
         text: str,
     ) -> dict:
-        """Build the translation layer node for the sidecar."""
+        """Build the translation layer node for the sidecar.
+
+        The ``position`` slot is a placeholder: Frame completes it with the
+        actual paste box when the node is recorded, so geometry agrees with
+        pixels by construction. The placeholder preserves the spec's
+        chronological key order (bbox, position, exceeded_bounds, text).
+        """
         return {
             "class_type": "translation",
             "bbox": {"x": 0, "y": 0, "w": t_image.width, "h": t_image.height},
-            "position": {"x": place_rect.left, "y": place_rect.top},
+            "position": None,
             "exceeded_bounds": exceeded_bounds,
             "text": text,
         }
@@ -443,7 +447,7 @@ def _render_pages(
                         text_color=text_cfg.color,
                         keep_bottom=keep_bottom,
                         sidecar_record=(
-                            _translation_record(t_image, place_rect, exceeded_bounds, verse_translations[page_index])
+                            _translation_record(t_image, exceeded_bounds, verse_translations[page_index])
                             if emit_sidecar
                             else None
                         ),
@@ -507,7 +511,7 @@ def _render_pages(
             place_rect,
             text_color=text_cfg.color,
             keep_bottom=keep_bottom,
-            sidecar_record=(_translation_record(t_img, place_rect, exceeded_bounds, text) if emit_sidecar else None),
+            sidecar_record=(_translation_record(t_img, exceeded_bounds, text) if emit_sidecar else None),
         )
         page_image = frame_obj.render()
         if emit_sidecar:

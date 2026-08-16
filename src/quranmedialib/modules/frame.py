@@ -56,6 +56,9 @@ class Frame:
                 ``collect_sidecar`` is enabled. For plain Images, defaults to an
                 ``image`` node with the paste box; supply a custom node to give a
                 plain image a domain-specific ``class_type`` (e.g. translation).
+                If the record carries a ``position`` sub-object, Frame overwrites
+                it with the actual paste position so the recorded geometry agrees
+                with pixels by construction (keep_bottom and centring included).
             **kwargs: Additional args passed to Layerable.layer().
         """
         if isinstance(image, Layerable):
@@ -81,7 +84,14 @@ class Frame:
             self.image.paste(image, (x, y))
         if self.sidecar_layers is not None:
             if sidecar_record is not None:
-                self.sidecar_layers.append(sidecar_record)
+                # Frame is the single authority on paste position: a record that
+                # declares a ``position`` slot gets it completed with the actual
+                # paste box so the recorded geometry agrees with pixels by
+                # construction (keep_bottom and centring included).
+                record = dict(sidecar_record)
+                if "position" in record:
+                    record["position"] = {"x": x, "y": y}
+                self.sidecar_layers.append(record)
             else:
                 self.sidecar_layers.append(
                     {
